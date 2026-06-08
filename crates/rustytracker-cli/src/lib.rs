@@ -21,6 +21,11 @@ const PLAY_STATE_MIN_ROWS: usize = 1;
 const FNV_OFFSET: u64 = 0xcbf29ce484222325;
 const FNV_PRIME: u64 = 0x100000001b3;
 const EXPANDED_PATTERN_CELL_BYTES: usize = 6;
+const EXPANDED_PATTERN_EMPTY_BYTE: u8 = 0;
+const DUMP_PRIMARY_EFFECT_SLOT: usize = 0;
+const DUMP_SECONDARY_EFFECT_SLOT: usize = 1;
+const OPTION_USIZE_CHECKSUM_NONE_TAG: u8 = 0;
+const OPTION_USIZE_CHECKSUM_SOME_TAG: u8 = 1;
 const SAMPLE_PREFIX_FRAMES: usize = 16;
 const JSON_TRAILING_NEWLINE: &str = "\n";
 const FREQUENCY_TABLE_AMIGA: &str = "amiga";
@@ -455,13 +460,13 @@ fn pattern_dump((index, pattern): (usize, &Pattern)) -> PatternDump {
             let expanded = [
                 cell.note.raw(),
                 cell.instrument,
-                cell.effects[0].effect,
-                cell.effects[0].operand,
-                cell.effects[1].effect,
-                cell.effects[1].operand,
+                cell.effects[DUMP_PRIMARY_EFFECT_SLOT].effect,
+                cell.effects[DUMP_PRIMARY_EFFECT_SLOT].operand,
+                cell.effects[DUMP_SECONDARY_EFFECT_SLOT].effect,
+                cell.effects[DUMP_SECONDARY_EFFECT_SLOT].operand,
             ];
 
-            if expanded != [0; EXPANDED_PATTERN_CELL_BYTES] {
+            if expanded != [EXPANDED_PATTERN_EMPTY_BYTE; EXPANDED_PATTERN_CELL_BYTES] {
                 non_empty_cells += 1;
             }
 
@@ -550,13 +555,13 @@ fn option_usize_checksum(values: &[Option<usize>]) -> u64 {
     for value in values {
         match value {
             Some(value) => {
-                checksum = fnv_byte(checksum, 1);
+                checksum = fnv_byte(checksum, OPTION_USIZE_CHECKSUM_SOME_TAG);
                 for byte in (*value as u64).to_le_bytes() {
                     checksum = fnv_byte(checksum, byte);
                 }
             }
             None => {
-                checksum = fnv_byte(checksum, 0);
+                checksum = fnv_byte(checksum, OPTION_USIZE_CHECKSUM_NONE_TAG);
             }
         }
     }
