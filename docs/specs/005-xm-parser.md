@@ -196,5 +196,5 @@ serialization.
 - note-off values are converted back from the core note-off value to XM `97`
 
 Effect inverse mapping, instrument metadata writing, and sample payload writing
-now exist in the XM writer. Full normalized roundtrip equality remains a
-separate milestone.
+now exist in the XM writer. Bundled fixtures have active
+`XM -> core -> XM -> core` normalized equality coverage.

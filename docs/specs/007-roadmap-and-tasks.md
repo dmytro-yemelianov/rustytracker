@@ -105,10 +105,9 @@ Done:
 - write 8-bit and 16-bit sample payloads using XM delta encoding
 - add symmetric parser/writer coverage for fine volume-slide volume-column
   commands
+- add `XM -> core -> XM -> core` normalized equality tests for bundled fixtures
 
-Remaining:
-
-- add `XM -> core -> XM -> core` normalized equality tests
+Remaining: none.
 
 Acceptance:
 
@@ -189,6 +188,7 @@ Acceptance:
 
 ## Immediate Backlog
 
-1. Add `XM -> core -> XM -> core` normalized equality checks.
-2. Use the normalized equality checks to drive the remaining fixture roundtrip
-   gaps.
+1. Use normalized equality checks to add synthetic roundtrip coverage for effect
+   and instrument edge cases not present in the bundled fixtures.
+2. Start Milestone 4 playback skeleton planning once the roundtrip edge-case
+   backlog is stable.

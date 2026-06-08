@@ -5,8 +5,9 @@
 The XM writer starts with the fixed module header, active order table, pattern
 headers/cells, the first MilkyTracker-compatible effect inverse mappings, and
 instrument/sample headers with 8-bit and 16-bit delta-coded sample payloads.
-Full normalized roundtrip support still needs the remaining symmetric effect
-coverage and end-to-end equality tests.
+Bundled fixtures now have active `XM -> core -> XM -> core` normalized
+roundtrip coverage. Additional synthetic effect cases should continue expanding
+the symmetric mapping surface beyond the bundled fixture corpus.
 
 ## References
 
@@ -54,8 +55,12 @@ The writer tests verify:
 - simple note/instrument cells roundtrip through unpacked XM pattern data
 - empty instruments are emitted as short XM instrument headers
 - active instruments are emitted with extension metadata and sample headers
+- zero-sample instruments keep the long XM instrument header when extension
+  metadata must roundtrip
 - 8-bit and 16-bit sample payloads are emitted with XM delta encoding
 - 16-bit sample lengths and loop fields are written as byte counts
+- bundled XM fixtures parse, write, and parse again to equivalent normalized
+  core summaries
 - sample header fields that cannot fit XM `u32` fields fail before bytes are
   returned
 
@@ -109,7 +114,10 @@ Implemented inverse mappings:
 
 `write_xm_instruments` writes one XM instrument block per core instrument:
 
-- instruments with no active core samples use the short 29-byte XM header
+- instruments with no active core samples use the short 29-byte XM header when
+  they have no extension metadata to preserve
+- zero-sample instruments with envelope, vibrato, or fadeout metadata use the
+  263-byte XM instrument header so the parser can recover that metadata
 - instruments with active sample slots use the 263-byte XM instrument header
 - sample header size is `40`
 - the note sample map is translated from core sample indexes back to XM-local
