@@ -905,9 +905,7 @@ fn xm_sample_data_byte_len(
     }
 
     let frame_count = data.frame_count() as u64;
-    let byte_len = frame_count
-        .checked_mul(xm_sample_bytes_per_frame(data) as u64)
-        .unwrap_or(u64::MAX);
+    let byte_len = frame_count.saturating_mul(xm_sample_bytes_per_frame(data) as u64);
 
     xm_u32_sample_field(
         byte_len,

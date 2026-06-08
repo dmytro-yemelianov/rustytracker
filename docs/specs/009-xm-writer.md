@@ -117,7 +117,7 @@ Deferred mappings:
 - envelope point values are scaled from core values back to XM values
 - vibrato depth and volume fadeout are scaled back to their XM stored values
 - sample header lengths are derived from core sample data
-- empty samples keep zero byte length and zero loop byte fields
+- empty samples keep zero-byte length and zero loop-byte fields
 - 16-bit sample length, loop start, and loop length fields are stored as byte
   counts
 
