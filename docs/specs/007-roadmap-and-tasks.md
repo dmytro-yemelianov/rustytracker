@@ -127,7 +127,7 @@ Acceptance:
 
 Goal: play rows/ticks and raw samples without full effect parity.
 
-Status: in progress.
+Status: complete.
 
 Done:
 
@@ -145,11 +145,9 @@ Done:
   note-off trigger state
 - add raw decoded PCM8/PCM16 sample stepping without interpolation
 - add deterministic raw mono PCM render tests on top of sample stepping
+- connect raw mono rendering to tick/row progression and sample-rate timing
 
-Tasks:
-
-- connect raw mono rendering to tick/row progression and future sample-rate
-  timing
+Tasks: none.
 
 Acceptance:
 
@@ -162,16 +160,16 @@ Goal: implement XM effects incrementally with PCM/golden state tests.
 
 Order:
 
-1. speed/BPM
-2. volume column
-3. set volume/panning
-4. pattern break and position jump
-5. arpeggio
-6. portamento
-7. vibrato
-8. sample offset
-9. loop and ping-pong loop behavior
-10. envelopes and fadeout
+- [x] 1. speed/BPM (complete)
+- [x] 2. volume column (complete)
+- [x] 3. set volume/panning (complete)
+- [x] 4. pattern break and position jump (complete)
+- [x] 5. arpeggio (complete)
+- [x] 6. portamento (complete)
+- [x] 7. vibrato (complete)
+- [x] 8. sample offset (complete)
+- [x] 9. loop and ping-pong loop behavior (complete)
+- [x] 10. envelopes and fadeout (complete)
 
 Acceptance:
 
@@ -212,7 +210,6 @@ Acceptance:
 
 ## Immediate Backlog
 
-1. Connect raw mono rendering to tick/row progression and future sample-rate
-   timing.
+1. Continue Milestone 5: implement loop/ping-pong and envelopes.
 2. Keep adding focused XM writer/parser edge cases when playback or future
    compatibility work exposes a concrete gap.
