@@ -5,8 +5,8 @@
 `rustytracker-play` owns headless playback state and future offline rendering.
 The first slices deliberately stop before effects, sample interpolation, and
 PCM mixing. They establish tested cursor, clock, current-row channel snapshots,
-and mutable per-channel trigger state that walk the core module order list,
-pattern rows, ticks, and active module channels.
+mutable per-channel trigger state, and raw decoded sample stepping that walk the
+core module order list, pattern rows, ticks, and active module channels.
 
 ## References
 
@@ -96,6 +96,26 @@ Trigger behavior:
 - missing instruments and out-of-range sample references return explicit
   playback errors
 
+## Sample Step Contract
+
+`PlaybackState::step_samples(&Module)` emits one decoded sample frame per
+active channel that currently points at readable sample data, in channel order.
+
+The raw sample frame output includes:
+
+- channel index
+- resolved core sample index
+- sample frame index before advancing
+- decoded sample value as either `Pcm8(i8)` or `Pcm16(i16)`
+
+After emitting a frame, the channel's sample frame advances by one decoded
+frame. When the frame just emitted is the final decoded frame, the channel stops
+its active sample and resets the sample frame to `0`. Empty sample data stops
+the active sample without emitting a frame.
+
+This stepper deliberately does not yet apply pitch, interpolation, loop modes,
+volume, panning, effect memory, envelopes, or cross-channel mixing.
+
 ## CLI Trace Contract
 
 `rustytracker play-state <module.xm> --rows <count>` loads an XM file and emits
@@ -112,7 +132,7 @@ a deterministic JSON trace of the first playback rows:
 
 The trace is intentionally not audio output. It gives contributors something
 concrete to compile and run while the playback crate is still below sample
-stepping and mixing.
+mixing.
 
 ## Error Contract
 
@@ -151,6 +171,9 @@ The initial `rustytracker-play` tests verify:
 - note-only rows reuse prior instrument memory
 - note-off rows release active channel state
 - missing instruments and missing samples are rejected explicitly
+- sample stepping emits decoded PCM8 and PCM16 frames without interpolation
+- sample stepping advances sample frame positions and stops after the final frame
+- empty sample data stops the active sample without emitting a frame
 - patterns with too few channels for the module are rejected
 - `play-state` rejects missing, non-numeric, or zero row counts
 - empty order lists are rejected
@@ -159,5 +182,4 @@ The initial `rustytracker-play` tests verify:
 
 ## Next Steps
 
-- add raw sample stepping without interpolation
-- add deterministic PCM render tests once sample stepping exists
+- add deterministic PCM render tests on top of raw sample stepping
