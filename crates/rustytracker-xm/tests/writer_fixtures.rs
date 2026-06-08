@@ -45,12 +45,16 @@ const XM_WRITER_INTERNAL_EXTRA_FINE_PORTA_EFFECT: u8 = 0x41;
 const XM_WRITER_EXTRA_FINE_PORTA_SOURCE_OPERAND: u8 = 0x05;
 const XM_WRITER_EXTRA_FINE_PORTA_OPERAND: u8 = 0x15;
 const XM_WRITER_VOLUME_EFFECT: u8 = 0x0c;
+const XM_WRITER_VOLUME_SLIDE_EFFECT: u8 = 0x0a;
 const XM_WRITER_FULL_VOLUME_255: u8 = 0xff;
 const XM_WRITER_FULL_VOLUME_64: u8 = 0x40;
 const XM_WRITER_FULL_VOLUME_COLUMN: u8 = 0x50;
 const XM_WRITER_PANNING_EFFECT: u8 = 0x08;
+const XM_WRITER_PANNING_SLIDE_EFFECT: u8 = 0x19;
 const XM_WRITER_CENTER_PANNING_255: u8 = 0x80;
 const XM_WRITER_CENTER_PANNING_COLUMN: u8 = 0xc8;
+const XM_WRITER_TONE_PORTAMENTO_EFFECT: u8 = 0x03;
+const XM_WRITER_LOW_NIBBLE_TONE_PORTAMENTO_OPERAND: u8 = 0x05;
 
 #[test]
 fn writes_empty_module_header_and_order_table() {
@@ -349,6 +353,80 @@ fn writes_first_panning_effect_to_volume_column() {
         first_decoded_cell(&bytes).effects[0],
         effect(XM_WRITER_PANNING_EFFECT, XM_WRITER_CENTER_PANNING_255)
     );
+}
+
+#[test]
+fn writes_zero_operand_slides_to_effect_column_for_roundtrip_symmetry() {
+    for slide_effect in [
+        XM_WRITER_VOLUME_SLIDE_EFFECT,
+        XM_WRITER_PANNING_SLIDE_EFFECT,
+    ] {
+        let bytes = write_single_cell_pattern(vec![effect(slide_effect, XM_WRITER_EMPTY_OPERAND)]);
+
+        assert_eq!(
+            first_raw_pattern_cell(&bytes),
+            &[
+                XM_WRITER_TEST_NOTE,
+                XM_WRITER_TEST_INSTRUMENT,
+                XM_WRITER_TEST_EMPTY_VOLUME_COLUMN,
+                slide_effect,
+                XM_WRITER_EMPTY_OPERAND,
+            ],
+            "slide effect {slide_effect:#04x}"
+        );
+        assert_eq!(
+            first_decoded_cell(&bytes).effects[1],
+            effect(slide_effect, XM_WRITER_EMPTY_OPERAND),
+            "slide effect {slide_effect:#04x}"
+        );
+    }
+}
+
+#[test]
+fn does_not_relocate_lossy_effects_to_volume_column_when_effect_column_is_occupied() {
+    for lossy_effect in [
+        effect(
+            XM_WRITER_TONE_PORTAMENTO_EFFECT,
+            XM_WRITER_LOW_NIBBLE_TONE_PORTAMENTO_OPERAND,
+        ),
+        effect(XM_WRITER_VOLUME_SLIDE_EFFECT, XM_WRITER_EMPTY_OPERAND),
+        effect(XM_WRITER_PANNING_SLIDE_EFFECT, XM_WRITER_EMPTY_OPERAND),
+    ] {
+        let bytes = write_single_cell_pattern(vec![
+            effect(
+                XM_WRITER_INTERNAL_ARPEGGIO_EFFECT,
+                XM_WRITER_ARPEGGIO_OPERAND,
+            ),
+            lossy_effect,
+        ]);
+
+        assert_eq!(
+            first_raw_pattern_cell(&bytes),
+            &[
+                XM_WRITER_TEST_NOTE,
+                XM_WRITER_TEST_INSTRUMENT,
+                XM_WRITER_TEST_EMPTY_VOLUME_COLUMN,
+                XM_WRITER_XM_ARPEGGIO_EFFECT,
+                XM_WRITER_ARPEGGIO_OPERAND,
+            ],
+            "lossy effect {:#04x}/{:#04x}",
+            lossy_effect.effect,
+            lossy_effect.operand
+        );
+        assert_eq!(
+            first_decoded_cell(&bytes).effects,
+            vec![
+                EffectCommand::default(),
+                effect(
+                    XM_WRITER_INTERNAL_ARPEGGIO_EFFECT,
+                    XM_WRITER_ARPEGGIO_OPERAND,
+                ),
+            ],
+            "lossy effect {:#04x}/{:#04x}",
+            lossy_effect.effect,
+            lossy_effect.operand
+        );
+    }
 }
 
 fn fixture_path(file_name: &str) -> PathBuf {

@@ -712,10 +712,16 @@ fn xm_effect_to_volume_column(effect: EffectCommand) -> Option<u8> {
             effect.operand >> XM_NIBBLE_SHIFT,
         )),
         INTERNAL_EFFECT_PANNING_SLIDE => xm_panning_slide_column(effect.operand),
-        INTERNAL_EFFECT_TONE_PORTAMENTO => Some(volume_command(
-            XM_VOLUME_TONE_PORTAMENTO,
-            effect.operand >> XM_NIBBLE_SHIFT,
-        )),
+        INTERNAL_EFFECT_TONE_PORTAMENTO => {
+            if note_portamento_requires_effect_column(effect) {
+                None
+            } else {
+                Some(volume_command(
+                    XM_VOLUME_TONE_PORTAMENTO,
+                    effect.operand >> XM_NIBBLE_SHIFT,
+                ))
+            }
+        }
         _ => None,
     }
 }
@@ -724,9 +730,7 @@ fn xm_volume_slide_column(operand: u8) -> Option<u8> {
     let low = operand & XM_NIBBLE_MASK;
     let high = operand >> XM_NIBBLE_SHIFT;
 
-    if operand == EMPTY_OPERAND {
-        Some(volume_command(XM_VOLUME_FINE_DOWN, EMPTY_OPERAND))
-    } else if low != EMPTY_OPERAND {
+    if low != EMPTY_OPERAND {
         Some(volume_command(XM_VOLUME_FINE_DOWN, low))
     } else if high != EMPTY_OPERAND {
         Some(volume_command(XM_VOLUME_FINE_UP, high))
@@ -752,9 +756,7 @@ fn xm_panning_slide_column(operand: u8) -> Option<u8> {
     let low = operand & XM_NIBBLE_MASK;
     let high = operand >> XM_NIBBLE_SHIFT;
 
-    if operand == EMPTY_OPERAND {
-        Some(volume_command(XM_VOLUME_PANNING_SLIDE_LEFT, EMPTY_OPERAND))
-    } else if low != EMPTY_OPERAND {
+    if low != EMPTY_OPERAND {
         Some(volume_command(XM_VOLUME_PANNING_SLIDE_LEFT, low))
     } else if high != EMPTY_OPERAND {
         Some(volume_command(XM_VOLUME_PANNING_SLIDE_RIGHT, high))

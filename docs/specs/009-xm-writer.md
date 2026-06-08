@@ -77,6 +77,10 @@ MilkyTracker's XM exporter:
   column is already occupied
 - tone portamento operands with a low nibble stay in the effect column because
   the XM volume column can only preserve the high nibble
+- effects are only relocated into the XM volume column when the current parser
+  can recover the same normalized core effect; zero-operand volume/panning
+  slides and low-nibble tone portamento are left in the effect column when space
+  exists
 
 Implemented inverse mappings:
 
