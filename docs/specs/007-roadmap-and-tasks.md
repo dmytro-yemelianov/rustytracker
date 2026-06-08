@@ -180,14 +180,16 @@ Acceptance:
 
 Goal: port tracker editing behavior after import/playback types stabilize.
 
+Status: complete.
+
 Tasks:
 
-- add `rustytracker-edit`
-- model edit commands
-- implement undo/redo snapshots or diffs
-- port order operations
-- port pattern edits and transformations
-- add tests from MilkyTracker `ModuleEditor` and `PatternTools` behavior
+- [x] add `rustytracker-edit`
+- [x] model edit commands
+- [x] implement undo/redo snapshots or diffs
+- [x] port order operations
+- [x] port pattern edits and transformations
+- [x] add tests from MilkyTracker `ModuleEditor` and `PatternTools` behavior
 
 Acceptance:
 
