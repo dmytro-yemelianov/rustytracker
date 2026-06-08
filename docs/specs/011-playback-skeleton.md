@@ -3,10 +3,10 @@
 ## Scope
 
 `rustytracker-play` owns headless playback state and future offline rendering.
-The first slices deliberately stop before effects, mutable sample-trigger state,
-sample interpolation, and PCM mixing. They establish tested cursor, clock, and
-current-row channel state that walk the core module order list, pattern rows,
-ticks, and active module channels.
+The first slices deliberately stop before effects, sample interpolation, and
+PCM mixing. They establish tested cursor, clock, current-row channel snapshots,
+and mutable per-channel trigger state that walk the core module order list,
+pattern rows, ticks, and active module channels.
 
 ## References
 
@@ -66,8 +66,35 @@ return a `PlaybackRowState` for the current position:
 - one `ChannelRowState` per active module channel
 - each channel's cloned `PatternCell` for the current row
 
-The row state is a read-only snapshot. It does not yet trigger instruments,
-carry effect memory, update envelopes, or advance sample playback.
+The row state is a read-only snapshot. It does not carry effect memory, update
+envelopes, or advance sample playback.
+
+## Playback State Contract
+
+`PlaybackState::start(&Module)` combines a `PlaybackClock` with one mutable
+`PlaybackChannelState` per active module channel. It applies triggers from the
+first row before returning.
+
+Each channel state tracks:
+
+- channel index
+- whether a sample is active
+- current note and instrument number
+- resolved instrument index
+- resolved core sample index
+- sample frame, starting at `0` when a note triggers
+- sample volume and panning copied from the resolved sample
+
+Trigger behavior:
+
+- non-empty instrument numbers are one-based XM instrument numbers and update
+  instrument memory
+- key notes trigger the current or newly supplied instrument
+- note-only rows reuse prior instrument memory
+- empty cells preserve current channel state
+- note-off cells mark the channel inactive and clear the active sample
+- missing instruments and out-of-range sample references return explicit
+  playback errors
 
 ## CLI Trace Contract
 
@@ -80,10 +107,12 @@ a deterministic JSON trace of the first playback rows:
 - one row entry per visited row
 - each row entry includes order index, pattern index, row, tick, and active
   channel cells
+- each channel entry includes the raw row cell plus the current mutable playback
+  channel state after that row's triggers have been applied
 
 The trace is intentionally not audio output. It gives contributors something
 concrete to compile and run while the playback crate is still below sample
-triggering and mixing.
+stepping and mixing.
 
 ## Error Contract
 
@@ -97,6 +126,8 @@ The cursor reports structural playback errors explicitly:
 - empty pattern
 - cursor row outside the resolved pattern's row count
 - pattern channel count smaller than the active module channel count
+- missing instrument references in trigger rows
+- note sample maps that point outside the module sample table
 
 These checks keep future tick/effect code from silently walking invalid module
 state.
@@ -115,6 +146,11 @@ The initial `rustytracker-play` tests verify:
 - tick advance reports song end without moving past the final tick
 - current row state returns one cell per active module channel
 - row state follows tick-driven row advancement
+- playback state triggers initial note/instrument/sample state
+- empty rows preserve active channel state
+- note-only rows reuse prior instrument memory
+- note-off rows release active channel state
+- missing instruments and missing samples are rejected explicitly
 - patterns with too few channels for the module are rejected
 - `play-state` rejects missing, non-numeric, or zero row counts
 - empty order lists are rejected
@@ -123,6 +159,5 @@ The initial `rustytracker-play` tests verify:
 
 ## Next Steps
 
-- add mutable per-channel sample/effect state
 - add raw sample stepping without interpolation
 - add deterministic PCM render tests once sample stepping exists

@@ -30,9 +30,13 @@ const PLAY_STATE_EXPECTED_FORMAT: &str = "play_state";
 const PLAY_STATE_EXPECTED_SCHEMA_VERSION: u64 = 1;
 const PLAY_STATE_EXPECTED_CHANNELS: usize = 10;
 const PLAY_STATE_FIRST_ROW_INDEX: usize = 0;
+const PLAY_STATE_FIRST_CHANNEL_INDEX: usize = 0;
 const PLAY_STATE_FIRST_ORDER: u64 = 0;
 const PLAY_STATE_FIRST_ROW: u64 = 0;
 const PLAY_STATE_ROW_START_TICK: u64 = 0;
+const PLAY_STATE_FIRST_INSTRUMENT_INDEX: u64 = 0;
+const PLAY_STATE_FIRST_SAMPLE_INDEX: u64 = 0;
+const PLAY_STATE_SAMPLE_START_FRAME: u64 = 0;
 const PLAY_STATE_EXPECTED_PARTIAL_COMPLETED: bool = false;
 
 #[test]
@@ -125,6 +129,41 @@ fn play_state_dump_reports_first_rows_from_xm_fixture() {
             .unwrap()
             .len(),
         PLAY_STATE_EXPECTED_CHANNELS
+    );
+    let first_channel =
+        &value["rows"][PLAY_STATE_FIRST_ROW_INDEX]["channels"][PLAY_STATE_FIRST_CHANNEL_INDEX];
+    assert!(first_channel["state"]["active"].as_bool().unwrap());
+    assert_eq!(
+        first_channel["state"]["note"].as_u64().unwrap(),
+        first_channel["note"].as_u64().unwrap()
+    );
+    assert_eq!(
+        first_channel["state"]["instrument"].as_u64().unwrap(),
+        first_channel["instrument"].as_u64().unwrap()
+    );
+    assert_eq!(
+        first_channel["state"]["instrument_index"].as_u64().unwrap(),
+        PLAY_STATE_FIRST_INSTRUMENT_INDEX
+    );
+    assert_eq!(
+        first_channel["state"]["sample_index"].as_u64().unwrap(),
+        PLAY_STATE_FIRST_SAMPLE_INDEX
+    );
+    assert_eq!(
+        first_channel["state"]["sample_frame"].as_u64().unwrap(),
+        PLAY_STATE_SAMPLE_START_FRAME
+    );
+    assert_eq!(
+        first_channel["state"]["volume"].as_u64().unwrap(),
+        module_dump["samples"][PLAY_STATE_FIRST_SAMPLE_INDEX as usize]["volume"]
+            .as_u64()
+            .unwrap()
+    );
+    assert_eq!(
+        first_channel["state"]["panning"].as_u64().unwrap(),
+        module_dump["samples"][PLAY_STATE_FIRST_SAMPLE_INDEX as usize]["panning"]
+            .as_u64()
+            .unwrap()
     );
 }
 

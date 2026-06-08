@@ -11,8 +11,8 @@ RustyTracker has a test-first Rust workspace with:
   XM loading into `rustytracker-core::Module`; XM header/order/pattern writing
   with the first MilkyTracker-compatible effect inverse mappings, instrument
   metadata writing, and delta-coded sample payload writing
-- `rustytracker-play`: initial playback cursor/order traversal, tick timing, and
-  current-row channel-state skeleton
+- `rustytracker-play`: initial playback cursor/order traversal, tick timing,
+  current-row channel snapshots, and mutable per-channel trigger state
 - `rustytracker-cli`: normalized JSON structural dumps with golden fixture
   comparisons, plus a runnable `play-state` JSON trace for the playback
   skeleton
@@ -139,10 +139,11 @@ Done:
 - expose current-row channel cell state for active module channels
 - add `rustytracker play-state <module.xm> --rows <count>` for runnable
   playback-state inspection
+- implement mutable per-channel note, instrument, sample, volume, panning, and
+  note-off trigger state
 
 Tasks:
 
-- implement mutable per-channel playback state for sample/effect execution
 - mix decoded sample data without interpolation first
 - add short deterministic PCM fixture tests
 
@@ -207,6 +208,6 @@ Acceptance:
 
 ## Immediate Backlog
 
-1. Add mutable per-channel playback state for sample/effect execution.
+1. Add raw decoded sample stepping without interpolation.
 2. Keep adding focused XM writer/parser edge cases when playback or future
    compatibility work exposes a concrete gap.
