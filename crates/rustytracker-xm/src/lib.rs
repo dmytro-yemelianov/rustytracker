@@ -130,6 +130,8 @@ const XM_SAMPLE_PANNING_LEN: usize = 1;
 const XM_SAMPLE_RELATIVE_NOTE_LEN: usize = 1;
 const XM_SAMPLE_RESERVED_LEN: usize = 1;
 const XM_EMPTY_SAMPLE_DATA_LEN: u32 = 0;
+const XM_SAMPLE_16_BIT_FLAG: u8 = 0x10;
+const BYTES_PER_16_BIT_SAMPLE: usize = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum XmParseError {
@@ -281,8 +283,11 @@ pub struct XmEnvelopePoint {
 pub struct XmSampleHeader {
     pub index: usize,
     pub length: u32,
+    pub frame_count: u32,
     pub loop_start: u32,
+    pub loop_start_frames: u32,
     pub loop_length: u32,
+    pub loop_length_frames: u32,
     pub volume_64: u8,
     pub volume: u8,
     pub finetune: i8,
@@ -293,6 +298,36 @@ pub struct XmSampleHeader {
     pub name: String,
     pub data_offset: usize,
     pub data_end: usize,
+    pub decoded_data: XmSampleData,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum XmSampleData {
+    Pcm8(Vec<i8>),
+    Pcm16(Vec<i16>),
+}
+
+impl XmSampleData {
+    pub fn frame_count(&self) -> usize {
+        match self {
+            Self::Pcm8(values) => values.len(),
+            Self::Pcm16(values) => values.len(),
+        }
+    }
+
+    pub fn as_i8(&self) -> Option<&[i8]> {
+        match self {
+            Self::Pcm8(values) => Some(values),
+            Self::Pcm16(_) => None,
+        }
+    }
+
+    pub fn as_i16(&self) -> Option<&[i16]> {
+        match self {
+            Self::Pcm8(_) => None,
+            Self::Pcm16(values) => Some(values),
+        }
+    }
 }
 
 pub fn parse_xm_header(bytes: &[u8]) -> XmResult<XmModuleHeader> {
@@ -594,6 +629,10 @@ fn parse_xm_instrument(
                 actual: bytes.len(),
             });
         }
+        sample.decoded_data = decode_sample_data(
+            &bytes[sample.data_offset..sample.data_end],
+            sample.sample_type,
+        );
         sample_data_offset = sample.data_end;
     }
 
@@ -769,12 +808,19 @@ fn read_sample_header(
     let reserved = bytes[cursor];
     cursor += XM_SAMPLE_RESERVED_LEN;
     let name = decode_fixed_text(&bytes[cursor..cursor + XM_SAMPLE_NAME_LEN]);
+    let frame_count = sample_frame_count(length, sample_type);
+    let loop_start_frames = sample_frame_count(loop_start, sample_type);
+    let loop_length_frames = sample_frame_count(loop_length, sample_type);
+    let decoded_data = empty_sample_data(sample_type);
 
     Ok(XmSampleHeader {
         index: sample_index,
         length,
+        frame_count,
         loop_start,
+        loop_start_frames,
         loop_length,
+        loop_length_frames,
         volume_64,
         volume: vol64_to_255(volume_64),
         finetune,
@@ -785,7 +831,59 @@ fn read_sample_header(
         name,
         data_offset: XM_EMPTY_SAMPLE_DATA_LEN as usize,
         data_end: XM_EMPTY_SAMPLE_DATA_LEN as usize,
+        decoded_data,
     })
+}
+
+fn sample_frame_count(byte_len: u32, sample_type: u8) -> u32 {
+    if is_16_bit_sample(sample_type) {
+        byte_len / BYTES_PER_16_BIT_SAMPLE as u32
+    } else {
+        byte_len
+    }
+}
+
+fn empty_sample_data(sample_type: u8) -> XmSampleData {
+    if is_16_bit_sample(sample_type) {
+        XmSampleData::Pcm16(Vec::new())
+    } else {
+        XmSampleData::Pcm8(Vec::new())
+    }
+}
+
+fn decode_sample_data(bytes: &[u8], sample_type: u8) -> XmSampleData {
+    if is_16_bit_sample(sample_type) {
+        XmSampleData::Pcm16(decode_delta16(bytes))
+    } else {
+        XmSampleData::Pcm8(decode_delta8(bytes))
+    }
+}
+
+fn decode_delta8(bytes: &[u8]) -> Vec<i8> {
+    let mut accumulator = 0_i8;
+    bytes
+        .iter()
+        .map(|&byte| {
+            accumulator = accumulator.wrapping_add(byte as i8);
+            accumulator
+        })
+        .collect()
+}
+
+fn decode_delta16(bytes: &[u8]) -> Vec<i16> {
+    let mut accumulator = 0_i16;
+    bytes
+        .chunks_exact(BYTES_PER_16_BIT_SAMPLE)
+        .map(|chunk| {
+            let delta = i16::from_le_bytes([chunk[0], chunk[BYTE_1_OFFSET]]);
+            accumulator = accumulator.wrapping_add(delta);
+            accumulator
+        })
+        .collect()
+}
+
+fn is_16_bit_sample(sample_type: u8) -> bool {
+    sample_type & XM_SAMPLE_16_BIT_FLAG == XM_SAMPLE_16_BIT_FLAG
 }
 
 fn ensure_instrument_range(

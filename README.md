@@ -51,5 +51,5 @@ Current coverage:
 - `rustytracker-core`: empty module defaults, pattern bounds, fixed text,
   orders, notes, instruments, samples.
 - `rustytracker-xm`: MilkyTracker-bundled XM headers, pattern headers, packed
-  pattern cell expansion, instrument/sample-header metadata, and malformed input
-  checks.
+  pattern cell expansion, instrument/sample-header metadata, delta-coded sample
+  payload decoding, and malformed input checks.

@@ -117,8 +117,11 @@ data. The parser mirrors MilkyTracker's loader behavior:
 - envelope values, vibrato depth, and volume fadeout are scaled the way
   MilkyTracker scales them during load
 - each sample header is read as the XM 40-byte sample header
-- sample payload bytes are skipped and bounds checked, but PCM data is not yet
-  decoded
+- sample payload bytes are bounds checked and decoded as XM delta-coded PCM
+- 8-bit sample data is decoded into signed `i8` frames
+- 16-bit sample data is decoded little-endian into signed `i16` frames
+- sample frame counts and loop frame positions are normalized for 16-bit sample
+  headers while the original XM byte lengths are retained
 
 The parser exposes:
 
@@ -127,11 +130,15 @@ The parser exposes:
 - `XmEnvelope`
 - `XmEnvelopePoint`
 - `XmSampleHeader`
+- `XmSampleData`
 
 Current tests assert instrument counts, empty-instrument counts, sample counts,
 sample-data byte totals, first instrument names, first sample header fields,
-instrument-section end offsets, and truncated instrument/sample-data failures
-for all bundled MilkyTracker XM fixtures.
+instrument-section end offsets, decoded sample frame totals, decoded sample
+checksums, and truncated instrument/sample-data failures for all bundled
+MilkyTracker XM fixtures. A synthetic test covers 16-bit delta decoding because
+the bundled fixtures currently use 8-bit samples.
 
-Next step: implement sample payload decoding for delta-coded 8-bit and 16-bit
-sample data, then normalize sample lengths/loops according to the sample type.
+Next step: convert parsed XM instruments and samples into `rustytracker-core`
+types, then add sample-loop normalization edge cases such as ModPlug stereo
+sample data and ADPCM-packed samples.

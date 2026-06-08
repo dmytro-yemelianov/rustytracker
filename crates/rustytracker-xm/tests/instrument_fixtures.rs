@@ -2,8 +2,12 @@ use std::fs;
 use std::path::PathBuf;
 
 use rustytracker_xm::{
-    parse_xm_header, parse_xm_instruments, parse_xm_pattern_headers, XmParseError,
+    parse_xm_header, parse_xm_instruments, parse_xm_pattern_headers, XmModuleHeader, XmParseError,
+    XmSampleData,
 };
+
+const FNV_OFFSET: u64 = 0xcbf29ce484222325;
+const FNV_PRIME: u64 = 0x100000001b3;
 
 #[derive(Debug)]
 struct ExpectedInstrumentSection {
@@ -19,6 +23,9 @@ struct ExpectedInstrumentSection {
     first_sample: ExpectedSample,
     first_instrument_volume_fadeout: Option<u16>,
     first_instrument_vibrato_depth: Option<u8>,
+    decoded_frame_count: usize,
+    decoded_sample_checksum: u64,
+    first_sample_decoded_prefix: &'static [i8],
 }
 
 #[derive(Debug)]
@@ -72,6 +79,11 @@ const FIXTURES: &[ExpectedInstrumentSection] = &[
         },
         first_instrument_volume_fadeout: Some(736),
         first_instrument_vibrato_depth: Some(0),
+        decoded_frame_count: 10_185,
+        decoded_sample_checksum: 0x6868_13f3_c203_59df,
+        first_sample_decoded_prefix: &[
+            -19, 88, 21, -33, 4, -17, -6, -12, -10, -9, -13, -5, -19, 87, 19, -31,
+        ],
     },
     ExpectedInstrumentSection {
         file_name: "slumberjack.xm",
@@ -107,6 +119,11 @@ const FIXTURES: &[ExpectedInstrumentSection] = &[
         },
         first_instrument_volume_fadeout: Some(480),
         first_instrument_vibrato_depth: Some(16),
+        decoded_frame_count: 9_099,
+        decoded_sample_checksum: 0x85bc_efa0_b95b_2b52,
+        first_sample_decoded_prefix: &[
+            1, 9, 22, 41, 60, 75, 94, 115, 120, 122, 127, 127, 127, 127, 127, 127,
+        ],
     },
     ExpectedInstrumentSection {
         file_name: "sv_ttt.xm",
@@ -146,6 +163,11 @@ const FIXTURES: &[ExpectedInstrumentSection] = &[
         },
         first_instrument_volume_fadeout: Some(0),
         first_instrument_vibrato_depth: Some(0),
+        decoded_frame_count: 10_871,
+        decoded_sample_checksum: 0x7877_f846_a0ee_3dd9,
+        first_sample_decoded_prefix: &[
+            6, 22, 16, 9, 7, 5, 3, 1, -3, -6, -7, -8, -10, -11, -15, -16,
+        ],
     },
     ExpectedInstrumentSection {
         file_name: "theday.xm",
@@ -181,6 +203,11 @@ const FIXTURES: &[ExpectedInstrumentSection] = &[
         },
         first_instrument_volume_fadeout: Some(0),
         first_instrument_vibrato_depth: Some(0),
+        decoded_frame_count: 28_466,
+        decoded_sample_checksum: 0x5f5e_bc48_2da7_96ed,
+        first_sample_decoded_prefix: &[
+            -9, -1, -1, 0, 85, 84, 81, 80, -80, -80, -80, -76, -74, -73, -70, -69,
+        ],
     },
     ExpectedInstrumentSection {
         file_name: "universalnetwork2_real.xm",
@@ -217,6 +244,11 @@ const FIXTURES: &[ExpectedInstrumentSection] = &[
         },
         first_instrument_volume_fadeout: Some(0),
         first_instrument_vibrato_depth: Some(0),
+        decoded_frame_count: 67_377,
+        decoded_sample_checksum: 0x0162_07eb_38de_b29d,
+        first_sample_decoded_prefix: &[
+            57, 2, 0, -3, -26, -23, -13, -7, 4, 13, 19, 30, 35, 44, 50, 47,
+        ],
     },
 ];
 
@@ -343,7 +375,60 @@ fn parses_milkytracker_bundled_xm_instrument_sections() {
         assert_eq!(sample.panning, fixture.first_sample.panning);
         assert_eq!(sample.relative_note, fixture.first_sample.relative_note);
         assert_eq!(sample.name, fixture.first_sample.name);
+        assert_eq!(sample.frame_count, fixture.first_sample.length);
+        assert_eq!(sample.loop_start_frames, fixture.first_sample.loop_start);
+        assert_eq!(sample.loop_length_frames, fixture.first_sample.loop_length);
+        assert_eq!(
+            sample.decoded_data.as_i8().unwrap()[..fixture.first_sample_decoded_prefix.len()],
+            *fixture.first_sample_decoded_prefix,
+            "{}",
+            fixture.file_name
+        );
+
+        let decoded_stats = decoded_sample_stats(
+            section
+                .instruments
+                .iter()
+                .flat_map(|instrument| &instrument.samples),
+        );
+        assert_eq!(
+            decoded_stats.frame_count, fixture.decoded_frame_count,
+            "{}",
+            fixture.file_name
+        );
+        assert_eq!(
+            decoded_stats.checksum, fixture.decoded_sample_checksum,
+            "{}",
+            fixture.file_name
+        );
     }
+}
+
+#[test]
+fn decodes_16_bit_delta_sample_data() {
+    let mut bytes = synthetic_instrument_file_with_16_bit_sample();
+    let header = synthetic_header();
+    let section = parse_xm_instruments(&bytes, &header, 0).unwrap();
+    let sample = &section.instruments[0].samples[0];
+
+    assert_eq!(sample.length, 8);
+    assert_eq!(sample.frame_count, 4);
+    assert_eq!(sample.loop_start_frames, 1);
+    assert_eq!(sample.loop_length_frames, 2);
+    assert_eq!(
+        sample.decoded_data.as_i16().unwrap(),
+        &[1_000, 500, 750, -250]
+    );
+
+    bytes.pop();
+    assert!(matches!(
+        parse_xm_instruments(&bytes, &header, 0),
+        Err(XmParseError::SampleDataTooShort {
+            instrument_index: 0,
+            sample_index: 0,
+            ..
+        })
+    ));
 }
 
 #[test]
@@ -385,4 +470,89 @@ fn fixture_path(file_name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../../MilkyTracker/resources/music")
         .join(file_name)
+}
+
+#[derive(Debug)]
+struct DecodedStats {
+    frame_count: usize,
+    checksum: u64,
+}
+
+fn decoded_sample_stats<'a>(
+    samples: impl Iterator<Item = &'a rustytracker_xm::XmSampleHeader>,
+) -> DecodedStats {
+    let mut frame_count = 0;
+    let mut checksum = FNV_OFFSET;
+
+    for sample in samples {
+        frame_count += sample.decoded_data.frame_count();
+        match &sample.decoded_data {
+            XmSampleData::Pcm8(values) => {
+                for value in values {
+                    checksum ^= *value as u8 as u64;
+                    checksum = checksum.wrapping_mul(FNV_PRIME);
+                }
+            }
+            XmSampleData::Pcm16(values) => {
+                for value in values {
+                    for byte in value.to_le_bytes() {
+                        checksum ^= byte as u64;
+                        checksum = checksum.wrapping_mul(FNV_PRIME);
+                    }
+                }
+            }
+        }
+    }
+
+    DecodedStats {
+        frame_count,
+        checksum,
+    }
+}
+
+fn synthetic_header() -> XmModuleHeader {
+    XmModuleHeader {
+        title: String::new(),
+        tracker_name: String::new(),
+        version: 0x0104,
+        header_size: 276,
+        song_length: 1,
+        restart_position: 0,
+        channel_count: 1,
+        pattern_count: 0,
+        instrument_count: 1,
+        flags: 1,
+        frequency_table: rustytracker_core::FrequencyTable::Linear,
+        default_tick_speed: 6,
+        default_bpm: 125,
+        orders: vec![0],
+    }
+}
+
+fn synthetic_instrument_file_with_16_bit_sample() -> Vec<u8> {
+    let mut bytes = Vec::new();
+
+    bytes.extend_from_slice(&263_u32.to_le_bytes());
+    bytes.extend_from_slice(&[0; 22]);
+    bytes.push(0);
+    bytes.extend_from_slice(&1_u16.to_le_bytes());
+    bytes.extend_from_slice(&40_u32.to_le_bytes());
+    bytes.extend_from_slice(&[0; 230]);
+
+    bytes.extend_from_slice(&8_u32.to_le_bytes());
+    bytes.extend_from_slice(&2_u32.to_le_bytes());
+    bytes.extend_from_slice(&4_u32.to_le_bytes());
+    bytes.push(64);
+    bytes.push(0);
+    bytes.push(0x10);
+    bytes.push(128);
+    bytes.push(0);
+    bytes.push(0);
+    bytes.extend_from_slice(&[0; 22]);
+
+    for delta in [1_000_i16, -500, 250, -1_000] {
+        bytes.extend_from_slice(&delta.to_le_bytes());
+    }
+
+    bytes
 }
