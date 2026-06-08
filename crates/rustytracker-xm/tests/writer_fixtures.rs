@@ -2,11 +2,14 @@ use std::fs;
 use std::path::PathBuf;
 
 use rustytracker_core::{
-    EffectCommand, FrequencyTable, Module, ModuleTitle, Note, Pattern, PatternCell,
+    EffectCommand, Envelope, EnvelopePoint, FrequencyTable, Instrument, InstrumentName, Module,
+    ModuleTitle, Note, Pattern, PatternCell, Sample, SampleData, SampleLoopKind, SampleName,
+    Vibrato, MAX_XM_NOTES, SAMPLES_PER_INSTRUMENT,
 };
 use rustytracker_xm::{
-    decode_xm_patterns, parse_xm_header, parse_xm_module, parse_xm_pattern_headers,
-    write_xm_header, write_xm_patterns, XmWriteError,
+    decode_xm_patterns, parse_xm_header, parse_xm_instruments, parse_xm_module,
+    parse_xm_pattern_headers, write_xm_header, write_xm_instruments, write_xm_patterns,
+    XmWriteError,
 };
 
 const FIXTURES: &[&str] = &[
@@ -55,6 +58,33 @@ const XM_WRITER_CENTER_PANNING_255: u8 = 0x80;
 const XM_WRITER_CENTER_PANNING_COLUMN: u8 = 0xc8;
 const XM_WRITER_TONE_PORTAMENTO_EFFECT: u8 = 0x03;
 const XM_WRITER_LOW_NIBBLE_TONE_PORTAMENTO_OPERAND: u8 = 0x05;
+const XM_WRITER_EMPTY_INSTRUMENT_HEADER_SIZE: u32 = 29;
+const XM_WRITER_INSTRUMENT_HEADER_SIZE: u32 = 263;
+const XM_WRITER_SAMPLE_HEADER_SIZE: u32 = 40;
+const XM_WRITER_SINGLE_INSTRUMENT_COUNT: usize = 1;
+const XM_WRITER_SINGLE_SAMPLE_COUNT: u16 = 1;
+const XM_WRITER_FIRST_INSTRUMENT_INDEX: usize = 0;
+const XM_WRITER_FIRST_SAMPLE_INDEX: usize = 0;
+const XM_WRITER_EMPTY_ENVELOPE_POINT_INDEX: u8 = 0;
+const XM_WRITER_TEST_INSTRUMENT_NAME: &str = "lead inst";
+const XM_WRITER_TEST_SAMPLE_NAME: &str = "sample a";
+const XM_WRITER_TEST_ENVELOPE_FRAME: u16 = 12;
+const XM_WRITER_TEST_ENVELOPE_VALUE: u16 = 32;
+const XM_WRITER_TEST_ENVELOPE_POINT_COUNT: u8 = 1;
+const XM_WRITER_TEST_ENVELOPE_FLAG: u8 = 1;
+const XM_WRITER_TEST_VIBRATO_WAVEFORM: u8 = 2;
+const XM_WRITER_TEST_VIBRATO_SWEEP: u8 = 3;
+const XM_WRITER_TEST_VIBRATO_DEPTH: u8 = 16;
+const XM_WRITER_TEST_VIBRATO_RATE: u8 = 5;
+const XM_WRITER_TEST_VOLUME_FADEOUT: u16 = 480;
+const XM_WRITER_TEST_SAMPLE_VOLUME_255: u8 = 192;
+const XM_WRITER_TEST_SAMPLE_VOLUME_64: u8 = 48;
+const XM_WRITER_TEST_SAMPLE_PANNING: u8 = 96;
+const XM_WRITER_TEST_SAMPLE_FINETUNE: i8 = -12;
+const XM_WRITER_TEST_SAMPLE_RELATIVE_NOTE: i8 = 7;
+const XM_WRITER_FORWARD_LOOP_SAMPLE_TYPE: u8 = 1;
+const XM_WRITER_TEST_SAMPLE_DATA_LEN: u32 = 1;
+const XM_WRITER_TEST_SAMPLE_DATA_BYTE: i8 = 1;
 
 #[test]
 fn writes_empty_module_header_and_order_table() {
@@ -157,6 +187,110 @@ fn writes_empty_pattern_headers_without_payload_data() {
     );
     assert_eq!(patterns[0].rows(), module.patterns[0].rows());
     assert_eq!(patterns[0].channels(), module.header.channel_count);
+}
+
+#[test]
+fn writes_empty_instrument_headers_without_sample_data() {
+    let module = Module::empty();
+    let bytes = write_header_patterns_and_instruments(&module);
+    let header = parse_xm_header(&bytes).unwrap();
+    let pattern_headers = parse_xm_pattern_headers(&bytes, &header).unwrap();
+    let instrument_offset = pattern_headers.last().unwrap().next_offset;
+    let section = parse_xm_instruments(&bytes, &header, instrument_offset).unwrap();
+
+    assert_eq!(section.instruments.len(), module.instruments.len());
+    assert_eq!(section.next_offset, bytes.len());
+    assert!(section.instruments.iter().all(|instrument| {
+        instrument.header_size == XM_WRITER_EMPTY_INSTRUMENT_HEADER_SIZE
+            && instrument.sample_count == 0
+            && instrument.sample_header_size.is_none()
+            && instrument.note_sample_map.is_none()
+    }));
+}
+
+#[test]
+fn writes_instrument_metadata_and_empty_sample_headers() {
+    let module = module_with_one_named_empty_sample();
+    let bytes = write_header_patterns_and_instruments(&module);
+    let header = parse_xm_header(&bytes).unwrap();
+    let pattern_headers = parse_xm_pattern_headers(&bytes, &header).unwrap();
+    let instrument_offset = pattern_headers.last().unwrap().next_offset;
+    let section = parse_xm_instruments(&bytes, &header, instrument_offset).unwrap();
+    let instrument = &section.instruments[XM_WRITER_FIRST_INSTRUMENT_INDEX];
+    let sample = &instrument.samples[XM_WRITER_FIRST_SAMPLE_INDEX];
+
+    assert_eq!(section.instruments.len(), XM_WRITER_SINGLE_INSTRUMENT_COUNT);
+    assert_eq!(section.next_offset, bytes.len());
+    assert_eq!(instrument.header_size, XM_WRITER_INSTRUMENT_HEADER_SIZE);
+    assert_eq!(instrument.name, XM_WRITER_TEST_INSTRUMENT_NAME);
+    assert_eq!(instrument.sample_count, XM_WRITER_SINGLE_SAMPLE_COUNT);
+    assert_eq!(
+        instrument.sample_header_size,
+        Some(XM_WRITER_SAMPLE_HEADER_SIZE)
+    );
+    assert_eq!(
+        instrument.note_sample_map.as_ref().unwrap(),
+        &vec![XM_WRITER_EMPTY_OPERAND; MAX_XM_NOTES as usize]
+    );
+    assert_eq!(
+        instrument.volume_envelope.as_ref().unwrap().points[0],
+        rustytracker_xm::XmEnvelopePoint {
+            frame: XM_WRITER_TEST_ENVELOPE_FRAME,
+            value: XM_WRITER_TEST_ENVELOPE_VALUE,
+        }
+    );
+    assert_eq!(
+        instrument.volume_envelope.as_ref().unwrap().point_count,
+        XM_WRITER_TEST_ENVELOPE_POINT_COUNT
+    );
+    assert_eq!(
+        instrument.volume_envelope.as_ref().unwrap().flags,
+        XM_WRITER_TEST_ENVELOPE_FLAG
+    );
+    assert_eq!(
+        instrument.panning_envelope.as_ref().unwrap().points[0],
+        rustytracker_xm::XmEnvelopePoint {
+            frame: XM_WRITER_TEST_ENVELOPE_FRAME,
+            value: XM_WRITER_TEST_ENVELOPE_VALUE,
+        }
+    );
+    assert_eq!(
+        instrument.vibrato_type,
+        Some(XM_WRITER_TEST_VIBRATO_WAVEFORM)
+    );
+    assert_eq!(instrument.vibrato_sweep, Some(XM_WRITER_TEST_VIBRATO_SWEEP));
+    assert_eq!(instrument.vibrato_depth, Some(XM_WRITER_TEST_VIBRATO_DEPTH));
+    assert_eq!(instrument.vibrato_rate, Some(XM_WRITER_TEST_VIBRATO_RATE));
+    assert_eq!(
+        instrument.volume_fadeout,
+        Some(XM_WRITER_TEST_VOLUME_FADEOUT)
+    );
+
+    assert_eq!(sample.length, 0);
+    assert_eq!(sample.name, XM_WRITER_TEST_SAMPLE_NAME);
+    assert_eq!(sample.volume_64, XM_WRITER_TEST_SAMPLE_VOLUME_64);
+    assert_eq!(sample.volume, XM_WRITER_TEST_SAMPLE_VOLUME_255);
+    assert_eq!(sample.panning, XM_WRITER_TEST_SAMPLE_PANNING);
+    assert_eq!(sample.finetune, XM_WRITER_TEST_SAMPLE_FINETUNE);
+    assert_eq!(sample.relative_note, XM_WRITER_TEST_SAMPLE_RELATIVE_NOTE);
+    assert_eq!(sample.sample_type, XM_WRITER_FORWARD_LOOP_SAMPLE_TYPE);
+    assert_eq!(sample.loop_kind, SampleLoopKind::Forward);
+}
+
+#[test]
+fn rejects_sample_payloads_until_delta_encoding_is_implemented() {
+    let mut module = module_with_one_named_empty_sample();
+    module.samples[XM_WRITER_FIRST_SAMPLE_INDEX].length = XM_WRITER_TEST_SAMPLE_DATA_LEN;
+    module.samples[XM_WRITER_FIRST_SAMPLE_INDEX].data =
+        SampleData::Pcm8(vec![XM_WRITER_TEST_SAMPLE_DATA_BYTE]);
+
+    assert_eq!(
+        write_xm_instruments(&module).unwrap_err(),
+        XmWriteError::SampleDataEncodingNotImplemented {
+            instrument_index: XM_WRITER_FIRST_INSTRUMENT_INDEX,
+            sample_index: XM_WRITER_FIRST_SAMPLE_INDEX,
+        }
+    );
 }
 
 #[test]
@@ -439,6 +573,59 @@ fn write_header_and_patterns(module: &Module) -> Vec<u8> {
     let mut bytes = write_xm_header(module).unwrap();
     bytes.extend_from_slice(&write_xm_patterns(module).unwrap());
     bytes
+}
+
+fn write_header_patterns_and_instruments(module: &Module) -> Vec<u8> {
+    let mut bytes = write_header_and_patterns(module);
+    bytes.extend_from_slice(&write_xm_instruments(module).unwrap());
+    bytes
+}
+
+fn module_with_one_named_empty_sample() -> Module {
+    let mut module = Module::empty_with_channels(XM_WRITER_TEST_CHANNELS).unwrap();
+    let mut instrument = Instrument::empty(XM_WRITER_FIRST_INSTRUMENT_INDEX);
+    let mut sample_slots = vec![None; SAMPLES_PER_INSTRUMENT];
+    sample_slots[XM_WRITER_FIRST_SAMPLE_INDEX] = Some(XM_WRITER_FIRST_SAMPLE_INDEX);
+
+    instrument.name = InstrumentName::new(XM_WRITER_TEST_INSTRUMENT_NAME);
+    instrument.sample_slots = sample_slots;
+    instrument.note_sample_map = vec![Some(XM_WRITER_FIRST_SAMPLE_INDEX); MAX_XM_NOTES as usize];
+    instrument.volume_envelope = test_envelope();
+    instrument.panning_envelope = test_envelope();
+    instrument.vibrato = Vibrato {
+        waveform: XM_WRITER_TEST_VIBRATO_WAVEFORM,
+        sweep: XM_WRITER_TEST_VIBRATO_SWEEP,
+        depth: XM_WRITER_TEST_VIBRATO_DEPTH,
+        rate: XM_WRITER_TEST_VIBRATO_RATE,
+    };
+    instrument.volume_fadeout = XM_WRITER_TEST_VOLUME_FADEOUT;
+
+    module.instruments = vec![instrument];
+    module.samples = vec![Sample {
+        name: SampleName::new(XM_WRITER_TEST_SAMPLE_NAME),
+        volume: XM_WRITER_TEST_SAMPLE_VOLUME_255,
+        panning: XM_WRITER_TEST_SAMPLE_PANNING,
+        loop_kind: SampleLoopKind::Forward,
+        finetune: XM_WRITER_TEST_SAMPLE_FINETUNE,
+        relative_note: XM_WRITER_TEST_SAMPLE_RELATIVE_NOTE,
+        ..Sample::default()
+    }];
+
+    module
+}
+
+fn test_envelope() -> Envelope {
+    Envelope {
+        points: vec![EnvelopePoint {
+            frame: XM_WRITER_TEST_ENVELOPE_FRAME,
+            value: XM_WRITER_TEST_ENVELOPE_VALUE,
+        }],
+        point_count: XM_WRITER_TEST_ENVELOPE_POINT_COUNT,
+        sustain_point: XM_WRITER_EMPTY_ENVELOPE_POINT_INDEX,
+        loop_start_point: XM_WRITER_EMPTY_ENVELOPE_POINT_INDEX,
+        loop_end_point: XM_WRITER_EMPTY_ENVELOPE_POINT_INDEX,
+        flags: XM_WRITER_TEST_ENVELOPE_FLAG,
+    }
 }
 
 fn write_single_cell_pattern(effects: Vec<EffectCommand>) -> Vec<u8> {

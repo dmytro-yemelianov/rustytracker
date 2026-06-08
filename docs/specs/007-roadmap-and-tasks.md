@@ -100,10 +100,10 @@ Done:
 - add reference-spec map for XM compatibility sources
 - add MilkyTracker-compatible inverse mappings for current core pattern effects
 - relocate compatible first-slot effects into the XM volume column
+- write XM instrument metadata and zero-length sample headers
 
 Remaining:
 
-- write instruments and sample headers
 - write sample payloads using XM delta encoding
 - add symmetric parser/writer coverage for fine volume-slide volume-column
   commands
@@ -188,8 +188,7 @@ Acceptance:
 
 ## Immediate Backlog
 
-1. Merge the current XM writer effect-mapping PR after review.
-2. Write instruments and sample headers.
-3. Write sample payloads using XM delta encoding.
-4. Add symmetric fine volume-slide volume-column coverage.
-5. Add `XM -> core -> XM -> core` normalized equality checks.
+1. Merge the current XM instrument/sample-header writer PR after review.
+2. Write sample payloads using XM delta encoding.
+3. Add symmetric fine volume-slide volume-column coverage.
+4. Add `XM -> core -> XM -> core` normalized equality checks.

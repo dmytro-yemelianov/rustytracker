@@ -3,9 +3,9 @@
 ## Scope
 
 The XM writer starts with the fixed module header, active order table, pattern
-headers/cells, and the first MilkyTracker-compatible effect inverse mappings.
-Full roundtrip support will add instrument writing, sample-header writing, and
-sample-payload writing in later slices.
+headers/cells, the first MilkyTracker-compatible effect inverse mappings, and
+instrument/sample headers without payload encoding. Full roundtrip support will
+add sample-payload writing in a later slice.
 
 ## References
 
@@ -50,6 +50,10 @@ The writer tests verify:
 - overlong order tables fail before bytes are emitted
 - empty patterns are written with zero payload bytes
 - simple note/instrument cells roundtrip through unpacked XM pattern data
+- empty instruments are emitted as short XM instrument headers
+- active instruments are emitted with extension metadata and zero-length sample
+  headers
+- non-empty sample payloads are rejected until delta encoding is implemented
 
 ## Pattern Blocks
 
@@ -96,3 +100,21 @@ Deferred mappings:
 
 - `EAx` / `EBx` relocation into volume-column `9x` / `8x` waits until parser and
   core semantics for fine volume slides are represented symmetrically.
+
+## Instrument Blocks
+
+`write_xm_instruments` writes one XM instrument block per core instrument:
+
+- instruments with no active core samples use the short 29-byte XM header
+- instruments with active sample slots use the 263-byte XM instrument header
+- sample header size is `40`
+- the note sample map is translated from core sample indexes back to XM-local
+  sample slots
+- envelope point values are scaled from core values back to XM values
+- vibrato depth and volume fadeout are scaled back to their XM stored values
+- sample headers are emitted with zero byte lengths until the sample payload
+  encoder exists
+
+The writer rejects non-empty sample data with
+`SampleDataEncodingNotImplemented` so it cannot silently emit invalid or fake
+audio payloads.
