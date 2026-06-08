@@ -69,6 +69,22 @@ return a `PlaybackRowState` for the current position:
 The row state is a read-only snapshot. It does not yet trigger instruments,
 carry effect memory, update envelopes, or advance sample playback.
 
+## CLI Trace Contract
+
+`rustytracker play-state <module.xm> --rows <count>` loads an XM file and emits
+a deterministic JSON trace of the first playback rows:
+
+- schema version and `play_state` format tag
+- requested row count and whether song end was reached
+- initial BPM, ticks per row, tick duration, and row duration
+- one row entry per visited row
+- each row entry includes order index, pattern index, row, tick, and active
+  channel cells
+
+The trace is intentionally not audio output. It gives contributors something
+concrete to compile and run while the playback crate is still below sample
+triggering and mixing.
+
 ## Error Contract
 
 The cursor reports structural playback errors explicitly:
@@ -100,6 +116,7 @@ The initial `rustytracker-play` tests verify:
 - current row state returns one cell per active module channel
 - row state follows tick-driven row advancement
 - patterns with too few channels for the module are rejected
+- `play-state` rejects missing, non-numeric, or zero row counts
 - empty order lists are rejected
 - empty patterns are rejected
 - missing pattern references are rejected before playback starts

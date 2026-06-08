@@ -37,6 +37,7 @@ name = "rustytracker-cli"
 version = "0.1.0"
 dependencies = [
  "rustytracker-core",
+ "rustytracker-play",
  "rustytracker-xm",
  "serde",
  "serde_json",
