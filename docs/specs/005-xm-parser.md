@@ -175,4 +175,18 @@ assert headers, orders, pattern counts, instrument counts, sample-pool layout,
 first instrument envelope/vibrato/fadeout metadata, first sample metadata,
 sample loop kind, decoded data prefixes, and decoded sample checksums.
 
-Next step: start the structural dump CLI and golden normalized JSON fixtures.
+Next step: continue XM writing with pattern, instrument, and sample payload
+serialization.
+
+## Header Writer Contract
+
+`write_xm_header` emits the fixed 336-byte XM header prefix:
+
+- signature, marker, module title, tracker name, version, and header size
+- active order count and 256-byte order table
+- restart position, channel count, pattern count, and instrument count
+- linear/amiga frequency-table flag
+- default tick speed and BPM
+
+The writer currently stops at the header/order table. Pattern, instrument, and
+sample payload writing are separate roundtrip milestones.

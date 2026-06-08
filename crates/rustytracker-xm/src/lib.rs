@@ -27,6 +27,10 @@ const XM_EXPANDED_EFFECT_SLOTS: u8 = 2;
 const XM_VERSION_1_02: u16 = 0x0102;
 const XM_VERSION_1_03: u16 = 0x0103;
 const XM_VERSION_1_04: u16 = 0x0104;
+const XM_WRITER_TRACKER_NAME: &str = "RustyTracker";
+const XM_WRITER_HEADER_SIZE: u32 = 276;
+const XM_WRITER_AMIGA_FLAGS: u16 = 0x0000;
+const XM_WRITER_EMPTY_ORDER: u8 = 0;
 const XM_HEADER_FIELD_STEP: usize = 2;
 const XM_RESTART_FIELD_OFFSET: usize = HEADER_FIELDS_OFFSET + XM_HEADER_FIELD_STEP;
 const XM_CHANNELS_FIELD_OFFSET: usize = HEADER_FIELDS_OFFSET + XM_HEADER_FIELD_STEP * 2;
@@ -148,6 +152,7 @@ const STEREO_CHANNEL_COUNT: usize = 2;
 const STEREO_CHANNEL_COUNT_U32: u32 = STEREO_CHANNEL_COUNT as u32;
 const STEREO_AVERAGE_SHIFT: u8 = 1;
 const XM_ORDER_REFERENCE_PATTERN_ROWS: u16 = rustytracker_core::DEFAULT_PATTERN_ROWS;
+const U16_MAX_AS_USIZE: usize = u16::MAX as usize;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum XmParseError {
@@ -227,6 +232,15 @@ pub enum XmParseError {
 }
 
 pub type XmResult<T> = Result<T, XmParseError>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum XmWriteError {
+    TooManyOrders { requested: usize, maximum: usize },
+    TooManyPatterns { requested: usize, maximum: usize },
+    TooManyInstruments { requested: usize, maximum: usize },
+}
+
+pub type XmWriteResult<T> = Result<T, XmWriteError>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XmModuleHeader {
@@ -410,6 +424,85 @@ pub fn parse_xm_header(bytes: &[u8]) -> XmResult<XmModuleHeader> {
         default_bpm,
         orders: bytes[ORDER_TABLE_OFFSET..order_end].to_vec(),
     })
+}
+
+pub fn write_xm_header(module: &Module) -> XmWriteResult<Vec<u8>> {
+    if module.orders.len() > XM_ORDER_TABLE_LEN {
+        return Err(XmWriteError::TooManyOrders {
+            requested: module.orders.len(),
+            maximum: XM_ORDER_TABLE_LEN,
+        });
+    }
+
+    if module.patterns.len() > U16_MAX_AS_USIZE {
+        return Err(XmWriteError::TooManyPatterns {
+            requested: module.patterns.len(),
+            maximum: U16_MAX_AS_USIZE,
+        });
+    }
+
+    if module.instruments.len() > U16_MAX_AS_USIZE {
+        return Err(XmWriteError::TooManyInstruments {
+            requested: module.instruments.len(),
+            maximum: U16_MAX_AS_USIZE,
+        });
+    }
+
+    let mut bytes = vec![ASCII_NUL; XM_MIN_HEADER_BYTES];
+
+    bytes[..XM_SIGNATURE.len()].copy_from_slice(XM_SIGNATURE);
+    bytes[MARKER_OFFSET] = XM_MARKER;
+    write_fixed_text(
+        &mut bytes[TITLE_OFFSET..TITLE_OFFSET + TITLE_LEN],
+        module.header.title.as_str(),
+    );
+    write_fixed_text(
+        &mut bytes[TRACKER_OFFSET..TRACKER_OFFSET + TRACKER_LEN],
+        XM_WRITER_TRACKER_NAME,
+    );
+    write_u16(&mut bytes, VERSION_OFFSET, XM_VERSION_1_04);
+    write_u32(&mut bytes, HEADER_SIZE_OFFSET, XM_WRITER_HEADER_SIZE);
+    write_u16(&mut bytes, HEADER_FIELDS_OFFSET, module.orders.len() as u16);
+    write_u16(
+        &mut bytes,
+        XM_RESTART_FIELD_OFFSET,
+        module.header.restart_position,
+    );
+    write_u16(
+        &mut bytes,
+        XM_CHANNELS_FIELD_OFFSET,
+        module.header.channel_count,
+    );
+    write_u16(
+        &mut bytes,
+        XM_PATTERNS_FIELD_OFFSET,
+        module.patterns.len() as u16,
+    );
+    write_u16(
+        &mut bytes,
+        XM_INSTRUMENTS_FIELD_OFFSET,
+        module.instruments.len() as u16,
+    );
+    write_u16(
+        &mut bytes,
+        XM_FLAGS_FIELD_OFFSET,
+        match module.header.frequency_table {
+            FrequencyTable::Amiga => XM_WRITER_AMIGA_FLAGS,
+            FrequencyTable::Linear => XM_LINEAR_FREQUENCY_FLAG,
+        },
+    );
+    write_u16(
+        &mut bytes,
+        XM_TICK_SPEED_FIELD_OFFSET,
+        module.header.tick_speed,
+    );
+    write_u16(&mut bytes, XM_BPM_FIELD_OFFSET, module.header.bpm);
+
+    bytes[ORDER_TABLE_OFFSET..ORDER_TABLE_OFFSET + XM_ORDER_TABLE_LEN].fill(XM_WRITER_EMPTY_ORDER);
+    bytes[ORDER_TABLE_OFFSET..ORDER_TABLE_OFFSET + module.orders.len()]
+        .copy_from_slice(&module.orders);
+
+    Ok(bytes)
 }
 
 pub fn parse_xm_pattern_headers(
@@ -1367,6 +1460,22 @@ fn read_u32(bytes: &[u8], offset: usize) -> u32 {
         bytes[offset + BYTE_2_OFFSET],
         bytes[offset + BYTE_3_OFFSET],
     ])
+}
+
+fn write_u16(bytes: &mut [u8], offset: usize, value: u16) {
+    bytes[offset..offset + BYTE_2_OFFSET].copy_from_slice(&value.to_le_bytes());
+}
+
+fn write_u32(bytes: &mut [u8], offset: usize, value: u32) {
+    bytes[offset..offset + BYTE_3_OFFSET + BYTE_1_OFFSET].copy_from_slice(&value.to_le_bytes());
+}
+
+fn write_fixed_text(bytes: &mut [u8], value: &str) {
+    bytes.fill(ASCII_NUL);
+
+    for (target, source) in bytes.iter_mut().zip(value.as_bytes()) {
+        *target = *source;
+    }
 }
 
 fn decode_fixed_text(bytes: &[u8]) -> String {
