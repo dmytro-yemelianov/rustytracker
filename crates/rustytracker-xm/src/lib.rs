@@ -3,7 +3,11 @@
 //! This crate starts read-only. It will grow toward a full parser/writer only
 //! through fixture-backed tests.
 
-use rustytracker_core::{EffectCommand, FrequencyTable, Note, Pattern, PatternCell};
+use rustytracker_core::{
+    EffectCommand, FrequencyTable, Instrument, InstrumentName, Module, ModuleHeader, ModuleTitle,
+    Note, Pattern, PatternCell, Sample, SampleData as CoreSampleData, SampleName,
+    SAMPLES_PER_INSTRUMENT, SAMPLE_DEFAULT_FLAGS, SAMPLE_DEFAULT_VOLUME_FADEOUT,
+};
 
 const XM_SIGNATURE: &[u8; 17] = b"Extended Module: ";
 const XM_MARKER: u8 = 0x1a;
@@ -501,6 +505,40 @@ pub fn decode_xm_pattern(
     Ok(pattern)
 }
 
+pub fn parse_xm_module(bytes: &[u8]) -> XmResult<Module> {
+    let header = parse_xm_header(bytes)?;
+    let pattern_headers = parse_xm_pattern_headers(bytes, &header)?;
+    let patterns = pattern_headers
+        .iter()
+        .map(|pattern_header| decode_xm_pattern(bytes, &header, pattern_header))
+        .collect::<XmResult<Vec<_>>>()?;
+    let instrument_offset = pattern_headers
+        .last()
+        .map(|pattern_header| pattern_header.next_offset)
+        .unwrap_or(HEADER_SIZE_OFFSET + header.header_size as usize);
+    let instrument_section = parse_xm_instruments(bytes, &header, instrument_offset)?;
+
+    Ok(Module {
+        header: ModuleHeader {
+            title: ModuleTitle::new(&header.title),
+            channel_count: header.channel_count,
+            frequency_table: header.frequency_table,
+            bpm: header.default_bpm,
+            tick_speed: header.default_tick_speed,
+            main_volume: rustytracker_core::DEFAULT_MAIN_VOLUME,
+            restart_position: header.restart_position,
+        },
+        orders: header.orders,
+        patterns,
+        instruments: instrument_section
+            .instruments
+            .iter()
+            .map(convert_instrument_to_core)
+            .collect(),
+        samples: convert_samples_to_core(&instrument_section.instruments),
+    })
+}
+
 pub fn parse_xm_instruments(
     bytes: &[u8],
     header: &XmModuleHeader,
@@ -639,6 +677,77 @@ fn parse_xm_instrument(
     instrument.samples = samples;
     instrument.next_offset = sample_data_offset;
     Ok(instrument)
+}
+
+fn convert_instrument_to_core(instrument: &XmInstrument) -> Instrument {
+    let base_sample = instrument.index * SAMPLES_PER_INSTRUMENT;
+    let mut sample_slots = vec![None; SAMPLES_PER_INSTRUMENT];
+    for sample in &instrument.samples {
+        if sample.index < SAMPLES_PER_INSTRUMENT {
+            sample_slots[sample.index] = Some(base_sample + sample.index);
+        }
+    }
+
+    Instrument {
+        name: InstrumentName::new(&instrument.name),
+        sample_slots,
+        note_sample_map: instrument
+            .note_sample_map
+            .as_ref()
+            .map(|note_map| {
+                note_map
+                    .iter()
+                    .map(|&sample_index| {
+                        let sample_index = sample_index as usize;
+                        if sample_index < instrument.sample_count as usize
+                            && sample_index < SAMPLES_PER_INSTRUMENT
+                        {
+                            Some(base_sample + sample_index)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect()
+            })
+            .unwrap_or_else(|| vec![None; XM_NOTE_SAMPLE_MAP_LEN]),
+    }
+}
+
+fn convert_samples_to_core(instruments: &[XmInstrument]) -> Vec<Sample> {
+    let mut samples = vec![Sample::default(); instruments.len() * SAMPLES_PER_INSTRUMENT];
+
+    for instrument in instruments {
+        let base_sample = instrument.index * SAMPLES_PER_INSTRUMENT;
+        let volume_fadeout = instrument
+            .volume_fadeout
+            .unwrap_or(SAMPLE_DEFAULT_VOLUME_FADEOUT);
+
+        for sample in &instrument.samples {
+            if sample.index >= SAMPLES_PER_INSTRUMENT {
+                continue;
+            }
+
+            samples[base_sample + sample.index] = Sample {
+                name: SampleName::new(&sample.name),
+                length: sample.frame_count,
+                loop_start: sample.loop_start_frames,
+                loop_length: sample.loop_length_frames,
+                volume: sample.volume,
+                panning: sample.panning,
+                flags: SAMPLE_DEFAULT_FLAGS,
+                volume_fadeout,
+                sample_type: sample.sample_type,
+                finetune: sample.finetune,
+                relative_note: sample.relative_note,
+                data: match &sample.decoded_data {
+                    XmSampleData::Pcm8(values) => CoreSampleData::Pcm8(values.clone()),
+                    XmSampleData::Pcm16(values) => CoreSampleData::Pcm16(values.clone()),
+                },
+            };
+        }
+    }
+
+    samples
 }
 
 fn read_instrument_identity(

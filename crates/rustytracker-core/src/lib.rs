@@ -34,6 +34,9 @@ pub const SAMPLE_DEFAULT_VOLUME: u8 = 0xff;
 pub const SAMPLE_DEFAULT_PANNING: u8 = 0x80;
 pub const SAMPLE_DEFAULT_FLAGS: u8 = 3;
 pub const SAMPLE_DEFAULT_VOLUME_FADEOUT: u16 = 65_535;
+pub const SAMPLE_DEFAULT_TYPE: u8 = 0;
+pub const SAMPLE_DEFAULT_FINETUNE: i8 = 0;
+pub const SAMPLE_DEFAULT_RELATIVE_NOTE: i8 = 0;
 pub const NOTES_PER_OCTAVE: u8 = 12;
 pub const FIRST_XM_NOTE_VALUE: u8 = 1;
 pub const EMPTY_NOTE_VALUE: u8 = 0;
@@ -368,7 +371,7 @@ impl OrderList {
 pub struct Instrument {
     pub name: InstrumentName,
     pub sample_slots: Vec<Option<usize>>,
-    pub note_sample_map: Vec<usize>,
+    pub note_sample_map: Vec<Option<usize>>,
 }
 
 impl Instrument {
@@ -381,7 +384,30 @@ impl Instrument {
         Self {
             name: InstrumentName::default(),
             sample_slots,
-            note_sample_map: vec![DEFAULT_NOTE_SAMPLE_INDEX; MAX_XM_NOTES as usize],
+            note_sample_map: vec![Some(DEFAULT_NOTE_SAMPLE_INDEX); MAX_XM_NOTES as usize],
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SampleData {
+    Empty,
+    Pcm8(Vec<i8>),
+    Pcm16(Vec<i16>),
+}
+
+impl Default for SampleData {
+    fn default() -> Self {
+        Self::Empty
+    }
+}
+
+impl SampleData {
+    pub fn frame_count(&self) -> usize {
+        match self {
+            Self::Empty => 0,
+            Self::Pcm8(values) => values.len(),
+            Self::Pcm16(values) => values.len(),
         }
     }
 }
@@ -396,6 +422,10 @@ pub struct Sample {
     pub panning: u8,
     pub flags: u8,
     pub volume_fadeout: u16,
+    pub sample_type: u8,
+    pub finetune: i8,
+    pub relative_note: i8,
+    pub data: SampleData,
 }
 
 impl Default for Sample {
@@ -409,6 +439,10 @@ impl Default for Sample {
             panning: SAMPLE_DEFAULT_PANNING,
             flags: SAMPLE_DEFAULT_FLAGS,
             volume_fadeout: SAMPLE_DEFAULT_VOLUME_FADEOUT,
+            sample_type: SAMPLE_DEFAULT_TYPE,
+            finetune: SAMPLE_DEFAULT_FINETUNE,
+            relative_note: SAMPLE_DEFAULT_RELATIVE_NOTE,
+            data: SampleData::Empty,
         }
     }
 }

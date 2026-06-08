@@ -131,6 +131,7 @@ The parser exposes:
 - `XmEnvelopePoint`
 - `XmSampleHeader`
 - `XmSampleData`
+- `parse_xm_module`
 
 Current tests assert instrument counts, empty-instrument counts, sample counts,
 sample-data byte totals, first instrument names, first sample header fields,
@@ -139,6 +140,25 @@ checksums, and truncated instrument/sample-data failures for all bundled
 MilkyTracker XM fixtures. A synthetic test covers 16-bit delta decoding because
 the bundled fixtures currently use 8-bit samples.
 
-Next step: convert parsed XM instruments and samples into `rustytracker-core`
-types, then add sample-loop normalization edge cases such as ModPlug stereo
-sample data and ADPCM-packed samples.
+## Core Module Conversion
+
+`parse_xm_module` composes the tested parser stages into a
+`rustytracker-core::Module`:
+
+- module title, channel count, frequency table, restart position, tick speed,
+  BPM, main volume, and active order table are copied from the XM header
+- packed XM patterns become typed core `Pattern` values
+- XM instruments become core `Instrument` values
+- sample slots use MilkyTracker's 16-slot-per-instrument pool layout
+- note-to-sample maps are converted to absolute core sample indexes where the
+  mapped sample exists, otherwise `None`
+- XM sample headers become core `Sample` metadata
+- decoded sample payloads become core `SampleData::Pcm8` or
+  `SampleData::Pcm16`
+
+Fixture tests load every bundled MilkyTracker XM file into the core model and
+assert headers, orders, pattern counts, instrument counts, sample-pool layout,
+first sample metadata, decoded data prefixes, and decoded sample checksums.
+
+Next step: add sample-loop normalization edge cases such as ModPlug stereo
+sample data and ADPCM-packed samples, then start playback-facing fixture tests.
