@@ -8,8 +8,8 @@ use rustytracker_core::{
 };
 use rustytracker_xm::{
     decode_xm_patterns, parse_xm_header, parse_xm_instruments, parse_xm_module,
-    parse_xm_pattern_headers, write_xm_header, write_xm_instruments, write_xm_patterns,
-    XmSampleField, XmWriteError,
+    parse_xm_pattern_headers, write_xm_header, write_xm_instruments, write_xm_module,
+    write_xm_patterns, XmSampleField, XmWriteError,
 };
 
 const FIXTURES: &[&str] = &[
@@ -22,6 +22,11 @@ const FIXTURES: &[&str] = &[
 const XM_WRITER_TEST_VERSION: u16 = 0x0104;
 const XM_WRITER_TEST_HEADER_SIZE: u32 = 276;
 const XM_WRITER_TEST_ORDERS: &[u8] = &[0, 0, 0];
+const XM_WRITER_FNV_OFFSET: u64 = 0xcbf29ce484222325;
+const XM_WRITER_FNV_PRIME: u64 = 0x100000001b3;
+const XM_WRITER_OPTION_NONE_TAG: u8 = 0;
+const XM_WRITER_OPTION_SOME_TAG: u8 = 1;
+const XM_WRITER_SAMPLE_PREFIX_FRAMES: usize = 16;
 const XM_WRITER_ORDER_TABLE_LEN: usize = 256;
 const XM_WRITER_OVERLONG_ORDER_LEN: usize = XM_WRITER_ORDER_TABLE_LEN + 1;
 const XM_WRITER_TEST_ROWS: u16 = 1;
@@ -29,6 +34,7 @@ const XM_WRITER_TEST_CHANNELS: u16 = 2;
 const XM_WRITER_TEST_EFFECT_SLOTS: u8 = 2;
 const XM_WRITER_TEST_NOTE: u8 = 49;
 const XM_WRITER_TEST_INSTRUMENT: u8 = 3;
+const XM_WRITER_EMPTY_INSTRUMENT: u8 = 0;
 const XM_WRITER_PATTERN_HEADER_LEN: u32 = 9;
 const XM_WRITER_PATTERN_PACKING_TYPE: u8 = 0;
 const XM_WRITER_EMPTY_PATTERN_DATA_LEN: u16 = 0;
@@ -71,6 +77,7 @@ const XM_WRITER_EMPTY_INSTRUMENT_HEADER_SIZE: u32 = 29;
 const XM_WRITER_INSTRUMENT_HEADER_SIZE: u32 = 263;
 const XM_WRITER_SAMPLE_HEADER_SIZE: u32 = 40;
 const XM_WRITER_SINGLE_INSTRUMENT_COUNT: usize = 1;
+const XM_WRITER_EMPTY_SAMPLE_COUNT: u16 = 0;
 const XM_WRITER_SINGLE_SAMPLE_COUNT: u16 = 1;
 const XM_WRITER_FIRST_INSTRUMENT_INDEX: usize = 0;
 const XM_WRITER_FIRST_SAMPLE_INDEX: usize = 0;
@@ -106,6 +113,67 @@ const XM_WRITER_OVERLONG_SAMPLE_LOOP_START: u32 = u32::MAX;
 const XM_WRITER_U32_FIELD_MAX: u64 = u32::MAX as u64;
 const XM_WRITER_OVERLONG_16_BIT_LOOP_START_BYTE_LEN: u64 =
     XM_WRITER_OVERLONG_SAMPLE_LOOP_START as u64 * XM_WRITER_BYTES_PER_16_BIT_SAMPLE as u64;
+
+#[derive(Debug, PartialEq, Eq)]
+struct ModuleRoundtripSummary {
+    header: rustytracker_core::ModuleHeader,
+    orders: Vec<u8>,
+    patterns: Vec<PatternRoundtripSummary>,
+    instruments: Vec<InstrumentRoundtripSummary>,
+    samples: Vec<SampleRoundtripSummary>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct PatternRoundtripSummary {
+    rows: u16,
+    channels: u16,
+    effect_slots: u8,
+    non_empty_cells: usize,
+    expanded_cell_checksum: u64,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct InstrumentRoundtripSummary {
+    name: InstrumentName,
+    sample_slots: Vec<Option<usize>>,
+    note_sample_map_checksum: u64,
+    volume_envelope: Envelope,
+    panning_envelope: Envelope,
+    vibrato: Vibrato,
+    volume_fadeout: u16,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct SampleRoundtripSummary {
+    name: SampleName,
+    length: u32,
+    loop_start: u32,
+    loop_length: u32,
+    loop_kind: SampleLoopKind,
+    volume: u8,
+    panning: u8,
+    flags: u8,
+    volume_fadeout: u16,
+    sample_type: u8,
+    finetune: i8,
+    relative_note: i8,
+    data: SampleDataRoundtripSummary,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum SampleDataRoundtripSummary {
+    Empty,
+    Pcm8 {
+        frames: usize,
+        checksum: u64,
+        prefix: Vec<i8>,
+    },
+    Pcm16 {
+        frames: usize,
+        checksum: u64,
+        prefix: Vec<i16>,
+    },
+}
 
 #[test]
 fn writes_empty_module_header_and_order_table() {
@@ -172,6 +240,22 @@ fn roundtrips_bundled_fixture_headers_and_orders() {
 }
 
 #[test]
+fn roundtrips_bundled_fixtures_to_equivalent_core_modules() {
+    for fixture in FIXTURES {
+        let bytes = fs::read(fixture_path(fixture)).unwrap();
+        let module = parse_xm_module(&bytes).unwrap();
+        let written = write_xm_module(&module).unwrap();
+        let reparsed = parse_xm_module(&written).unwrap();
+
+        assert_module_roundtrip_summary_eq(
+            &module_roundtrip_summary(&reparsed),
+            &module_roundtrip_summary(&module),
+            fixture,
+        );
+    }
+}
+
+#[test]
 fn rejects_order_tables_that_do_not_fit_in_xm_header() {
     let mut module = Module::empty();
     module.orders = vec![0; XM_WRITER_OVERLONG_ORDER_LEN];
@@ -227,6 +311,65 @@ fn writes_empty_instrument_headers_without_sample_data() {
             && instrument.sample_header_size.is_none()
             && instrument.note_sample_map.is_none()
     }));
+}
+
+#[test]
+fn writes_extended_zero_sample_instruments_when_metadata_must_roundtrip() {
+    let mut module = Module::empty();
+    let mut instrument = Instrument::empty(XM_WRITER_FIRST_INSTRUMENT_INDEX);
+    instrument.name = InstrumentName::new(XM_WRITER_TEST_INSTRUMENT_NAME);
+    instrument.sample_slots = vec![None; SAMPLES_PER_INSTRUMENT];
+    instrument.note_sample_map = vec![None; MAX_XM_NOTES as usize];
+    instrument.volume_envelope = test_envelope();
+    instrument.panning_envelope = test_envelope();
+    instrument.vibrato = Vibrato {
+        waveform: XM_WRITER_TEST_VIBRATO_WAVEFORM,
+        sweep: XM_WRITER_TEST_VIBRATO_SWEEP,
+        depth: XM_WRITER_TEST_VIBRATO_DEPTH,
+        rate: XM_WRITER_TEST_VIBRATO_RATE,
+    };
+    instrument.volume_fadeout = XM_WRITER_TEST_VOLUME_FADEOUT;
+    module.instruments = vec![instrument];
+
+    let bytes = write_header_patterns_and_instruments(&module);
+    let section = parse_written_instruments(&bytes);
+    let instrument = &section.instruments[XM_WRITER_FIRST_INSTRUMENT_INDEX];
+
+    assert_eq!(section.instruments.len(), XM_WRITER_SINGLE_INSTRUMENT_COUNT);
+    assert_eq!(section.next_offset, bytes.len());
+    assert_eq!(instrument.header_size, XM_WRITER_INSTRUMENT_HEADER_SIZE);
+    assert_eq!(instrument.name, XM_WRITER_TEST_INSTRUMENT_NAME);
+    assert_eq!(instrument.sample_count, XM_WRITER_EMPTY_SAMPLE_COUNT);
+    assert_eq!(
+        instrument.sample_header_size,
+        Some(XM_WRITER_SAMPLE_HEADER_SIZE)
+    );
+    assert_eq!(
+        instrument.volume_envelope.as_ref().unwrap().points[0],
+        rustytracker_xm::XmEnvelopePoint {
+            frame: XM_WRITER_TEST_ENVELOPE_FRAME,
+            value: XM_WRITER_TEST_ENVELOPE_VALUE,
+        }
+    );
+    assert_eq!(
+        instrument.panning_envelope.as_ref().unwrap().points[0],
+        rustytracker_xm::XmEnvelopePoint {
+            frame: XM_WRITER_TEST_ENVELOPE_FRAME,
+            value: XM_WRITER_TEST_ENVELOPE_VALUE,
+        }
+    );
+    assert_eq!(
+        instrument.vibrato_type,
+        Some(XM_WRITER_TEST_VIBRATO_WAVEFORM)
+    );
+    assert_eq!(instrument.vibrato_sweep, Some(XM_WRITER_TEST_VIBRATO_SWEEP));
+    assert_eq!(instrument.vibrato_depth, Some(XM_WRITER_TEST_VIBRATO_DEPTH));
+    assert_eq!(instrument.vibrato_rate, Some(XM_WRITER_TEST_VIBRATO_RATE));
+    assert_eq!(
+        instrument.volume_fadeout,
+        Some(XM_WRITER_TEST_VOLUME_FADEOUT)
+    );
+    assert!(instrument.samples.is_empty());
 }
 
 #[test]
@@ -927,4 +1070,204 @@ fn first_decoded_cell(bytes: &[u8]) -> PatternCell {
 
 fn effect(effect: u8, operand: u8) -> EffectCommand {
     EffectCommand { effect, operand }
+}
+
+fn module_roundtrip_summary(module: &Module) -> ModuleRoundtripSummary {
+    ModuleRoundtripSummary {
+        header: module.header.clone(),
+        orders: module.orders.clone(),
+        patterns: module
+            .patterns
+            .iter()
+            .map(pattern_roundtrip_summary)
+            .collect(),
+        instruments: module
+            .instruments
+            .iter()
+            .map(instrument_roundtrip_summary)
+            .collect(),
+        samples: module
+            .samples
+            .iter()
+            .map(sample_roundtrip_summary)
+            .collect(),
+    }
+}
+
+fn assert_module_roundtrip_summary_eq(
+    actual: &ModuleRoundtripSummary,
+    expected: &ModuleRoundtripSummary,
+    fixture: &str,
+) {
+    assert_eq!(actual.header, expected.header, "{fixture} header");
+    assert_eq!(actual.orders, expected.orders, "{fixture} orders");
+    assert_eq!(
+        actual.patterns.len(),
+        expected.patterns.len(),
+        "{fixture} pattern count"
+    );
+    assert_eq!(
+        actual.instruments.len(),
+        expected.instruments.len(),
+        "{fixture} instrument count"
+    );
+    assert_eq!(
+        actual.samples.len(),
+        expected.samples.len(),
+        "{fixture} sample count"
+    );
+
+    for (index, (actual, expected)) in actual
+        .patterns
+        .iter()
+        .zip(expected.patterns.iter())
+        .enumerate()
+    {
+        assert_eq!(actual, expected, "{fixture} pattern {index}");
+    }
+
+    for (index, (actual, expected)) in actual
+        .instruments
+        .iter()
+        .zip(expected.instruments.iter())
+        .enumerate()
+    {
+        assert_eq!(actual, expected, "{fixture} instrument {index}");
+    }
+
+    for (index, (actual, expected)) in actual
+        .samples
+        .iter()
+        .zip(expected.samples.iter())
+        .enumerate()
+    {
+        assert_eq!(actual, expected, "{fixture} sample {index}");
+    }
+}
+
+fn pattern_roundtrip_summary(pattern: &Pattern) -> PatternRoundtripSummary {
+    let mut non_empty_cells = 0;
+    let mut checksum = XM_WRITER_FNV_OFFSET;
+
+    for row in 0..pattern.rows() {
+        for channel in 0..pattern.channels() {
+            let cell = pattern
+                .cell(channel, row)
+                .expect("summary walks cells inside pattern bounds");
+
+            if cell.note != Note::Empty
+                || cell.instrument != XM_WRITER_EMPTY_INSTRUMENT
+                || cell
+                    .effects
+                    .iter()
+                    .any(|effect| *effect != EffectCommand::default())
+            {
+                non_empty_cells += 1;
+            }
+
+            checksum = fnv_byte(checksum, cell.note.raw());
+            checksum = fnv_byte(checksum, cell.instrument);
+
+            for effect in &cell.effects {
+                checksum = fnv_byte(checksum, effect.effect);
+                checksum = fnv_byte(checksum, effect.operand);
+            }
+        }
+    }
+
+    PatternRoundtripSummary {
+        rows: pattern.rows(),
+        channels: pattern.channels(),
+        effect_slots: pattern.effect_slots(),
+        non_empty_cells,
+        expanded_cell_checksum: checksum,
+    }
+}
+
+fn sample_roundtrip_summary(sample: &Sample) -> SampleRoundtripSummary {
+    SampleRoundtripSummary {
+        name: sample.name.clone(),
+        length: sample.length,
+        loop_start: sample.loop_start,
+        loop_length: sample.loop_length,
+        loop_kind: sample.loop_kind,
+        volume: sample.volume,
+        panning: sample.panning,
+        flags: sample.flags,
+        volume_fadeout: sample.volume_fadeout,
+        sample_type: sample.sample_type,
+        finetune: sample.finetune,
+        relative_note: sample.relative_note,
+        data: sample_data_roundtrip_summary(&sample.data),
+    }
+}
+
+fn instrument_roundtrip_summary(instrument: &Instrument) -> InstrumentRoundtripSummary {
+    InstrumentRoundtripSummary {
+        name: instrument.name.clone(),
+        sample_slots: instrument.sample_slots.clone(),
+        note_sample_map_checksum: checksum_optional_usize(&instrument.note_sample_map),
+        volume_envelope: instrument.volume_envelope.clone(),
+        panning_envelope: instrument.panning_envelope.clone(),
+        vibrato: instrument.vibrato,
+        volume_fadeout: instrument.volume_fadeout,
+    }
+}
+
+fn sample_data_roundtrip_summary(data: &SampleData) -> SampleDataRoundtripSummary {
+    match data {
+        SampleData::Empty => SampleDataRoundtripSummary::Empty,
+        SampleData::Pcm8(values) => SampleDataRoundtripSummary::Pcm8 {
+            frames: values.len(),
+            checksum: checksum_i8(values),
+            prefix: values
+                .iter()
+                .take(XM_WRITER_SAMPLE_PREFIX_FRAMES)
+                .copied()
+                .collect(),
+        },
+        SampleData::Pcm16(values) => SampleDataRoundtripSummary::Pcm16 {
+            frames: values.len(),
+            checksum: checksum_i16(values),
+            prefix: values
+                .iter()
+                .take(XM_WRITER_SAMPLE_PREFIX_FRAMES)
+                .copied()
+                .collect(),
+        },
+    }
+}
+
+fn checksum_i8(values: &[i8]) -> u64 {
+    values.iter().fold(XM_WRITER_FNV_OFFSET, |checksum, value| {
+        fnv_byte(checksum, *value as u8)
+    })
+}
+
+fn checksum_i16(values: &[i16]) -> u64 {
+    values.iter().fold(XM_WRITER_FNV_OFFSET, |checksum, value| {
+        let bytes = value.to_le_bytes();
+        fnv_byte(fnv_byte(checksum, bytes[0]), bytes[1])
+    })
+}
+
+fn checksum_optional_usize(values: &[Option<usize>]) -> u64 {
+    values
+        .iter()
+        .fold(XM_WRITER_FNV_OFFSET, |checksum, value| match value {
+            Some(value) => checksum_usize(fnv_byte(checksum, XM_WRITER_OPTION_SOME_TAG), *value),
+            None => fnv_byte(checksum, XM_WRITER_OPTION_NONE_TAG),
+        })
+}
+
+fn checksum_usize(mut checksum: u64, value: usize) -> u64 {
+    for byte in value.to_le_bytes() {
+        checksum = fnv_byte(checksum, byte);
+    }
+
+    checksum
+}
+
+fn fnv_byte(checksum: u64, byte: u8) -> u64 {
+    (checksum ^ byte as u64).wrapping_mul(XM_WRITER_FNV_PRIME)
 }

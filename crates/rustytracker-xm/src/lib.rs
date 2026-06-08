@@ -571,6 +571,13 @@ pub fn write_xm_header(module: &Module) -> XmWriteResult<Vec<u8>> {
     Ok(bytes)
 }
 
+pub fn write_xm_module(module: &Module) -> XmWriteResult<Vec<u8>> {
+    let mut bytes = write_xm_header(module)?;
+    bytes.extend_from_slice(&write_xm_patterns(module)?);
+    bytes.extend_from_slice(&write_xm_instruments(module)?);
+    Ok(bytes)
+}
+
 pub fn write_xm_patterns(module: &Module) -> XmWriteResult<Vec<u8>> {
     let mut bytes = Vec::new();
 
@@ -638,6 +645,17 @@ fn sample_is_active(sample: &Sample) -> bool {
     sample != &Sample::default()
 }
 
+fn instrument_needs_extension_header(sample_count: usize, instrument: &Instrument) -> bool {
+    sample_count != 0 || zero_sample_instrument_has_extension_metadata(instrument)
+}
+
+fn zero_sample_instrument_has_extension_metadata(instrument: &Instrument) -> bool {
+    instrument.volume_envelope != CoreEnvelope::default()
+        || instrument.panning_envelope != CoreEnvelope::default()
+        || instrument.vibrato != CoreVibrato::default()
+        || instrument.volume_fadeout != SAMPLE_DEFAULT_VOLUME_FADEOUT
+}
+
 fn write_xm_instrument(
     bytes: &mut Vec<u8>,
     module: &Module,
@@ -653,10 +671,11 @@ fn write_xm_instrument(
         });
     }
 
-    let header_size = if sample_count == 0 {
-        XM_WRITER_EMPTY_INSTRUMENT_HEADER_SIZE
-    } else {
+    let has_extension_header = instrument_needs_extension_header(sample_count, instrument);
+    let header_size = if has_extension_header {
         XM_WRITER_INSTRUMENT_HEADER_SIZE
+    } else {
+        XM_WRITER_EMPTY_INSTRUMENT_HEADER_SIZE
     };
     let instrument_offset = bytes.len();
     bytes.resize(instrument_offset + header_size as usize, ASCII_NUL);
@@ -675,7 +694,7 @@ fn write_xm_instrument(
         sample_count as u16,
     );
 
-    if sample_count == 0 {
+    if !has_extension_header {
         return Ok(());
     }
 
