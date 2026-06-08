@@ -8,11 +8,13 @@ RustyTracker has a test-first Rust workspace with:
   model
 - `rustytracker-xm`: read-only XM header parsing, pattern decoding, instrument
   metadata parsing, delta-coded sample payload decoding, and end-to-end bundled
-  XM loading into `rustytracker-core::Module`
+  XM loading into `rustytracker-core::Module`; XM header/order/pattern writing
+  with the first MilkyTracker-compatible effect inverse mappings
 - `rustytracker-cli`: normalized JSON structural dumps with golden fixture
   comparisons
 - CodeRabbit review rules requiring compatibility values and format constants to
   live behind named constants/enums
+- reference source map in `docs/specs/010-reference-specs.md`
 
 Current fixture base:
 
@@ -89,18 +91,22 @@ Acceptance:
 
 Goal: load and write enough XM to prove structural roundtrip.
 
-Status: in progress in PR #4.
+Status: in progress.
 
 Done:
 
 - implement XM writer for header/order table
 - write empty pattern headers and simple unpacked pattern cells
+- add reference-spec map for XM compatibility sources
+- add MilkyTracker-compatible inverse mappings for current core pattern effects
+- relocate compatible first-slot effects into the XM volume column
 
 Remaining:
 
-- add effect-column inverse mapping for pattern writing
 - write instruments and sample headers
 - write sample payloads using XM delta encoding
+- add symmetric parser/writer coverage for fine volume-slide volume-column
+  commands
 - add `XM -> core -> XM -> core` normalized equality tests
 
 Acceptance:
@@ -182,8 +188,8 @@ Acceptance:
 
 ## Immediate Backlog
 
-1. Merge PR #4 after review.
-2. Add effect-column inverse mapping for pattern writing.
-3. Write instruments and sample headers.
-4. Write sample payloads using XM delta encoding.
+1. Merge the current XM writer effect-mapping PR after review.
+2. Write instruments and sample headers.
+3. Write sample payloads using XM delta encoding.
+4. Add symmetric fine volume-slide volume-column coverage.
 5. Add `XM -> core -> XM -> core` normalized equality checks.

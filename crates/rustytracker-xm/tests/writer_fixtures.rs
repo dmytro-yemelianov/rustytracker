@@ -1,7 +1,9 @@
 use std::fs;
 use std::path::PathBuf;
 
-use rustytracker_core::{FrequencyTable, Module, ModuleTitle, Note, Pattern, PatternCell};
+use rustytracker_core::{
+    EffectCommand, FrequencyTable, Module, ModuleTitle, Note, Pattern, PatternCell,
+};
 use rustytracker_xm::{
     decode_xm_patterns, parse_xm_header, parse_xm_module, parse_xm_pattern_headers,
     write_xm_header, write_xm_patterns, XmWriteError,
@@ -27,6 +29,32 @@ const XM_WRITER_TEST_INSTRUMENT: u8 = 3;
 const XM_WRITER_PATTERN_HEADER_LEN: u32 = 9;
 const XM_WRITER_PATTERN_PACKING_TYPE: u8 = 0;
 const XM_WRITER_EMPTY_PATTERN_DATA_LEN: u16 = 0;
+const XM_WRITER_UNPACKED_CELL_LEN: usize = 5;
+const XM_WRITER_EMPTY_EFFECT: u8 = 0;
+const XM_WRITER_EMPTY_OPERAND: u8 = 0;
+const XM_WRITER_TEST_EMPTY_VOLUME_COLUMN: u8 = 0;
+const XM_WRITER_XM_ARPEGGIO_EFFECT: u8 = 0x00;
+const XM_WRITER_INTERNAL_ARPEGGIO_EFFECT: u8 = 0x20;
+const XM_WRITER_ARPEGGIO_OPERAND: u8 = 0x37;
+const XM_WRITER_XM_EXTENDED_EFFECT: u8 = 0x0e;
+const XM_WRITER_INTERNAL_EXTENDED_EFFECT: u8 = 0x3a;
+const XM_WRITER_EXTENDED_SOURCE_OPERAND: u8 = 0x07;
+const XM_WRITER_EXTENDED_OPERAND: u8 = 0xa7;
+const XM_WRITER_XM_EXTRA_FINE_PORTA_EFFECT: u8 = 0x21;
+const XM_WRITER_INTERNAL_EXTRA_FINE_PORTA_EFFECT: u8 = 0x41;
+const XM_WRITER_EXTRA_FINE_PORTA_SOURCE_OPERAND: u8 = 0x05;
+const XM_WRITER_EXTRA_FINE_PORTA_OPERAND: u8 = 0x15;
+const XM_WRITER_VOLUME_EFFECT: u8 = 0x0c;
+const XM_WRITER_VOLUME_SLIDE_EFFECT: u8 = 0x0a;
+const XM_WRITER_FULL_VOLUME_255: u8 = 0xff;
+const XM_WRITER_FULL_VOLUME_64: u8 = 0x40;
+const XM_WRITER_FULL_VOLUME_COLUMN: u8 = 0x50;
+const XM_WRITER_PANNING_EFFECT: u8 = 0x08;
+const XM_WRITER_PANNING_SLIDE_EFFECT: u8 = 0x19;
+const XM_WRITER_CENTER_PANNING_255: u8 = 0x80;
+const XM_WRITER_CENTER_PANNING_COLUMN: u8 = 0xc8;
+const XM_WRITER_TONE_PORTAMENTO_EFFECT: u8 = 0x03;
+const XM_WRITER_LOW_NIBBLE_TONE_PORTAMENTO_OPERAND: u8 = 0x05;
 
 #[test]
 fn writes_empty_module_header_and_order_table() {
@@ -162,6 +190,245 @@ fn writes_simple_unpacked_pattern_cells() {
     assert_eq!(cell.effects, PatternCell::default().effects);
 }
 
+#[test]
+fn writes_internal_arpeggio_back_to_xm_effect_zero() {
+    let bytes = write_single_cell_pattern(vec![
+        EffectCommand::default(),
+        effect(
+            XM_WRITER_INTERNAL_ARPEGGIO_EFFECT,
+            XM_WRITER_ARPEGGIO_OPERAND,
+        ),
+    ]);
+
+    assert_eq!(
+        first_raw_pattern_cell(&bytes),
+        &[
+            XM_WRITER_TEST_NOTE,
+            XM_WRITER_TEST_INSTRUMENT,
+            XM_WRITER_TEST_EMPTY_VOLUME_COLUMN,
+            XM_WRITER_XM_ARPEGGIO_EFFECT,
+            XM_WRITER_ARPEGGIO_OPERAND,
+        ]
+    );
+    assert_eq!(
+        first_decoded_cell(&bytes).effects[1],
+        effect(
+            XM_WRITER_INTERNAL_ARPEGGIO_EFFECT,
+            XM_WRITER_ARPEGGIO_OPERAND
+        )
+    );
+}
+
+#[test]
+fn writes_internal_extended_effects_back_to_xm_e_commands() {
+    let bytes = write_single_cell_pattern(vec![
+        EffectCommand::default(),
+        effect(
+            XM_WRITER_INTERNAL_EXTENDED_EFFECT,
+            XM_WRITER_EXTENDED_SOURCE_OPERAND,
+        ),
+    ]);
+
+    assert_eq!(
+        first_raw_pattern_cell(&bytes),
+        &[
+            XM_WRITER_TEST_NOTE,
+            XM_WRITER_TEST_INSTRUMENT,
+            XM_WRITER_TEST_EMPTY_VOLUME_COLUMN,
+            XM_WRITER_XM_EXTENDED_EFFECT,
+            XM_WRITER_EXTENDED_OPERAND,
+        ]
+    );
+    assert_eq!(
+        first_decoded_cell(&bytes).effects[1],
+        effect(
+            XM_WRITER_INTERNAL_EXTENDED_EFFECT,
+            XM_WRITER_EXTENDED_SOURCE_OPERAND
+        )
+    );
+}
+
+#[test]
+fn writes_internal_extra_fine_portamento_back_to_xm_21() {
+    let bytes = write_single_cell_pattern(vec![
+        EffectCommand::default(),
+        effect(
+            XM_WRITER_INTERNAL_EXTRA_FINE_PORTA_EFFECT,
+            XM_WRITER_EXTRA_FINE_PORTA_SOURCE_OPERAND,
+        ),
+    ]);
+
+    assert_eq!(
+        first_raw_pattern_cell(&bytes),
+        &[
+            XM_WRITER_TEST_NOTE,
+            XM_WRITER_TEST_INSTRUMENT,
+            XM_WRITER_TEST_EMPTY_VOLUME_COLUMN,
+            XM_WRITER_XM_EXTRA_FINE_PORTA_EFFECT,
+            XM_WRITER_EXTRA_FINE_PORTA_OPERAND,
+        ]
+    );
+    assert_eq!(
+        first_decoded_cell(&bytes).effects[1],
+        effect(
+            XM_WRITER_INTERNAL_EXTRA_FINE_PORTA_EFFECT,
+            XM_WRITER_EXTRA_FINE_PORTA_SOURCE_OPERAND,
+        )
+    );
+}
+
+#[test]
+fn writes_full_scale_core_volume_back_to_xm_volume_operand() {
+    let bytes = write_single_cell_pattern(vec![
+        EffectCommand::default(),
+        effect(XM_WRITER_VOLUME_EFFECT, XM_WRITER_FULL_VOLUME_255),
+    ]);
+
+    assert_eq!(
+        first_raw_pattern_cell(&bytes),
+        &[
+            XM_WRITER_TEST_NOTE,
+            XM_WRITER_TEST_INSTRUMENT,
+            XM_WRITER_TEST_EMPTY_VOLUME_COLUMN,
+            XM_WRITER_VOLUME_EFFECT,
+            XM_WRITER_FULL_VOLUME_64,
+        ]
+    );
+    assert_eq!(
+        first_decoded_cell(&bytes).effects[1],
+        effect(XM_WRITER_VOLUME_EFFECT, XM_WRITER_FULL_VOLUME_255)
+    );
+}
+
+#[test]
+fn writes_relocatable_first_effect_to_volume_column_when_effect_column_is_needed() {
+    let bytes = write_single_cell_pattern(vec![
+        effect(XM_WRITER_VOLUME_EFFECT, XM_WRITER_FULL_VOLUME_255),
+        effect(
+            XM_WRITER_INTERNAL_ARPEGGIO_EFFECT,
+            XM_WRITER_ARPEGGIO_OPERAND,
+        ),
+    ]);
+
+    assert_eq!(
+        first_raw_pattern_cell(&bytes),
+        &[
+            XM_WRITER_TEST_NOTE,
+            XM_WRITER_TEST_INSTRUMENT,
+            XM_WRITER_FULL_VOLUME_COLUMN,
+            XM_WRITER_XM_ARPEGGIO_EFFECT,
+            XM_WRITER_ARPEGGIO_OPERAND,
+        ]
+    );
+    assert_eq!(
+        first_decoded_cell(&bytes).effects,
+        vec![
+            effect(XM_WRITER_VOLUME_EFFECT, XM_WRITER_FULL_VOLUME_255),
+            effect(
+                XM_WRITER_INTERNAL_ARPEGGIO_EFFECT,
+                XM_WRITER_ARPEGGIO_OPERAND
+            ),
+        ]
+    );
+}
+
+#[test]
+fn writes_first_panning_effect_to_volume_column() {
+    let bytes = write_single_cell_pattern(vec![
+        effect(XM_WRITER_PANNING_EFFECT, XM_WRITER_CENTER_PANNING_255),
+        EffectCommand::default(),
+    ]);
+
+    assert_eq!(
+        first_raw_pattern_cell(&bytes),
+        &[
+            XM_WRITER_TEST_NOTE,
+            XM_WRITER_TEST_INSTRUMENT,
+            XM_WRITER_CENTER_PANNING_COLUMN,
+            XM_WRITER_EMPTY_EFFECT,
+            XM_WRITER_EMPTY_OPERAND,
+        ]
+    );
+    assert_eq!(
+        first_decoded_cell(&bytes).effects[0],
+        effect(XM_WRITER_PANNING_EFFECT, XM_WRITER_CENTER_PANNING_255)
+    );
+}
+
+#[test]
+fn writes_zero_operand_slides_to_effect_column_for_roundtrip_symmetry() {
+    for slide_effect in [
+        XM_WRITER_VOLUME_SLIDE_EFFECT,
+        XM_WRITER_PANNING_SLIDE_EFFECT,
+    ] {
+        let bytes = write_single_cell_pattern(vec![effect(slide_effect, XM_WRITER_EMPTY_OPERAND)]);
+
+        assert_eq!(
+            first_raw_pattern_cell(&bytes),
+            &[
+                XM_WRITER_TEST_NOTE,
+                XM_WRITER_TEST_INSTRUMENT,
+                XM_WRITER_TEST_EMPTY_VOLUME_COLUMN,
+                slide_effect,
+                XM_WRITER_EMPTY_OPERAND,
+            ],
+            "slide effect {slide_effect:#04x}"
+        );
+        assert_eq!(
+            first_decoded_cell(&bytes).effects[1],
+            effect(slide_effect, XM_WRITER_EMPTY_OPERAND),
+            "slide effect {slide_effect:#04x}"
+        );
+    }
+}
+
+#[test]
+fn does_not_relocate_lossy_effects_to_volume_column_when_effect_column_is_occupied() {
+    for lossy_effect in [
+        effect(
+            XM_WRITER_TONE_PORTAMENTO_EFFECT,
+            XM_WRITER_LOW_NIBBLE_TONE_PORTAMENTO_OPERAND,
+        ),
+        effect(XM_WRITER_VOLUME_SLIDE_EFFECT, XM_WRITER_EMPTY_OPERAND),
+        effect(XM_WRITER_PANNING_SLIDE_EFFECT, XM_WRITER_EMPTY_OPERAND),
+    ] {
+        let bytes = write_single_cell_pattern(vec![
+            effect(
+                XM_WRITER_INTERNAL_ARPEGGIO_EFFECT,
+                XM_WRITER_ARPEGGIO_OPERAND,
+            ),
+            lossy_effect,
+        ]);
+
+        assert_eq!(
+            first_raw_pattern_cell(&bytes),
+            &[
+                XM_WRITER_TEST_NOTE,
+                XM_WRITER_TEST_INSTRUMENT,
+                XM_WRITER_TEST_EMPTY_VOLUME_COLUMN,
+                XM_WRITER_XM_ARPEGGIO_EFFECT,
+                XM_WRITER_ARPEGGIO_OPERAND,
+            ],
+            "lossy effect {:#04x}/{:#04x}",
+            lossy_effect.effect,
+            lossy_effect.operand
+        );
+        assert_eq!(
+            first_decoded_cell(&bytes).effects,
+            vec![
+                EffectCommand::default(),
+                effect(
+                    XM_WRITER_INTERNAL_ARPEGGIO_EFFECT,
+                    XM_WRITER_ARPEGGIO_OPERAND,
+                ),
+            ],
+            "lossy effect {:#04x}/{:#04x}",
+            lossy_effect.effect,
+            lossy_effect.operand
+        );
+    }
+}
+
 fn fixture_path(file_name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../../MilkyTracker/resources/music")
@@ -172,4 +439,46 @@ fn write_header_and_patterns(module: &Module) -> Vec<u8> {
     let mut bytes = write_xm_header(module).unwrap();
     bytes.extend_from_slice(&write_xm_patterns(module).unwrap());
     bytes
+}
+
+fn write_single_cell_pattern(effects: Vec<EffectCommand>) -> Vec<u8> {
+    let mut module = Module::empty_with_channels(XM_WRITER_TEST_CHANNELS).unwrap();
+    let mut pattern = Pattern::new(
+        XM_WRITER_TEST_ROWS,
+        XM_WRITER_TEST_CHANNELS,
+        effects.len() as u8,
+    );
+    pattern
+        .set_cell(
+            0,
+            0,
+            PatternCell {
+                note: Note::Key(XM_WRITER_TEST_NOTE),
+                instrument: XM_WRITER_TEST_INSTRUMENT,
+                effects,
+            },
+        )
+        .unwrap();
+    module.patterns = vec![pattern];
+
+    write_header_and_patterns(&module)
+}
+
+fn first_raw_pattern_cell(bytes: &[u8]) -> &[u8] {
+    let header = parse_xm_header(bytes).unwrap();
+    let pattern_headers = parse_xm_pattern_headers(bytes, &header).unwrap();
+    let offset = pattern_headers[0].packed_data_offset;
+
+    &bytes[offset..offset + XM_WRITER_UNPACKED_CELL_LEN]
+}
+
+fn first_decoded_cell(bytes: &[u8]) -> PatternCell {
+    let header = parse_xm_header(bytes).unwrap();
+    let patterns = decode_xm_patterns(bytes, &header).unwrap();
+
+    patterns[0].cell(0, 0).unwrap().clone()
+}
+
+fn effect(effect: u8, operand: u8) -> EffectCommand {
+    EffectCommand { effect, operand }
 }
