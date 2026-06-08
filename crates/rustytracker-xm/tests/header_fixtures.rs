@@ -9,6 +9,18 @@ use rustytracker_xm::{
 
 const FNV_OFFSET: u64 = 0xcbf29ce484222325;
 const FNV_PRIME: u64 = 0x100000001b3;
+const XM_TEST_SINGLE_ROW: u16 = 1;
+const XM_TEST_TWO_CHANNELS: u16 = 2;
+const XM_TEST_NOTE: u8 = 49;
+const XM_TEST_INSTRUMENT: u8 = 1;
+const XM_TEST_EMPTY_EFFECT: u8 = 0;
+const XM_TEST_EMPTY_OPERAND: u8 = 0;
+const XM_FINE_VOLUME_SLIDE_DOWN_COLUMN: u8 = 0x8d;
+const XM_FINE_VOLUME_SLIDE_UP_COLUMN: u8 = 0x9c;
+const INTERNAL_FINE_VOLUME_SLIDE_UP_EFFECT: u8 = 0x3a;
+const INTERNAL_FINE_VOLUME_SLIDE_DOWN_EFFECT: u8 = 0x3b;
+const XM_FINE_VOLUME_SLIDE_UP_OPERAND: u8 = 0x0c;
+const XM_FINE_VOLUME_SLIDE_DOWN_OPERAND: u8 = 0x0d;
 
 #[derive(Debug)]
 struct ExpectedHeader {
@@ -270,6 +282,40 @@ fn decodes_packed_and_unpacked_cells_with_milkytracker_normalization() {
                 operand: 255,
             },
         ]
+    );
+}
+
+#[test]
+fn decodes_fine_volume_slides_from_xm_volume_column() {
+    let header = synthetic_header(XM_TEST_TWO_CHANNELS, XM_TEST_SINGLE_ROW);
+    let bytes = [
+        XM_TEST_NOTE,
+        XM_TEST_INSTRUMENT,
+        XM_FINE_VOLUME_SLIDE_DOWN_COLUMN,
+        XM_TEST_EMPTY_EFFECT,
+        XM_TEST_EMPTY_OPERAND,
+        XM_TEST_NOTE,
+        XM_TEST_INSTRUMENT,
+        XM_FINE_VOLUME_SLIDE_UP_COLUMN,
+        XM_TEST_EMPTY_EFFECT,
+        XM_TEST_EMPTY_OPERAND,
+    ];
+    let pattern_header = synthetic_pattern_header(XM_TEST_SINGLE_ROW, bytes.len() as u16);
+    let pattern = decode_xm_pattern(&bytes, &header, &pattern_header).unwrap();
+
+    assert_eq!(
+        pattern.cell(0, 0).unwrap().effects[0],
+        EffectCommand {
+            effect: INTERNAL_FINE_VOLUME_SLIDE_DOWN_EFFECT,
+            operand: XM_FINE_VOLUME_SLIDE_DOWN_OPERAND,
+        }
+    );
+    assert_eq!(
+        pattern.cell(1, 0).unwrap().effects[0],
+        EffectCommand {
+            effect: INTERNAL_FINE_VOLUME_SLIDE_UP_EFFECT,
+            operand: XM_FINE_VOLUME_SLIDE_UP_OPERAND,
+        }
     );
 }
 

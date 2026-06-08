@@ -99,11 +99,10 @@ Implemented inverse mappings:
 - volume, volume slide, vibrato, panning, panning slide, and tone portamento
   relocation into the XM volume column where the current parser can roundtrip
   the normalized core effect
-
-Deferred mappings:
-
-- `EAx` / `EBx` relocation into volume-column `9x` / `8x` waits until parser and
-  core semantics for fine volume slides are represented symmetrically.
+- internal fine volume slide up/down `EAx` / `EBx` relocate to volume-column
+  `9x` / `8x` when the operand is non-zero; zero-operand commands stay in the
+  effect column because the XM volume column cannot distinguish absent data from
+  zero-value fine slides
 
 ## Instrument Blocks
 
