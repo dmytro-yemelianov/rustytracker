@@ -100,9 +100,10 @@ Implemented inverse mappings:
   relocation into the XM volume column where the current parser can roundtrip
   the normalized core effect
 - internal fine volume slide up/down `EAx` / `EBx` relocate to volume-column
-  `9x` / `8x` when the operand is non-zero; zero-operand commands stay in the
-  effect column because the XM volume column cannot distinguish absent data from
-  zero-value fine slides
+  `9x` / `8x` from the first internal effect slot when the operand is non-zero;
+  zero-operand commands and later-slot fine slides stay out of the volume column
+  because the XM parser always decodes volume-column commands into the first
+  internal effect slot
 
 ## Instrument Blocks
 

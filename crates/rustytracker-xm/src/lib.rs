@@ -1067,7 +1067,7 @@ fn xm_columns_from_core_effects(effects: &[EffectCommand]) -> (u8, EffectCommand
 
         if index == 0 {
             if !note_portamento_requires_effect_column(xm_effect) {
-                if let Some(volume_column) = xm_effect_to_volume_column(xm_effect) {
+                if let Some(volume_column) = xm_effect_to_volume_column(xm_effect, true) {
                     volume = volume_column;
                     continue;
                 }
@@ -1082,7 +1082,7 @@ fn xm_columns_from_core_effects(effects: &[EffectCommand]) -> (u8, EffectCommand
         if effect_column == EffectCommand::default() {
             effect_column = xm_effect;
         } else if volume == XM_WRITER_EMPTY_VOLUME_COLUMN {
-            if let Some(volume_column) = xm_effect_to_volume_column(xm_effect) {
+            if let Some(volume_column) = xm_effect_to_volume_column(xm_effect, false) {
                 volume = volume_column;
             }
         }
@@ -1127,10 +1127,16 @@ fn core_effect_to_xm(effect: EffectCommand) -> EffectCommand {
     }
 }
 
-fn xm_effect_to_volume_column(effect: EffectCommand) -> Option<u8> {
+fn xm_effect_to_volume_column(
+    effect: EffectCommand,
+    allow_fine_volume_slide_relocation: bool,
+) -> Option<u8> {
     match effect.effect {
         XM_EFFECT_VOLUME => Some(XM_VOLUME_SET_MIN + effect.operand.min(XM_VOLUME_MAX)),
-        XM_EFFECT_EXTENDED => xm_extended_fine_volume_slide_column(effect.operand),
+        XM_EFFECT_EXTENDED if allow_fine_volume_slide_relocation => {
+            xm_extended_fine_volume_slide_column(effect.operand)
+        }
+        XM_EFFECT_EXTENDED => None,
         INTERNAL_EFFECT_VOLUME_SLIDE => xm_volume_slide_column(effect.operand),
         INTERNAL_EFFECT_VIBRATO_COMPAT => xm_vibrato_column(effect.operand),
         INTERNAL_EFFECT_PANNING => Some(volume_command(
@@ -1156,9 +1162,9 @@ fn xm_volume_slide_column(operand: u8) -> Option<u8> {
     let low = operand & XM_NIBBLE_MASK;
     let high = operand >> XM_NIBBLE_SHIFT;
 
-    if low != EMPTY_OPERAND {
+    if low != EMPTY_OPERAND && high == EMPTY_OPERAND {
         Some(volume_command(XM_VOLUME_SLIDE_DOWN, low))
-    } else if high != EMPTY_OPERAND {
+    } else if high != EMPTY_OPERAND && low == EMPTY_OPERAND {
         Some(volume_command(XM_VOLUME_SLIDE_UP, high))
     } else {
         None

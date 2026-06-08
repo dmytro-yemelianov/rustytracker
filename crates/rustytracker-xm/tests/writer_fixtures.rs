@@ -57,6 +57,7 @@ const XM_WRITER_EXTRA_FINE_PORTA_SOURCE_OPERAND: u8 = 0x05;
 const XM_WRITER_EXTRA_FINE_PORTA_OPERAND: u8 = 0x15;
 const XM_WRITER_VOLUME_EFFECT: u8 = 0x0c;
 const XM_WRITER_VOLUME_SLIDE_EFFECT: u8 = 0x0a;
+const XM_WRITER_MIXED_VOLUME_SLIDE_OPERAND: u8 = 0x34;
 const XM_WRITER_FULL_VOLUME_255: u8 = 0xff;
 const XM_WRITER_FULL_VOLUME_64: u8 = 0x40;
 const XM_WRITER_FULL_VOLUME_COLUMN: u8 = 0x50;
@@ -470,6 +471,41 @@ fn writes_internal_extended_effects_back_to_xm_e_commands() {
 }
 
 #[test]
+fn does_not_relocate_mixed_direction_volume_slide_to_volume_column() {
+    let bytes = write_single_cell_pattern(vec![
+        effect(
+            XM_WRITER_VOLUME_SLIDE_EFFECT,
+            XM_WRITER_MIXED_VOLUME_SLIDE_OPERAND,
+        ),
+        effect(
+            XM_WRITER_INTERNAL_ARPEGGIO_EFFECT,
+            XM_WRITER_ARPEGGIO_OPERAND,
+        ),
+    ]);
+
+    assert_eq!(
+        first_raw_pattern_cell(&bytes),
+        &[
+            XM_WRITER_TEST_NOTE,
+            XM_WRITER_TEST_INSTRUMENT,
+            XM_WRITER_TEST_EMPTY_VOLUME_COLUMN,
+            XM_WRITER_VOLUME_SLIDE_EFFECT,
+            XM_WRITER_MIXED_VOLUME_SLIDE_OPERAND,
+        ]
+    );
+    assert_eq!(
+        first_decoded_cell(&bytes).effects,
+        vec![
+            EffectCommand::default(),
+            effect(
+                XM_WRITER_VOLUME_SLIDE_EFFECT,
+                XM_WRITER_MIXED_VOLUME_SLIDE_OPERAND,
+            ),
+        ]
+    );
+}
+
+#[test]
 fn writes_internal_fine_volume_slides_to_xm_volume_column_when_effect_column_is_needed() {
     for (fine_effect, fine_operand, volume_column) in [
         (
@@ -506,6 +542,51 @@ fn writes_internal_fine_volume_slides_to_xm_volume_column_when_effect_column_is_
             first_decoded_cell(&bytes).effects,
             vec![
                 effect(fine_effect, fine_operand),
+                effect(
+                    XM_WRITER_INTERNAL_ARPEGGIO_EFFECT,
+                    XM_WRITER_ARPEGGIO_OPERAND,
+                ),
+            ],
+            "fine slide {fine_effect:#04x}/{fine_operand:#04x}"
+        );
+    }
+}
+
+#[test]
+fn does_not_backfill_internal_fine_volume_slides_from_later_effect_slots() {
+    for (fine_effect, fine_operand) in [
+        (
+            XM_WRITER_INTERNAL_EXTENDED_EFFECT,
+            XM_WRITER_FINE_VOLUME_SLIDE_UP_OPERAND,
+        ),
+        (
+            XM_WRITER_INTERNAL_FINE_VOLUME_SLIDE_DOWN_EFFECT,
+            XM_WRITER_FINE_VOLUME_SLIDE_DOWN_OPERAND,
+        ),
+    ] {
+        let bytes = write_single_cell_pattern(vec![
+            effect(
+                XM_WRITER_INTERNAL_ARPEGGIO_EFFECT,
+                XM_WRITER_ARPEGGIO_OPERAND,
+            ),
+            effect(fine_effect, fine_operand),
+        ]);
+
+        assert_eq!(
+            first_raw_pattern_cell(&bytes),
+            &[
+                XM_WRITER_TEST_NOTE,
+                XM_WRITER_TEST_INSTRUMENT,
+                XM_WRITER_TEST_EMPTY_VOLUME_COLUMN,
+                XM_WRITER_XM_ARPEGGIO_EFFECT,
+                XM_WRITER_ARPEGGIO_OPERAND,
+            ],
+            "fine slide {fine_effect:#04x}/{fine_operand:#04x}"
+        );
+        assert_eq!(
+            first_decoded_cell(&bytes).effects,
+            vec![
+                EffectCommand::default(),
                 effect(
                     XM_WRITER_INTERNAL_ARPEGGIO_EFFECT,
                     XM_WRITER_ARPEGGIO_OPERAND,
