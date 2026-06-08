@@ -3,6 +3,7 @@ members = [
     "crates/rustytracker-cli",
     "crates/rustytracker-core",
     "crates/rustytracker-edit",
+    "crates/rustytracker-mod",
     "crates/rustytracker-play",
     "crates/rustytracker-xm",
 ]

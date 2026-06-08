@@ -1,4 +1,7 @@
-use rustytracker_core::{EffectCommand, Envelope, EnvelopePoint, Module, Note, Pattern, PatternCell, SampleData, SampleLoopKind, DEFAULT_EFFECT_SLOTS};
+use rustytracker_core::{
+    EffectCommand, Envelope, EnvelopePoint, Module, Note, Pattern, PatternCell, SampleData,
+    SampleLoopKind, DEFAULT_EFFECT_SLOTS,
+};
 use rustytracker_play::{
     ChannelSampleFrame, PlaybackClock, PlaybackCursor, PlaybackError, PlaybackSampleValue,
     PlaybackState, PlaybackTiming, RowAdvance, TickAdvance, PLAYBACK_FIRST_ORDER_INDEX,
@@ -747,16 +750,17 @@ fn raw_mono_render_returns_requested_silence_after_sample_end() {
 
 #[test]
 fn raw_mono_render_advances_ticks_and_rows_based_on_sample_rate() {
-    let mut module = module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_TWO_ROWS]);
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_TWO_ROWS]);
     module.header.tick_speed = PLAY_TEST_THREE_TICKS_PER_ROW; // 3 ticks per row
     module.header.bpm = PLAY_TEST_DEFAULT_BPM; // 125 BPM -> 20 ms per tick
-    
+
     // We want to render at a sample rate of 50 Hz.
     // At 50 Hz, 1 sample is 20 ms, which matches 1 tick!
     // So 1 frame = 1 tick.
     // 3 ticks per row, 2 rows. Total song = 6 ticks.
     let mut playback = PlaybackState::start(&module).unwrap();
-    
+
     assert_eq!(playback.clock().tick(), 0);
     assert_eq!(playback.clock().position(&module).unwrap().row, 0);
 
@@ -784,9 +788,10 @@ fn raw_mono_render_advances_ticks_and_rows_based_on_sample_rate() {
 
 #[test]
 fn test_effect_set_speed() {
-    let mut module = module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_TWO_ROWS]);
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_TWO_ROWS]);
     module.header.tick_speed = 6;
-    
+
     let cell = PatternCell {
         effects: vec![
             EffectCommand::default(),
@@ -803,24 +808,34 @@ fn test_effect_set_speed() {
     assert_eq!(playback.clock().timing().ticks_per_row(), 3);
 
     // Tick 0 -> Tick 1
-    assert_eq!(playback.advance_tick(&module).unwrap(), TickAdvance::SameRow);
+    assert_eq!(
+        playback.advance_tick(&module).unwrap(),
+        TickAdvance::SameRow
+    );
     assert_eq!(playback.clock().tick(), 1);
 
     // Tick 1 -> Tick 2
-    assert_eq!(playback.advance_tick(&module).unwrap(), TickAdvance::SameRow);
+    assert_eq!(
+        playback.advance_tick(&module).unwrap(),
+        TickAdvance::SameRow
+    );
     assert_eq!(playback.clock().tick(), 2);
 
     // Tick 2 -> Row 1 (since speed is 3)
-    assert_eq!(playback.advance_tick(&module).unwrap(), TickAdvance::NextRow);
+    assert_eq!(
+        playback.advance_tick(&module).unwrap(),
+        TickAdvance::NextRow
+    );
     assert_eq!(playback.clock().tick(), 0);
     assert_eq!(playback.clock().position(&module).unwrap().row, 1);
 }
 
 #[test]
 fn test_effect_set_bpm() {
-    let mut module = module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_ONE_ROW]);
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_ONE_ROW]);
     module.header.bpm = 125;
-    
+
     let cell = PatternCell {
         effects: vec![
             EffectCommand::default(),
@@ -835,13 +850,17 @@ fn test_effect_set_bpm() {
 
     let playback = PlaybackState::start(&module).unwrap();
     assert_eq!(playback.clock().timing().bpm(), 150);
-    assert_eq!(playback.clock().timing().tick_duration_nanos(), 2_500_000_000 / 150);
+    assert_eq!(
+        playback.clock().timing().tick_duration_nanos(),
+        2_500_000_000 / 150
+    );
 }
 
 #[test]
 fn test_effect_speed_zero_halts_playback() {
-    let mut module = module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_TWO_ROWS]);
-    
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_TWO_ROWS]);
+
     let cell = PatternCell {
         effects: vec![
             EffectCommand::default(),
@@ -855,12 +874,16 @@ fn test_effect_speed_zero_halts_playback() {
     module.patterns[0].set_cell(0, 0, cell).unwrap();
 
     let mut playback = PlaybackState::start(&module).unwrap();
-    assert_eq!(playback.advance_tick(&module).unwrap(), TickAdvance::SongEnd);
+    assert_eq!(
+        playback.advance_tick(&module).unwrap(),
+        TickAdvance::SongEnd
+    );
 }
 
 #[test]
 fn test_effect_set_volume() {
-    let mut module = module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_ONE_ROW]);
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_ONE_ROW]);
     let cell = PatternCell {
         effects: vec![
             EffectCommand {
@@ -879,7 +902,8 @@ fn test_effect_set_volume() {
 
 #[test]
 fn test_effect_set_panning() {
-    let mut module = module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_ONE_ROW]);
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_ONE_ROW]);
     let cell = PatternCell {
         effects: vec![
             EffectCommand::default(),
@@ -898,7 +922,8 @@ fn test_effect_set_panning() {
 
 #[test]
 fn test_effect_volume_slide_up() {
-    let mut module = module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_TWO_ROWS]);
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_TWO_ROWS]);
     module.header.tick_speed = 3;
 
     // Row 0: Set Volume to 100
@@ -919,7 +944,7 @@ fn test_effect_volume_slide_up() {
         effects: vec![
             EffectCommand::default(),
             EffectCommand {
-                effect: 0x0a, // Volume Slide
+                effect: 0x0a,  // Volume Slide
                 operand: 0x30, // x=3, y=0 (slide up)
             },
         ],
@@ -934,9 +959,12 @@ fn test_effect_volume_slide_up() {
     playback.advance_tick(&module).unwrap();
     // Tick 1 -> Tick 2 of Row 0
     playback.advance_tick(&module).unwrap();
-    
+
     // Tick 2 -> Tick 0 of Row 1
-    assert_eq!(playback.advance_tick(&module).unwrap(), TickAdvance::NextRow);
+    assert_eq!(
+        playback.advance_tick(&module).unwrap(),
+        TickAdvance::NextRow
+    );
     assert_eq!(playback.channels()[0].volume, 100); // No slide on tick 0
 
     // Tick 0 -> Tick 1 of Row 1
@@ -950,7 +978,8 @@ fn test_effect_volume_slide_up() {
 
 #[test]
 fn test_effect_volume_slide_down() {
-    let mut module = module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_TWO_ROWS]);
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_TWO_ROWS]);
     module.header.tick_speed = 3;
 
     // Row 0: Set Volume to 100
@@ -986,7 +1015,7 @@ fn test_effect_volume_slide_down() {
     playback.advance_tick(&module).unwrap();
     // Tick 1 -> Tick 2 of Row 0
     playback.advance_tick(&module).unwrap();
-    
+
     // Tick 2 -> Tick 0 of Row 1
     playback.advance_tick(&module).unwrap();
     assert_eq!(playback.channels()[0].volume, 100);
@@ -1002,7 +1031,8 @@ fn test_effect_volume_slide_down() {
 
 #[test]
 fn test_effect_fine_volume_slide() {
-    let mut module = module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_THREE_ROWS]);
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_THREE_ROWS]);
     module.header.tick_speed = 3;
 
     // Row 0: Set Volume to 100
@@ -1093,7 +1123,10 @@ fn test_effect_position_jump() {
     assert_eq!(playback.clock().position(&module).unwrap().order_index, 0);
 
     // Row 0 Tick 0 -> Row 0 Tick 0 of order 2 (since speed is 1, it advances to next row/order next tick)
-    assert_eq!(playback.advance_tick(&module).unwrap(), TickAdvance::NextOrder);
+    assert_eq!(
+        playback.advance_tick(&module).unwrap(),
+        TickAdvance::NextOrder
+    );
     assert_eq!(playback.clock().position(&module).unwrap().order_index, 2);
     assert_eq!(playback.clock().position(&module).unwrap().row, 0);
 }
@@ -1112,7 +1145,7 @@ fn test_effect_pattern_break() {
         effects: vec![
             EffectCommand::default(),
             EffectCommand {
-                effect: 0x0d, // Pattern Break
+                effect: 0x0d,  // Pattern Break
                 operand: 0x12, // BCD for 12 -> row 12
             },
         ],
@@ -1123,7 +1156,10 @@ fn test_effect_pattern_break() {
     let mut playback = PlaybackState::start(&module).unwrap();
     assert_eq!(playback.clock().position(&module).unwrap().order_index, 0);
 
-    assert_eq!(playback.advance_tick(&module).unwrap(), TickAdvance::NextOrder);
+    assert_eq!(
+        playback.advance_tick(&module).unwrap(),
+        TickAdvance::NextOrder
+    );
     assert_eq!(playback.clock().position(&module).unwrap().order_index, 1);
     assert_eq!(playback.clock().position(&module).unwrap().row, 12);
 }
@@ -1158,7 +1194,10 @@ fn test_effect_position_jump_and_pattern_break() {
     let mut playback = PlaybackState::start(&module).unwrap();
     assert_eq!(playback.clock().position(&module).unwrap().order_index, 0);
 
-    assert_eq!(playback.advance_tick(&module).unwrap(), TickAdvance::NextOrder);
+    assert_eq!(
+        playback.advance_tick(&module).unwrap(),
+        TickAdvance::NextOrder
+    );
     assert_eq!(playback.clock().position(&module).unwrap().order_index, 2);
     assert_eq!(playback.clock().position(&module).unwrap().row, 8);
 }
@@ -1216,7 +1255,8 @@ fn map_instrument_to_sample(module: &mut Module, instrument_index: usize, sample
 
 #[test]
 fn test_effect_arpeggio() {
-    let mut module = module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_TWO_ROWS]);
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_TWO_ROWS]);
     module.header.tick_speed = 3;
 
     // Row 0: Note C-4 with Arpeggio 0x37 (offset 3 and 7)
@@ -1283,7 +1323,8 @@ fn test_effect_arpeggio() {
 
 #[test]
 fn test_effect_portamento_up_down() {
-    let mut module = module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_THREE_ROWS]);
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_THREE_ROWS]);
     module.header.tick_speed = 3;
 
     // Row 0: Note C-4 with Portamento Up 0x01 operand 8
@@ -1375,7 +1416,8 @@ fn test_effect_portamento_up_down() {
 
 #[test]
 fn test_effect_tone_portamento() {
-    let mut module = module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_TWO_ROWS]);
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_TWO_ROWS]);
     module.header.tick_speed = 3;
 
     // Row 0: Note C-4
@@ -1434,7 +1476,8 @@ fn test_effect_tone_portamento() {
 
 #[test]
 fn test_effect_vibrato() {
-    let mut module = module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_TWO_ROWS]);
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_TWO_ROWS]);
     module.header.tick_speed = 3;
 
     // Row 0: Note C-4 with Vibrato 0x04 speed 4, depth 2
@@ -1443,7 +1486,7 @@ fn test_effect_vibrato() {
         instrument: 1,
         effects: vec![
             EffectCommand {
-                effect: 0x04, // Vibrato
+                effect: 0x04,  // Vibrato
                 operand: 0x42, // speed 4, depth 2
             },
             EffectCommand::default(),
@@ -1469,7 +1512,8 @@ fn test_effect_vibrato() {
 
 #[test]
 fn test_effect_vibrato_volume_slide() {
-    let mut module = module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_THREE_ROWS]);
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_THREE_ROWS]);
     module.header.tick_speed = 3;
 
     // Row 0: Note C-4 with Vibrato 0x04 speed 4, depth 2, Volume 100
@@ -1494,7 +1538,7 @@ fn test_effect_vibrato_volume_slide() {
         effects: vec![
             EffectCommand::default(),
             EffectCommand {
-                effect: 0x06, // Vibrato + Volume Slide
+                effect: 0x06,  // Vibrato + Volume Slide
                 operand: 0x30, // slide up by 3 (operand 0x30 -> x=3, y=0)
             },
         ],
@@ -1531,7 +1575,8 @@ fn test_effect_vibrato_volume_slide() {
 
 #[test]
 fn test_effect_sample_offset() {
-    let mut module = module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_THREE_ROWS]);
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_THREE_ROWS]);
     module.header.tick_speed = 1;
 
     // Row 0: Note C-4 with Sample Offset 0x09 operand 2 -> start at 512
@@ -1600,7 +1645,8 @@ fn test_effect_sample_offset() {
 
 #[test]
 fn test_forward_loop() {
-    let mut module = module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_ONE_ROW]);
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_ONE_ROW]);
     module.header.tick_speed = 1;
 
     let cell = PatternCell {
@@ -1631,7 +1677,8 @@ fn test_forward_loop() {
 
 #[test]
 fn test_ping_pong_loop() {
-    let mut module = module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_ONE_ROW]);
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_ONE_ROW]);
     module.header.tick_speed = 1;
 
     let cell = PatternCell {
@@ -1661,7 +1708,8 @@ fn test_ping_pong_loop() {
 
 #[test]
 fn test_volume_envelope_and_fadeout() {
-    let mut module = module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_TWO_ROWS]);
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_TWO_ROWS]);
     module.header.tick_speed = 5; // 5 ticks per row
 
     // Row 0: Note C-4 Instrument 1
@@ -1690,8 +1738,14 @@ fn test_volume_envelope_and_fadeout() {
     // Point 2: frame 5, value 0
     module.instruments[0].volume_envelope = Envelope {
         points: vec![
-            EnvelopePoint { frame: 0, value: 256 },
-            EnvelopePoint { frame: 2, value: 128 },
+            EnvelopePoint {
+                frame: 0,
+                value: 256,
+            },
+            EnvelopePoint {
+                frame: 2,
+                value: 128,
+            },
             EnvelopePoint { frame: 5, value: 0 },
         ],
         point_count: 3,
@@ -1706,8 +1760,14 @@ fn test_volume_envelope_and_fadeout() {
     // Point 1: frame 4, value 256
     module.instruments[0].panning_envelope = Envelope {
         points: vec![
-            EnvelopePoint { frame: 0, value: 128 },
-            EnvelopePoint { frame: 4, value: 256 },
+            EnvelopePoint {
+                frame: 0,
+                value: 128,
+            },
+            EnvelopePoint {
+                frame: 4,
+                value: 256,
+            },
         ],
         point_count: 2,
         sustain_point: 0,
@@ -1779,10 +1839,10 @@ fn test_volume_envelope_and_fadeout() {
         let ch = &playback.channels()[0];
         assert!(ch.active); // Envelope keeps channel active
         assert!(!ch.keyon); // keyon is false now
-        // Read before advance: still at step 2 -> 128
+                            // Read before advance: still at step 2 -> 128
         assert_eq!(ch.volume_envelope_val, 128);
         assert_eq!(ch.panning_envelope_val, 256); // remains at last point
-        // fadeout volume starts decreasing: 65536 - 16384 = 49152
+                                                  // fadeout volume starts decreasing: 65536 - 16384 = 49152
         assert_eq!(ch.fadeout_volume, 49152);
     }
 
@@ -1814,5 +1874,3 @@ fn test_volume_envelope_and_fadeout() {
         assert!(!ch.active);
     }
 }
-
-

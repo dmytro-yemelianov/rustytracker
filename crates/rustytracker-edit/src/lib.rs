@@ -4,8 +4,8 @@
 //! order modifications, transpositions, and selections.
 
 use rustytracker_core::{
-    CoreError, CoreResult, EffectCommand, Module, Note, PatternCell,
-    MAX_ACTIVE_ORDERS, MAX_XM_NOTES,
+    CoreError, CoreResult, EffectCommand, Module, Note, PatternCell, MAX_ACTIVE_ORDERS,
+    MAX_XM_NOTES,
 };
 
 pub const DEFAULT_UNDO_LIMIT: usize = 64;
@@ -140,28 +140,62 @@ impl ModuleEditor {
 
     // --- Note & Cell Editing ---
 
-    pub fn set_note(&mut self, pattern_idx: usize, channel: u16, row: u16, note: Note) -> CoreResult<()> {
+    pub fn set_note(
+        &mut self,
+        pattern_idx: usize,
+        channel: u16,
+        row: u16,
+        note: Note,
+    ) -> CoreResult<()> {
         self.begin_transaction();
-        let pattern = self.module.patterns.get_mut(pattern_idx).ok_or(CoreError::PatternNumberOverflow)?;
+        let pattern = self
+            .module
+            .patterns
+            .get_mut(pattern_idx)
+            .ok_or(CoreError::PatternNumberOverflow)?;
         let mut cell = pattern.cell(channel, row)?.clone();
         cell.note = note;
         pattern.set_cell(channel, row, cell)
     }
 
-    pub fn set_instrument(&mut self, pattern_idx: usize, channel: u16, row: u16, instrument: u8) -> CoreResult<()> {
+    pub fn set_instrument(
+        &mut self,
+        pattern_idx: usize,
+        channel: u16,
+        row: u16,
+        instrument: u8,
+    ) -> CoreResult<()> {
         self.begin_transaction();
-        let pattern = self.module.patterns.get_mut(pattern_idx).ok_or(CoreError::PatternNumberOverflow)?;
+        let pattern = self
+            .module
+            .patterns
+            .get_mut(pattern_idx)
+            .ok_or(CoreError::PatternNumberOverflow)?;
         let mut cell = pattern.cell(channel, row)?.clone();
         cell.instrument = instrument;
         pattern.set_cell(channel, row, cell)
     }
 
-    pub fn set_effect(&mut self, pattern_idx: usize, channel: u16, row: u16, slot: u8, command: EffectCommand) -> CoreResult<()> {
+    pub fn set_effect(
+        &mut self,
+        pattern_idx: usize,
+        channel: u16,
+        row: u16,
+        slot: u8,
+        command: EffectCommand,
+    ) -> CoreResult<()> {
         self.begin_transaction();
-        let pattern = self.module.patterns.get_mut(pattern_idx).ok_or(CoreError::PatternNumberOverflow)?;
+        let pattern = self
+            .module
+            .patterns
+            .get_mut(pattern_idx)
+            .ok_or(CoreError::PatternNumberOverflow)?;
         let mut cell = pattern.cell(channel, row)?.clone();
         if usize::from(slot) >= cell.effects.len() {
-            return Err(CoreError::InvalidEffectSlot { slot, slots: cell.effects.len() as u8 });
+            return Err(CoreError::InvalidEffectSlot {
+                slot,
+                slots: cell.effects.len() as u8,
+            });
         }
         cell.effects[usize::from(slot)] = command;
         pattern.set_cell(channel, row, cell)
@@ -169,7 +203,11 @@ impl ModuleEditor {
 
     pub fn clear_cell(&mut self, pattern_idx: usize, channel: u16, row: u16) -> CoreResult<()> {
         self.begin_transaction();
-        let pattern = self.module.patterns.get_mut(pattern_idx).ok_or(CoreError::PatternNumberOverflow)?;
+        let pattern = self
+            .module
+            .patterns
+            .get_mut(pattern_idx)
+            .ok_or(CoreError::PatternNumberOverflow)?;
         let clean_cell = PatternCell {
             note: Note::Empty,
             instrument: 0,
@@ -183,9 +221,19 @@ impl ModuleEditor {
     pub fn insert_duplicate_order(&mut self, index: usize) -> CoreResult<()> {
         self.begin_transaction();
         if self.module.orders.len() >= MAX_ACTIVE_ORDERS {
-            return Err(CoreError::TooManyOrders { requested: self.module.orders.len() + 1, maximum: MAX_ACTIVE_ORDERS });
+            return Err(CoreError::TooManyOrders {
+                requested: self.module.orders.len() + 1,
+                maximum: MAX_ACTIVE_ORDERS,
+            });
         }
-        let pattern = *self.module.orders.get(index).ok_or(CoreError::InvalidOrderIndex { index, len: self.module.orders.len() })?;
+        let pattern = *self
+            .module
+            .orders
+            .get(index)
+            .ok_or(CoreError::InvalidOrderIndex {
+                index,
+                len: self.module.orders.len(),
+            })?;
         self.module.orders.insert(index + 1, pattern);
         Ok(())
     }
@@ -193,7 +241,10 @@ impl ModuleEditor {
     pub fn delete_order(&mut self, index: usize) -> CoreResult<()> {
         self.begin_transaction();
         if index >= self.module.orders.len() {
-            return Err(CoreError::InvalidOrderIndex { index, len: self.module.orders.len() });
+            return Err(CoreError::InvalidOrderIndex {
+                index,
+                len: self.module.orders.len(),
+            });
         }
         if self.module.orders.len() > 1 {
             self.module.orders.remove(index);
@@ -206,7 +257,11 @@ impl ModuleEditor {
     pub fn set_order_pattern(&mut self, index: usize, pattern_idx: u8) -> CoreResult<()> {
         self.begin_transaction();
         let len = self.module.orders.len();
-        let val = self.module.orders.get_mut(index).ok_or(CoreError::InvalidOrderIndex { index, len })?;
+        let val = self
+            .module
+            .orders
+            .get_mut(index)
+            .ok_or(CoreError::InvalidOrderIndex { index, len })?;
         *val = pattern_idx;
         Ok(())
     }
@@ -215,7 +270,10 @@ impl ModuleEditor {
         self.begin_transaction();
         let len = self.module.orders.len();
         if from_idx >= len || to_idx >= len {
-            return Err(CoreError::InvalidOrderIndex { index: from_idx.max(to_idx), len });
+            return Err(CoreError::InvalidOrderIndex {
+                index: from_idx.max(to_idx),
+                len,
+            });
         }
         let item = self.module.orders.remove(from_idx);
         self.module.orders.insert(to_idx, item);
@@ -225,9 +283,18 @@ impl ModuleEditor {
     // --- Selection Transformations ---
 
     /// Transpose all notes in the selected area of a pattern by a number of semitones.
-    pub fn transpose_selection(&mut self, pattern_idx: usize, selection: Selection, semitones: i8) -> CoreResult<()> {
+    pub fn transpose_selection(
+        &mut self,
+        pattern_idx: usize,
+        selection: Selection,
+        semitones: i8,
+    ) -> CoreResult<()> {
         self.begin_transaction();
-        let pattern = self.module.patterns.get_mut(pattern_idx).ok_or(CoreError::PatternNumberOverflow)?;
+        let pattern = self
+            .module
+            .patterns
+            .get_mut(pattern_idx)
+            .ok_or(CoreError::PatternNumberOverflow)?;
 
         for channel in selection.start_channel..=selection.end_channel {
             for row in selection.start_row..=selection.end_row {
@@ -245,9 +312,19 @@ impl ModuleEditor {
     }
 
     /// Remap all notes referencing one instrument to another instrument within the selection.
-    pub fn remap_instrument_selection(&mut self, pattern_idx: usize, selection: Selection, from_ins: u8, to_ins: u8) -> CoreResult<()> {
+    pub fn remap_instrument_selection(
+        &mut self,
+        pattern_idx: usize,
+        selection: Selection,
+        from_ins: u8,
+        to_ins: u8,
+    ) -> CoreResult<()> {
         self.begin_transaction();
-        let pattern = self.module.patterns.get_mut(pattern_idx).ok_or(CoreError::PatternNumberOverflow)?;
+        let pattern = self
+            .module
+            .patterns
+            .get_mut(pattern_idx)
+            .ok_or(CoreError::PatternNumberOverflow)?;
 
         for channel in selection.start_channel..=selection.end_channel {
             for row in selection.start_row..=selection.end_row {
@@ -264,9 +341,20 @@ impl ModuleEditor {
     }
 
     /// Clear notes, instruments, or effects inside the selection area.
-    pub fn clear_selection(&mut self, pattern_idx: usize, selection: Selection, clear_notes: bool, clear_instruments: bool, clear_effects: bool) -> CoreResult<()> {
+    pub fn clear_selection(
+        &mut self,
+        pattern_idx: usize,
+        selection: Selection,
+        clear_notes: bool,
+        clear_instruments: bool,
+        clear_effects: bool,
+    ) -> CoreResult<()> {
         self.begin_transaction();
-        let pattern = self.module.patterns.get_mut(pattern_idx).ok_or(CoreError::PatternNumberOverflow)?;
+        let pattern = self
+            .module
+            .patterns
+            .get_mut(pattern_idx)
+            .ok_or(CoreError::PatternNumberOverflow)?;
 
         for channel in selection.start_channel..=selection.end_channel {
             for row in selection.start_row..=selection.end_row {
@@ -295,7 +383,11 @@ impl ModuleEditor {
     /// Inserts a blank row at the target index in the pattern, shifting rows down and discarding the last row.
     pub fn insert_row(&mut self, pattern_idx: usize, row_idx: u16) -> CoreResult<()> {
         self.begin_transaction();
-        let pattern = self.module.patterns.get_mut(pattern_idx).ok_or(CoreError::PatternNumberOverflow)?;
+        let pattern = self
+            .module
+            .patterns
+            .get_mut(pattern_idx)
+            .ok_or(CoreError::PatternNumberOverflow)?;
         let rows = pattern.rows();
         let chs = pattern.channels();
         let slots = pattern.effect_slots();
@@ -328,7 +420,11 @@ impl ModuleEditor {
     /// Deletes the row at the target index, shifting subsequent rows up and filling the last row with empty cells.
     pub fn delete_row(&mut self, pattern_idx: usize, row_idx: u16) -> CoreResult<()> {
         self.begin_transaction();
-        let pattern = self.module.patterns.get_mut(pattern_idx).ok_or(CoreError::PatternNumberOverflow)?;
+        let pattern = self
+            .module
+            .patterns
+            .get_mut(pattern_idx)
+            .ok_or(CoreError::PatternNumberOverflow)?;
         let rows = pattern.rows();
         let chs = pattern.channels();
         let slots = pattern.effect_slots();
