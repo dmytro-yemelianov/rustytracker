@@ -3,9 +3,10 @@
 ## Scope
 
 `rustytracker-play` owns headless playback state and future offline rendering.
-The first slices deliberately stop before effects, channel state, sample
-interpolation, and PCM mixing. They establish tested cursor and clock state that
-walk the core module order list, pattern rows, and ticks.
+The first slices deliberately stop before effects, mutable sample-trigger state,
+sample interpolation, and PCM mixing. They establish tested cursor, clock, and
+current-row channel state that walk the core module order list, pattern rows,
+ticks, and active module channels.
 
 ## References
 
@@ -56,6 +57,18 @@ validated `PlaybackTiming`, and tick `0`.
   tick of a non-final row
 - returns `SongEnd` and keeps the clock on the final tick of the final row
 
+## Row State Contract
+
+`PlaybackCursor::row_state(&Module)` and `PlaybackClock::row_state(&Module)`
+return a `PlaybackRowState` for the current position:
+
+- the resolved playback position
+- one `ChannelRowState` per active module channel
+- each channel's cloned `PatternCell` for the current row
+
+The row state is a read-only snapshot. It does not yet trigger instruments,
+carry effect memory, update envelopes, or advance sample playback.
+
 ## Error Contract
 
 The cursor reports structural playback errors explicitly:
@@ -67,6 +80,7 @@ The cursor reports structural playback errors explicitly:
 - order entry that references a missing pattern
 - empty pattern
 - cursor row outside the resolved pattern's row count
+- pattern channel count smaller than the active module channel count
 
 These checks keep future tick/effect code from silently walking invalid module
 state.
@@ -83,12 +97,15 @@ The initial `rustytracker-play` tests verify:
 - zero speed/BPM timing fields are rejected
 - tick advance stays in the row until the row's final tick has elapsed
 - tick advance reports song end without moving past the final tick
+- current row state returns one cell per active module channel
+- row state follows tick-driven row advancement
+- patterns with too few channels for the module are rejected
 - empty order lists are rejected
 - empty patterns are rejected
 - missing pattern references are rejected before playback starts
 
 ## Next Steps
 
-- add per-channel row state
+- add mutable per-channel sample/effect state
 - add raw sample stepping without interpolation
 - add deterministic PCM render tests once sample stepping exists
