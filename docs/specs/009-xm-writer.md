@@ -64,6 +64,8 @@ The writer tests verify:
   core summaries
 - synthetic effect cells parse, write, and parse again through the full module
   writer for the supported effect-column and volume-column inverse mappings
+- a synthetic instrument with a nonzero core sample index in local slot 0
+  roundtrips as XM-local slot 0 while preserving note-map intent and sample data
 - sample header fields that cannot fit XM `u32` fields fail before bytes are
   returned
 
@@ -125,6 +127,9 @@ Implemented inverse mappings:
 - sample header size is `40`
 - the note sample map is translated from core sample indexes back to XM-local
   sample slots
+- nonzero core sample indexes assigned to an instrument slot are serialized as
+  the slot's XM-local sample index; parsing the written XM normalizes the core
+  sample pool back to the instrument-local slot layout
 - envelope point values are scaled from core values back to XM values
 - vibrato depth and volume fadeout are scaled back to their XM stored values
 - sample header lengths are derived from core sample data

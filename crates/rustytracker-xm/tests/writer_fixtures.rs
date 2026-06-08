@@ -89,6 +89,7 @@ const XM_WRITER_EMPTY_SAMPLE_COUNT: u16 = 0;
 const XM_WRITER_SINGLE_SAMPLE_COUNT: u16 = 1;
 const XM_WRITER_FIRST_INSTRUMENT_INDEX: usize = 0;
 const XM_WRITER_FIRST_SAMPLE_INDEX: usize = 0;
+const XM_WRITER_SECOND_SAMPLE_INDEX: usize = 1;
 const XM_WRITER_EMPTY_ENVELOPE_POINT_INDEX: u8 = 0;
 const XM_WRITER_TEST_INSTRUMENT_NAME: &str = "lead inst";
 const XM_WRITER_TEST_SAMPLE_NAME: &str = "sample a";
@@ -114,6 +115,7 @@ const XM_WRITER_BYTES_PER_16_BIT_SAMPLE: usize = 2;
 const XM_WRITER_TEST_SAMPLE_LOOP_START: u32 = 1;
 const XM_WRITER_TEST_SAMPLE_LOOP_LENGTH: u32 = 2;
 const XM_WRITER_TEST_SAMPLE_VALUES_8: &[i8] = &[1, 9, 22, 41];
+const XM_WRITER_TEST_SAMPLE_FRAME_COUNT_8: u32 = XM_WRITER_TEST_SAMPLE_VALUES_8.len() as u32;
 const XM_WRITER_TEST_SAMPLE_DELTAS_8: &[u8] = &[1, 8, 13, 19];
 const XM_WRITER_TEST_SAMPLE_VALUES_16: &[i16] = &[1_000, 500, 750, -250];
 const XM_WRITER_TEST_SAMPLE_DELTAS_16: &[u8] = &[0xe8, 0x03, 0x0c, 0xfe, 0xfa, 0x00, 0x18, 0xfc];
@@ -620,6 +622,57 @@ fn writes_instrument_metadata_and_empty_sample_headers() {
     assert_eq!(sample.relative_note, XM_WRITER_TEST_SAMPLE_RELATIVE_NOTE);
     assert_eq!(sample.sample_type, XM_WRITER_FORWARD_LOOP_SAMPLE_TYPE);
     assert_eq!(sample.loop_kind, SampleLoopKind::Forward);
+}
+
+#[test]
+fn roundtrips_nonzero_core_sample_indexes_as_xm_local_slots() {
+    let mut module = Module::empty();
+    let mut instrument = Instrument::empty(XM_WRITER_FIRST_INSTRUMENT_INDEX);
+    let mut sample_slots = vec![None; SAMPLES_PER_INSTRUMENT];
+    sample_slots[XM_WRITER_FIRST_SAMPLE_INDEX] = Some(XM_WRITER_SECOND_SAMPLE_INDEX);
+    instrument.sample_slots = sample_slots;
+    instrument.note_sample_map = vec![Some(XM_WRITER_SECOND_SAMPLE_INDEX); MAX_XM_NOTES as usize];
+    instrument.volume_fadeout = XM_WRITER_TEST_VOLUME_FADEOUT;
+
+    let expected_local_sample = Sample {
+        name: SampleName::new(XM_WRITER_TEST_SAMPLE_NAME),
+        length: XM_WRITER_TEST_SAMPLE_FRAME_COUNT_8,
+        volume: XM_WRITER_TEST_SAMPLE_VOLUME_255,
+        panning: XM_WRITER_TEST_SAMPLE_PANNING,
+        volume_fadeout: XM_WRITER_TEST_VOLUME_FADEOUT,
+        data: SampleData::Pcm8(XM_WRITER_TEST_SAMPLE_VALUES_8.to_vec()),
+        ..Sample::default()
+    };
+
+    module.instruments = vec![instrument];
+    module.samples = vec![Sample::default(), expected_local_sample.clone()];
+
+    let written = write_xm_module(&module).unwrap();
+    let reparsed = parse_xm_module(&written).unwrap();
+    let instrument = &reparsed.instruments[XM_WRITER_FIRST_INSTRUMENT_INDEX];
+
+    assert_eq!(
+        instrument.sample_slots[XM_WRITER_FIRST_SAMPLE_INDEX],
+        Some(XM_WRITER_FIRST_SAMPLE_INDEX)
+    );
+    assert!(instrument
+        .sample_slots
+        .iter()
+        .skip(XM_WRITER_SECOND_SAMPLE_INDEX)
+        .all(Option::is_none));
+    assert!(instrument
+        .note_sample_map
+        .iter()
+        .all(|sample_index| *sample_index == Some(XM_WRITER_FIRST_SAMPLE_INDEX)));
+    assert_eq!(reparsed.samples.len(), SAMPLES_PER_INSTRUMENT);
+    assert_eq!(
+        sample_roundtrip_summary(&reparsed.samples[XM_WRITER_FIRST_SAMPLE_INDEX]),
+        sample_roundtrip_summary(&expected_local_sample)
+    );
+    assert_eq!(
+        reparsed.samples[XM_WRITER_SECOND_SAMPLE_INDEX],
+        Sample::default()
+    );
 }
 
 #[test]
