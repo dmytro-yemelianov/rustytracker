@@ -1,8 +1,9 @@
-use rustytracker_core::{Module, Note, Pattern, PatternCell, DEFAULT_EFFECT_SLOTS};
+use rustytracker_core::{Module, Note, Pattern, PatternCell, SampleData, DEFAULT_EFFECT_SLOTS};
 use rustytracker_play::{
-    PlaybackClock, PlaybackCursor, PlaybackError, PlaybackState, PlaybackTiming, RowAdvance,
-    TickAdvance, PLAYBACK_FIRST_ORDER_INDEX, PLAYBACK_FIRST_ROW, PLAYBACK_FIRST_TICK,
-    PLAYBACK_ORDER_STEP, PLAYBACK_ROW_STEP, PLAYBACK_TICK_STEP,
+    ChannelSampleFrame, PlaybackClock, PlaybackCursor, PlaybackError, PlaybackSampleValue,
+    PlaybackState, PlaybackTiming, RowAdvance, TickAdvance, PLAYBACK_FIRST_ORDER_INDEX,
+    PLAYBACK_FIRST_ROW, PLAYBACK_FIRST_TICK, PLAYBACK_ORDER_STEP, PLAYBACK_ROW_STEP,
+    PLAYBACK_TICK_STEP,
 };
 
 const PLAY_TEST_CHANNELS: u16 = 1;
@@ -39,9 +40,14 @@ const PLAY_TEST_ROW_ONE_INSTRUMENT: u8 = 3;
 const PLAY_TEST_FIRST_INSTRUMENT_INDEX: usize = 0;
 const PLAY_TEST_FIRST_SAMPLE_INDEX: usize = 0;
 const PLAY_TEST_SAMPLE_START_FRAME: usize = 0;
+const PLAY_TEST_SECOND_SAMPLE_FRAME: usize = 1;
 const PLAY_TEST_SAMPLE_VOLUME: u8 = 48;
 const PLAY_TEST_SAMPLE_PANNING: u8 = 96;
 const PLAY_TEST_MISSING_INSTRUMENT: u8 = 200;
+const PLAY_TEST_PCM8_FIRST_VALUE: i8 = -2;
+const PLAY_TEST_PCM8_SECOND_VALUE: i8 = 3;
+const PLAY_TEST_PCM16_FIRST_VALUE: i16 = -512;
+const PLAY_TEST_PCM16_SECOND_VALUE: i16 = 1024;
 
 #[test]
 fn starts_at_first_order_first_row() {
@@ -518,6 +524,132 @@ fn playback_state_rejects_missing_samples() {
             instrument_index: PLAY_TEST_FIRST_INSTRUMENT_INDEX,
             sample_index: missing_sample_index,
         }
+    );
+}
+
+#[test]
+fn sample_step_reads_pcm8_frames_and_advances_position() {
+    let mut module = module_with_two_channel_cells(
+        PLAY_TEST_ONE_ROW,
+        &[(
+            PLAY_TEST_CHANNEL_ZERO,
+            PLAYBACK_FIRST_ROW,
+            test_cell(
+                PLAY_TEST_CHANNEL_ZERO_NOTE,
+                PLAY_TEST_CHANNEL_ZERO_INSTRUMENT,
+            ),
+        )],
+    );
+    module.samples[PLAY_TEST_FIRST_SAMPLE_INDEX].data = SampleData::Pcm8(vec![
+        PLAY_TEST_PCM8_FIRST_VALUE,
+        PLAY_TEST_PCM8_SECOND_VALUE,
+    ]);
+    let mut playback = PlaybackState::start(&module).unwrap();
+
+    assert_eq!(
+        playback.step_samples(&module).unwrap(),
+        vec![ChannelSampleFrame {
+            channel: PLAY_TEST_CHANNEL_ZERO,
+            sample_index: PLAY_TEST_FIRST_SAMPLE_INDEX,
+            sample_frame: PLAY_TEST_SAMPLE_START_FRAME,
+            value: PlaybackSampleValue::Pcm8(PLAY_TEST_PCM8_FIRST_VALUE),
+        }]
+    );
+    assert!(playback.channels()[PLAY_TEST_CHANNEL_ZERO as usize].active);
+    assert_eq!(
+        playback.channels()[PLAY_TEST_CHANNEL_ZERO as usize].sample_frame,
+        PLAY_TEST_SECOND_SAMPLE_FRAME
+    );
+
+    assert_eq!(
+        playback.step_samples(&module).unwrap(),
+        vec![ChannelSampleFrame {
+            channel: PLAY_TEST_CHANNEL_ZERO,
+            sample_index: PLAY_TEST_FIRST_SAMPLE_INDEX,
+            sample_frame: PLAY_TEST_SECOND_SAMPLE_FRAME,
+            value: PlaybackSampleValue::Pcm8(PLAY_TEST_PCM8_SECOND_VALUE),
+        }]
+    );
+    assert!(!playback.channels()[PLAY_TEST_CHANNEL_ZERO as usize].active);
+    assert_eq!(
+        playback.channels()[PLAY_TEST_CHANNEL_ZERO as usize].note,
+        Note::Key(PLAY_TEST_CHANNEL_ZERO_NOTE)
+    );
+    assert_eq!(
+        playback.channels()[PLAY_TEST_CHANNEL_ZERO as usize].sample_index,
+        None
+    );
+    assert_eq!(
+        playback.channels()[PLAY_TEST_CHANNEL_ZERO as usize].sample_frame,
+        PLAY_TEST_SAMPLE_START_FRAME
+    );
+    assert!(playback.step_samples(&module).unwrap().is_empty());
+}
+
+#[test]
+fn sample_step_reads_pcm16_frames_without_interpolation() {
+    let mut module = module_with_two_channel_cells(
+        PLAY_TEST_ONE_ROW,
+        &[(
+            PLAY_TEST_CHANNEL_ZERO,
+            PLAYBACK_FIRST_ROW,
+            test_cell(
+                PLAY_TEST_CHANNEL_ZERO_NOTE,
+                PLAY_TEST_CHANNEL_ZERO_INSTRUMENT,
+            ),
+        )],
+    );
+    module.samples[PLAY_TEST_FIRST_SAMPLE_INDEX].data = SampleData::Pcm16(vec![
+        PLAY_TEST_PCM16_FIRST_VALUE,
+        PLAY_TEST_PCM16_SECOND_VALUE,
+    ]);
+    let mut playback = PlaybackState::start(&module).unwrap();
+
+    assert_eq!(
+        playback.step_samples(&module).unwrap(),
+        vec![ChannelSampleFrame {
+            channel: PLAY_TEST_CHANNEL_ZERO,
+            sample_index: PLAY_TEST_FIRST_SAMPLE_INDEX,
+            sample_frame: PLAY_TEST_SAMPLE_START_FRAME,
+            value: PlaybackSampleValue::Pcm16(PLAY_TEST_PCM16_FIRST_VALUE),
+        }]
+    );
+    assert_eq!(
+        playback.step_samples(&module).unwrap(),
+        vec![ChannelSampleFrame {
+            channel: PLAY_TEST_CHANNEL_ZERO,
+            sample_index: PLAY_TEST_FIRST_SAMPLE_INDEX,
+            sample_frame: PLAY_TEST_SECOND_SAMPLE_FRAME,
+            value: PlaybackSampleValue::Pcm16(PLAY_TEST_PCM16_SECOND_VALUE),
+        }]
+    );
+}
+
+#[test]
+fn sample_step_releases_empty_sample_data_without_frame() {
+    let module = module_with_two_channel_cells(
+        PLAY_TEST_ONE_ROW,
+        &[(
+            PLAY_TEST_CHANNEL_ZERO,
+            PLAYBACK_FIRST_ROW,
+            test_cell(
+                PLAY_TEST_CHANNEL_ZERO_NOTE,
+                PLAY_TEST_CHANNEL_ZERO_INSTRUMENT,
+            ),
+        )],
+    );
+    let mut playback = PlaybackState::start(&module).unwrap();
+
+    assert!(playback.channels()[PLAY_TEST_CHANNEL_ZERO as usize].active);
+    assert!(playback.step_samples(&module).unwrap().is_empty());
+    assert!(!playback.channels()[PLAY_TEST_CHANNEL_ZERO as usize].active);
+    assert_eq!(
+        playback.channels()[PLAY_TEST_CHANNEL_ZERO as usize].note,
+        Note::Key(PLAY_TEST_CHANNEL_ZERO_NOTE)
+    );
+    assert_eq!(
+        playback.channels()[PLAY_TEST_CHANNEL_ZERO as usize].sample_index,
+        None
     );
 }
 

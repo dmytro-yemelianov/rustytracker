@@ -4,7 +4,7 @@
 //! keeps traversal explicit and testable.
 
 use rustytracker_core::{
-    Module, Note, Pattern, PatternCell, DEFAULT_INSTRUMENT_NUMBER, FIRST_XM_NOTE_VALUE,
+    Module, Note, Pattern, PatternCell, SampleData, DEFAULT_INSTRUMENT_NUMBER, FIRST_XM_NOTE_VALUE,
     SAMPLE_DEFAULT_PANNING,
 };
 
@@ -21,6 +21,7 @@ pub const PLAYBACK_MIN_BPM: u16 = 1;
 pub const PLAYBACK_XM_TICK_NANOS_AT_ONE_BPM: u64 = 2_500_000_000;
 pub const PLAYBACK_INSTRUMENT_NUMBER_BASE: u8 = 1;
 pub const PLAYBACK_SAMPLE_START_FRAME: usize = 0;
+pub const PLAYBACK_SAMPLE_FRAME_STEP: usize = 1;
 pub const PLAYBACK_EMPTY_VOLUME: u8 = 0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -83,6 +84,20 @@ pub struct ChannelRowState {
 pub struct PlaybackRowState {
     pub position: PlaybackPosition,
     pub channels: Vec<ChannelRowState>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlaybackSampleValue {
+    Pcm8(i8),
+    Pcm16(i16),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ChannelSampleFrame {
+    pub channel: u16,
+    pub sample_index: usize,
+    pub sample_frame: usize,
+    pub value: PlaybackSampleValue,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -190,6 +205,58 @@ impl PlaybackChannelState {
         self.note = Note::Off;
         self.sample_index = None;
         self.sample_frame = PLAYBACK_SAMPLE_START_FRAME;
+    }
+
+    fn stop_sample(&mut self) {
+        self.active = false;
+        self.sample_index = None;
+        self.sample_frame = PLAYBACK_SAMPLE_START_FRAME;
+    }
+
+    fn step_sample(&mut self, module: &Module) -> PlaybackResult<Option<ChannelSampleFrame>> {
+        if !self.active {
+            return Ok(None);
+        }
+
+        let Some(sample_index) = self.sample_index else {
+            self.stop_sample();
+            return Ok(None);
+        };
+        let Some(instrument_index) = self.instrument_index else {
+            return Err(PlaybackError::MissingInstrument {
+                channel: self.channel,
+                instrument: self.instrument,
+            });
+        };
+        let Some(sample) = module.samples.get(sample_index) else {
+            return Err(PlaybackError::MissingSample {
+                channel: self.channel,
+                instrument_index,
+                sample_index,
+            });
+        };
+        let Some(value) = sample_value_at_frame(&sample.data, self.sample_frame) else {
+            self.stop_sample();
+            return Ok(None);
+        };
+
+        let sample_frame = self.sample_frame;
+        self.advance_sample_frame(sample.data.frame_count());
+        Ok(Some(ChannelSampleFrame {
+            channel: self.channel,
+            sample_index,
+            sample_frame,
+            value,
+        }))
+    }
+
+    fn advance_sample_frame(&mut self, frame_count: usize) {
+        let next_frame = self.sample_frame.saturating_add(PLAYBACK_SAMPLE_FRAME_STEP);
+        if next_frame >= frame_count {
+            self.stop_sample();
+        } else {
+            self.sample_frame = next_frame;
+        }
     }
 }
 
@@ -404,6 +471,17 @@ impl PlaybackState {
         Ok(advance)
     }
 
+    pub fn step_samples(&mut self, module: &Module) -> PlaybackResult<Vec<ChannelSampleFrame>> {
+        let mut frames = Vec::new();
+        for channel in &mut self.channels {
+            if let Some(frame) = channel.step_sample(module)? {
+                frames.push(frame);
+            }
+        }
+
+        Ok(frames)
+    }
+
     fn trigger_current_row(&mut self, module: &Module) -> PlaybackResult<()> {
         let row_state = self.clock.row_state(module)?;
         self.apply_row_state(module, &row_state)
@@ -499,4 +577,12 @@ fn instrument_index_for_number(instrument: u8) -> Option<usize> {
 
 fn note_sample_map_index(note: u8) -> Option<usize> {
     note.checked_sub(FIRST_XM_NOTE_VALUE).map(usize::from)
+}
+
+fn sample_value_at_frame(data: &SampleData, frame: usize) -> Option<PlaybackSampleValue> {
+    match data {
+        SampleData::Empty => None,
+        SampleData::Pcm8(values) => values.get(frame).copied().map(PlaybackSampleValue::Pcm8),
+        SampleData::Pcm16(values) => values.get(frame).copied().map(PlaybackSampleValue::Pcm16),
+    }
 }
