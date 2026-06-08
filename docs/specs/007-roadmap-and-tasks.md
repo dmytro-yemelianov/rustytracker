@@ -68,7 +68,7 @@ Acceptance:
 
 Goal: produce stable JSON dumps from loaded modules.
 
-Status: complete in PR #2, pending review/merge.
+Status: complete and merged.
 
 Done:
 
@@ -78,9 +78,7 @@ Done:
 - generate golden JSON for bundled fixtures
 - compare fixture dumps in tests
 
-Remaining:
-
-- merge PR #2 after review
+Remaining: none.
 
 Acceptance:
 
@@ -91,9 +89,14 @@ Acceptance:
 
 Goal: load and write enough XM to prove structural roundtrip.
 
-Tasks:
+Status: in progress in PR #3.
+
+Done:
 
 - implement XM writer for header/order table
+
+Remaining:
+
 - write patterns from core cells into XM packed pattern data
 - write instruments and sample headers
 - write sample payloads using XM delta encoding
@@ -178,7 +181,8 @@ Acceptance:
 
 ## Immediate Backlog
 
-1. Merge PR #2 after review.
-2. Start XM roundtrip writer tests.
-3. Implement XM writer for headers and order table.
-4. Add `XM -> core -> XM -> core` normalized equality checks.
+1. Merge PR #3 after review.
+2. Write patterns from core cells into XM packed pattern data.
+3. Write instruments and sample headers.
+4. Write sample payloads using XM delta encoding.
+5. Add `XM -> core -> XM -> core` normalized equality checks.
