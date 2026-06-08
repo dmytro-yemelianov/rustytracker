@@ -53,3 +53,8 @@ XM packing is not part of the core model.
   represent MilkyTracker's invalid `-1` sample mapping.
 - Samples keep typed payloads as `SampleData::Empty`, `SampleData::Pcm8`, or
   `SampleData::Pcm16`; parser crates should not own long-lived sample buffers.
+- Instruments preserve envelope metadata, vibrato metadata, and volume fadeout
+  in core types so playback and editing do not need to inspect XM parser
+  structs.
+- Samples preserve a normalized `SampleLoopKind` independently from the raw
+  format-specific sample type byte.

@@ -117,6 +117,9 @@ data. The parser mirrors MilkyTracker's loader behavior:
 - envelope values, vibrato depth, and volume fadeout are scaled the way
   MilkyTracker scales them during load
 - each sample header is read as the XM 40-byte sample header
+- sample loop flags are normalized to core `SampleLoopKind`
+- XM's undefined loop flag combination `0x03` is treated as ping-pong loop,
+  matching MilkyTracker's load-time normalization
 - sample payload bytes are bounds checked and decoded as XM delta-coded PCM
 - 8-bit sample data is decoded into signed `i8` frames
 - 16-bit sample data is decoded little-endian into signed `i16` frames
@@ -152,13 +155,17 @@ the bundled fixtures currently use 8-bit samples.
 - sample slots use MilkyTracker's 16-slot-per-instrument pool layout
 - note-to-sample maps are converted to absolute core sample indexes where the
   mapped sample exists, otherwise `None`
+- volume envelopes, panning envelopes, vibrato metadata, and volume fadeout are
+  copied into core instrument fields
 - XM sample headers become core `Sample` metadata
+- normalized sample loop kinds are copied into core samples
 - decoded sample payloads become core `SampleData::Pcm8` or
   `SampleData::Pcm16`
 
 Fixture tests load every bundled MilkyTracker XM file into the core model and
 assert headers, orders, pattern counts, instrument counts, sample-pool layout,
-first sample metadata, decoded data prefixes, and decoded sample checksums.
+first instrument envelope/vibrato/fadeout metadata, first sample metadata,
+sample loop kind, decoded data prefixes, and decoded sample checksums.
 
-Next step: add sample-loop normalization edge cases such as ModPlug stereo
-sample data and ADPCM-packed samples, then start playback-facing fixture tests.
+Next step: add ModPlug stereo sample handling, ADPCM-packed sample errors, and
+out-of-range order reference tests before the structural dump CLI.

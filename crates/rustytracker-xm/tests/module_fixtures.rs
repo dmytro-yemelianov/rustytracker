@@ -1,7 +1,9 @@
 use std::fs;
 use std::path::PathBuf;
 
-use rustytracker_core::{FrequencyTable, SampleData, SAMPLES_PER_INSTRUMENT};
+use rustytracker_core::{
+    EnvelopePoint, FrequencyTable, SampleData, SampleLoopKind, SAMPLES_PER_INSTRUMENT,
+};
 use rustytracker_xm::parse_xm_module;
 
 const FNV_OFFSET: u64 = 0xcbf29ce484222325;
@@ -18,10 +20,19 @@ struct ExpectedModule {
     first_orders: &'static [u8],
     first_pattern_rows: u16,
     first_instrument_name: &'static str,
+    first_volume_envelope_point_count: u8,
+    first_volume_envelope_first_point: EnvelopePoint,
+    first_volume_envelope_flags: u8,
+    first_panning_envelope_point_count: u8,
+    first_panning_envelope_first_point: EnvelopePoint,
+    first_panning_envelope_flags: u8,
+    first_instrument_volume_fadeout: u16,
+    first_instrument_vibrato_depth: u8,
     first_sample_name: &'static str,
     first_sample_length: u32,
     first_sample_loop_start: u32,
     first_sample_loop_length: u32,
+    first_sample_loop_kind: SampleLoopKind,
     first_sample_data_prefix: &'static [i8],
     decoded_sample_checksum: u64,
 }
@@ -37,10 +48,25 @@ const FIXTURES: &[ExpectedModule] = &[
         first_orders: &[1, 2, 0, 3, 4, 5, 6, 7],
         first_pattern_rows: 64,
         first_instrument_name: "",
+        first_volume_envelope_point_count: 4,
+        first_volume_envelope_first_point: EnvelopePoint {
+            frame: 0,
+            value: 256,
+        },
+        first_volume_envelope_flags: 5,
+        first_panning_envelope_point_count: 6,
+        first_panning_envelope_first_point: EnvelopePoint {
+            frame: 0,
+            value: 128,
+        },
+        first_panning_envelope_flags: 5,
+        first_instrument_volume_fadeout: 736,
+        first_instrument_vibrato_depth: 0,
         first_sample_name: "beng",
         first_sample_length: 997,
         first_sample_loop_start: 613,
         first_sample_loop_length: 384,
+        first_sample_loop_kind: SampleLoopKind::Forward,
         first_sample_data_prefix: &[
             -19, 88, 21, -33, 4, -17, -6, -12, -10, -9, -13, -5, -19, 87, 19, -31,
         ],
@@ -56,10 +82,25 @@ const FIXTURES: &[ExpectedModule] = &[
         first_orders: &[5, 5, 5, 5, 6, 0, 1, 2],
         first_pattern_rows: 32,
         first_instrument_name: "",
+        first_volume_envelope_point_count: 4,
+        first_volume_envelope_first_point: EnvelopePoint {
+            frame: 0,
+            value: 256,
+        },
+        first_volume_envelope_flags: 7,
+        first_panning_envelope_point_count: 4,
+        first_panning_envelope_first_point: EnvelopePoint {
+            frame: 0,
+            value: 128,
+        },
+        first_panning_envelope_flags: 5,
+        first_instrument_volume_fadeout: 480,
+        first_instrument_vibrato_depth: 16,
         first_sample_name: "",
         first_sample_length: 446,
         first_sample_loop_start: 414,
         first_sample_loop_length: 32,
+        first_sample_loop_kind: SampleLoopKind::Forward,
         first_sample_data_prefix: &[
             1, 9, 22, 41, 60, 75, 94, 115, 120, 122, 127, 127, 127, 127, 127, 127,
         ],
@@ -75,10 +116,19 @@ const FIXTURES: &[ExpectedModule] = &[
         first_orders: &[9, 0, 1, 2, 3, 4, 5, 6],
         first_pattern_rows: 64,
         first_instrument_name: "svenzzon of titan",
+        first_volume_envelope_point_count: 0,
+        first_volume_envelope_first_point: EnvelopePoint { frame: 0, value: 0 },
+        first_volume_envelope_flags: 0,
+        first_panning_envelope_point_count: 0,
+        first_panning_envelope_first_point: EnvelopePoint { frame: 0, value: 0 },
+        first_panning_envelope_flags: 0,
+        first_instrument_volume_fadeout: 0,
+        first_instrument_vibrato_depth: 0,
         first_sample_name: "",
         first_sample_length: 132,
         first_sample_loop_start: 0,
         first_sample_loop_length: 132,
+        first_sample_loop_kind: SampleLoopKind::Forward,
         first_sample_data_prefix: &[6, 22, 16, 9, 7, 5, 3, 1, -3, -6, -7, -8, -10, -11, -15, -16],
         decoded_sample_checksum: 0x7877_f846_a0ee_3dd9,
     },
@@ -92,10 +142,25 @@ const FIXTURES: &[ExpectedModule] = &[
         first_orders: &[0, 2, 3, 4, 5, 1, 6, 9],
         first_pattern_rows: 64,
         first_instrument_name: "2                    0",
+        first_volume_envelope_point_count: 2,
+        first_volume_envelope_first_point: EnvelopePoint {
+            frame: 0,
+            value: 256,
+        },
+        first_volume_envelope_flags: 0,
+        first_panning_envelope_point_count: 2,
+        first_panning_envelope_first_point: EnvelopePoint {
+            frame: 0,
+            value: 128,
+        },
+        first_panning_envelope_flags: 0,
+        first_instrument_volume_fadeout: 0,
+        first_instrument_vibrato_depth: 0,
         first_sample_name: "",
         first_sample_length: 87,
         first_sample_loop_start: 2,
         first_sample_loop_length: 85,
+        first_sample_loop_kind: SampleLoopKind::Forward,
         first_sample_data_prefix: &[
             -9, -1, -1, 0, 85, 84, 81, 80, -80, -80, -80, -76, -74, -73, -70, -69,
         ],
@@ -111,10 +176,25 @@ const FIXTURES: &[ExpectedModule] = &[
         first_orders: &[12, 13, 14, 15, 1, 17, 16, 2],
         first_pattern_rows: 64,
         first_instrument_name: " ...Strobe&Kmuland...",
+        first_volume_envelope_point_count: 2,
+        first_volume_envelope_first_point: EnvelopePoint {
+            frame: 0,
+            value: 256,
+        },
+        first_volume_envelope_flags: 0,
+        first_panning_envelope_point_count: 2,
+        first_panning_envelope_first_point: EnvelopePoint {
+            frame: 0,
+            value: 128,
+        },
+        first_panning_envelope_flags: 0,
+        first_instrument_volume_fadeout: 0,
+        first_instrument_vibrato_depth: 0,
         first_sample_name: "",
         first_sample_length: 2_345,
         first_sample_loop_start: 0,
         first_sample_loop_length: 0,
+        first_sample_loop_kind: SampleLoopKind::None,
         first_sample_data_prefix: &[
             57, 2, 0, -3, -26, -23, -13, -7, 4, 13, 19, 30, 35, 44, 50, 47,
         ],
@@ -189,12 +269,58 @@ fn parses_bundled_xm_files_into_core_modules() {
             .note_sample_map
             .iter()
             .all(|sample_index| *sample_index == Some(0)));
+        assert_eq!(
+            first_instrument.volume_envelope.point_count, fixture.first_volume_envelope_point_count,
+            "{}",
+            fixture.file_name
+        );
+        assert_eq!(
+            first_instrument.volume_envelope.points[0], fixture.first_volume_envelope_first_point,
+            "{}",
+            fixture.file_name
+        );
+        assert_eq!(
+            first_instrument.volume_envelope.flags, fixture.first_volume_envelope_flags,
+            "{}",
+            fixture.file_name
+        );
+        assert_eq!(
+            first_instrument.panning_envelope.point_count,
+            fixture.first_panning_envelope_point_count,
+            "{}",
+            fixture.file_name
+        );
+        assert_eq!(
+            first_instrument.panning_envelope.points[0], fixture.first_panning_envelope_first_point,
+            "{}",
+            fixture.file_name
+        );
+        assert_eq!(
+            first_instrument.panning_envelope.flags, fixture.first_panning_envelope_flags,
+            "{}",
+            fixture.file_name
+        );
+        assert_eq!(
+            first_instrument.volume_fadeout, fixture.first_instrument_volume_fadeout,
+            "{}",
+            fixture.file_name
+        );
+        assert_eq!(
+            first_instrument.vibrato.depth, fixture.first_instrument_vibrato_depth,
+            "{}",
+            fixture.file_name
+        );
 
         let first_sample = &module.samples[0];
         assert_eq!(first_sample.name.as_str(), fixture.first_sample_name);
         assert_eq!(first_sample.length, fixture.first_sample_length);
         assert_eq!(first_sample.loop_start, fixture.first_sample_loop_start);
         assert_eq!(first_sample.loop_length, fixture.first_sample_loop_length);
+        assert_eq!(
+            first_sample.loop_kind, fixture.first_sample_loop_kind,
+            "{}",
+            fixture.file_name
+        );
         assert_eq!(
             first_sample.data.frame_count(),
             fixture.first_sample_length as usize

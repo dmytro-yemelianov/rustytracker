@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
+use rustytracker_core::SampleLoopKind;
 use rustytracker_xm::{
     parse_xm_header, parse_xm_instruments, parse_xm_pattern_headers, XmModuleHeader, XmParseError,
     XmSampleData,
@@ -8,6 +9,8 @@ use rustytracker_xm::{
 
 const FNV_OFFSET: u64 = 0xcbf29ce484222325;
 const FNV_PRIME: u64 = 0x100000001b3;
+const XM_TEST_16_BIT_SAMPLE_TYPE: u8 = 0x10;
+const XM_TEST_UNDEFINED_LOOP_SAMPLE_TYPE: u8 = 0x03;
 
 #[derive(Debug)]
 struct ExpectedInstrumentSection {
@@ -39,6 +42,7 @@ struct ExpectedSample {
     volume: u8,
     finetune: i8,
     sample_type: u8,
+    loop_kind: SampleLoopKind,
     panning: u8,
     relative_note: i8,
     name: &'static str,
@@ -73,6 +77,7 @@ const FIXTURES: &[ExpectedInstrumentSection] = &[
             volume: 255,
             finetune: -28,
             sample_type: 1,
+            loop_kind: SampleLoopKind::Forward,
             panning: 128,
             relative_note: -7,
             name: "beng",
@@ -113,6 +118,7 @@ const FIXTURES: &[ExpectedInstrumentSection] = &[
             volume: 192,
             finetune: 50,
             sample_type: 1,
+            loop_kind: SampleLoopKind::Forward,
             panning: 96,
             relative_note: 0,
             name: "",
@@ -157,6 +163,7 @@ const FIXTURES: &[ExpectedInstrumentSection] = &[
             volume: 200,
             finetune: 0,
             sample_type: 1,
+            loop_kind: SampleLoopKind::Forward,
             panning: 128,
             relative_note: 7,
             name: "",
@@ -197,6 +204,7 @@ const FIXTURES: &[ExpectedInstrumentSection] = &[
             volume: 255,
             finetune: 0,
             sample_type: 1,
+            loop_kind: SampleLoopKind::Forward,
             panning: 100,
             relative_note: 0,
             name: "",
@@ -238,6 +246,7 @@ const FIXTURES: &[ExpectedInstrumentSection] = &[
             volume: 255,
             finetune: 0,
             sample_type: 0,
+            loop_kind: SampleLoopKind::None,
             panning: 128,
             relative_note: -8,
             name: "",
@@ -372,6 +381,7 @@ fn parses_milkytracker_bundled_xm_instrument_sections() {
         assert_eq!(sample.volume, fixture.first_sample.volume);
         assert_eq!(sample.finetune, fixture.first_sample.finetune);
         assert_eq!(sample.sample_type, fixture.first_sample.sample_type);
+        assert_eq!(sample.loop_kind, fixture.first_sample.loop_kind);
         assert_eq!(sample.panning, fixture.first_sample.panning);
         assert_eq!(sample.relative_note, fixture.first_sample.relative_note);
         assert_eq!(sample.name, fixture.first_sample.name);
@@ -406,7 +416,7 @@ fn parses_milkytracker_bundled_xm_instrument_sections() {
 
 #[test]
 fn decodes_16_bit_delta_sample_data() {
-    let mut bytes = synthetic_instrument_file_with_16_bit_sample();
+    let mut bytes = synthetic_instrument_file_with_sample_type(XM_TEST_16_BIT_SAMPLE_TYPE);
     let header = synthetic_header();
     let section = parse_xm_instruments(&bytes, &header, 0).unwrap();
     let sample = &section.instruments[0].samples[0];
@@ -415,6 +425,7 @@ fn decodes_16_bit_delta_sample_data() {
     assert_eq!(sample.frame_count, 4);
     assert_eq!(sample.loop_start_frames, 1);
     assert_eq!(sample.loop_length_frames, 2);
+    assert_eq!(sample.loop_kind, SampleLoopKind::None);
     assert_eq!(
         sample.decoded_data.as_i16().unwrap(),
         &[1_000, 500, 750, -250]
@@ -429,6 +440,20 @@ fn decodes_16_bit_delta_sample_data() {
             ..
         })
     ));
+}
+
+#[test]
+fn normalizes_undefined_loop_type_as_ping_pong() {
+    let bytes = synthetic_instrument_file_with_sample_type(XM_TEST_UNDEFINED_LOOP_SAMPLE_TYPE);
+    let header = synthetic_header();
+    let section = parse_xm_instruments(&bytes, &header, 0).unwrap();
+    let sample = &section.instruments[0].samples[0];
+
+    assert_eq!(sample.sample_type, XM_TEST_UNDEFINED_LOOP_SAMPLE_TYPE);
+    assert_eq!(sample.frame_count, 8);
+    assert_eq!(sample.loop_start_frames, 2);
+    assert_eq!(sample.loop_length_frames, 4);
+    assert_eq!(sample.loop_kind, SampleLoopKind::PingPong);
 }
 
 #[test]
@@ -529,7 +554,7 @@ fn synthetic_header() -> XmModuleHeader {
     }
 }
 
-fn synthetic_instrument_file_with_16_bit_sample() -> Vec<u8> {
+fn synthetic_instrument_file_with_sample_type(sample_type: u8) -> Vec<u8> {
     let mut bytes = Vec::new();
 
     bytes.extend_from_slice(&263_u32.to_le_bytes());
@@ -544,14 +569,18 @@ fn synthetic_instrument_file_with_16_bit_sample() -> Vec<u8> {
     bytes.extend_from_slice(&4_u32.to_le_bytes());
     bytes.push(64);
     bytes.push(0);
-    bytes.push(0x10);
+    bytes.push(sample_type);
     bytes.push(128);
     bytes.push(0);
     bytes.push(0);
     bytes.extend_from_slice(&[0; 22]);
 
-    for delta in [1_000_i16, -500, 250, -1_000] {
-        bytes.extend_from_slice(&delta.to_le_bytes());
+    if sample_type == XM_TEST_16_BIT_SAMPLE_TYPE {
+        for delta in [1_000_i16, -500, 250, -1_000] {
+            bytes.extend_from_slice(&delta.to_le_bytes());
+        }
+    } else {
+        bytes.extend_from_slice(&[1, 1, 1, 1, 1, 1, 1, 1]);
     }
 
     bytes

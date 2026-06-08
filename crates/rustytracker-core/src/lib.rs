@@ -42,6 +42,9 @@ pub const FIRST_XM_NOTE_VALUE: u8 = 1;
 pub const EMPTY_NOTE_VALUE: u8 = 0;
 pub const DEFAULT_INSTRUMENT_NUMBER: u8 = 0;
 pub const DEFAULT_NOTE_SAMPLE_INDEX: usize = 0;
+pub const EMPTY_ENVELOPE_POINT_COUNT: u8 = 0;
+pub const EMPTY_ENVELOPE_POINT_INDEX: u8 = 0;
+pub const EMPTY_ENVELOPE_FLAGS: u8 = 0;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreError {
@@ -368,10 +371,59 @@ impl OrderList {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Envelope {
+    pub points: Vec<EnvelopePoint>,
+    pub point_count: u8,
+    pub sustain_point: u8,
+    pub loop_start_point: u8,
+    pub loop_end_point: u8,
+    pub flags: u8,
+}
+
+impl Default for Envelope {
+    fn default() -> Self {
+        Self {
+            points: Vec::new(),
+            point_count: EMPTY_ENVELOPE_POINT_COUNT,
+            sustain_point: EMPTY_ENVELOPE_POINT_INDEX,
+            loop_start_point: EMPTY_ENVELOPE_POINT_INDEX,
+            loop_end_point: EMPTY_ENVELOPE_POINT_INDEX,
+            flags: EMPTY_ENVELOPE_FLAGS,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EnvelopePoint {
+    pub frame: u16,
+    pub value: u16,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Vibrato {
+    pub waveform: u8,
+    pub sweep: u8,
+    pub depth: u8,
+    pub rate: u8,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SampleLoopKind {
+    #[default]
+    None,
+    Forward,
+    PingPong,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Instrument {
     pub name: InstrumentName,
     pub sample_slots: Vec<Option<usize>>,
     pub note_sample_map: Vec<Option<usize>>,
+    pub volume_envelope: Envelope,
+    pub panning_envelope: Envelope,
+    pub vibrato: Vibrato,
+    pub volume_fadeout: u16,
 }
 
 impl Instrument {
@@ -385,6 +437,10 @@ impl Instrument {
             name: InstrumentName::default(),
             sample_slots,
             note_sample_map: vec![Some(DEFAULT_NOTE_SAMPLE_INDEX); MAX_XM_NOTES as usize],
+            volume_envelope: Envelope::default(),
+            panning_envelope: Envelope::default(),
+            vibrato: Vibrato::default(),
+            volume_fadeout: SAMPLE_DEFAULT_VOLUME_FADEOUT,
         }
     }
 }
@@ -418,6 +474,7 @@ pub struct Sample {
     pub length: u32,
     pub loop_start: u32,
     pub loop_length: u32,
+    pub loop_kind: SampleLoopKind,
     pub volume: u8,
     pub panning: u8,
     pub flags: u8,
@@ -435,6 +492,7 @@ impl Default for Sample {
             length: EMPTY_SAMPLE_LENGTH,
             loop_start: EMPTY_SAMPLE_LENGTH,
             loop_length: EMPTY_SAMPLE_LENGTH,
+            loop_kind: SampleLoopKind::default(),
             volume: SAMPLE_DEFAULT_VOLUME,
             panning: SAMPLE_DEFAULT_PANNING,
             flags: SAMPLE_DEFAULT_FLAGS,

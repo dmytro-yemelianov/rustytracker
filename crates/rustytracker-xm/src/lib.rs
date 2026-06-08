@@ -4,8 +4,9 @@
 //! through fixture-backed tests.
 
 use rustytracker_core::{
-    EffectCommand, FrequencyTable, Instrument, InstrumentName, Module, ModuleHeader, ModuleTitle,
-    Note, Pattern, PatternCell, Sample, SampleData as CoreSampleData, SampleName,
+    EffectCommand, Envelope as CoreEnvelope, EnvelopePoint as CoreEnvelopePoint, FrequencyTable,
+    Instrument, InstrumentName, Module, ModuleHeader, ModuleTitle, Note, Pattern, PatternCell,
+    Sample, SampleData as CoreSampleData, SampleLoopKind, SampleName, Vibrato as CoreVibrato,
     SAMPLES_PER_INSTRUMENT, SAMPLE_DEFAULT_FLAGS, SAMPLE_DEFAULT_VOLUME_FADEOUT,
 };
 
@@ -135,6 +136,11 @@ const XM_SAMPLE_RELATIVE_NOTE_LEN: usize = 1;
 const XM_SAMPLE_RESERVED_LEN: usize = 1;
 const XM_EMPTY_SAMPLE_DATA_LEN: u32 = 0;
 const XM_SAMPLE_16_BIT_FLAG: u8 = 0x10;
+const XM_SAMPLE_LOOP_MASK: u8 = 0x03;
+const XM_SAMPLE_LOOP_NONE: u8 = 0x00;
+const XM_SAMPLE_LOOP_FORWARD: u8 = 0x01;
+const XM_SAMPLE_LOOP_PING_PONG: u8 = 0x02;
+const XM_SAMPLE_LOOP_UNDEFINED: u8 = 0x03;
 const BYTES_PER_16_BIT_SAMPLE: usize = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -296,6 +302,7 @@ pub struct XmSampleHeader {
     pub volume: u8,
     pub finetune: i8,
     pub sample_type: u8,
+    pub loop_kind: SampleLoopKind,
     pub panning: u8,
     pub relative_note: i8,
     pub reserved: u8,
@@ -710,6 +717,43 @@ fn convert_instrument_to_core(instrument: &XmInstrument) -> Instrument {
                     .collect()
             })
             .unwrap_or_else(|| vec![None; XM_NOTE_SAMPLE_MAP_LEN]),
+        volume_envelope: instrument
+            .volume_envelope
+            .as_ref()
+            .map(convert_envelope_to_core)
+            .unwrap_or_default(),
+        panning_envelope: instrument
+            .panning_envelope
+            .as_ref()
+            .map(convert_envelope_to_core)
+            .unwrap_or_default(),
+        vibrato: CoreVibrato {
+            waveform: instrument.vibrato_type.unwrap_or_default(),
+            sweep: instrument.vibrato_sweep.unwrap_or_default(),
+            depth: instrument.vibrato_depth.unwrap_or_default(),
+            rate: instrument.vibrato_rate.unwrap_or_default(),
+        },
+        volume_fadeout: instrument
+            .volume_fadeout
+            .unwrap_or(SAMPLE_DEFAULT_VOLUME_FADEOUT),
+    }
+}
+
+fn convert_envelope_to_core(envelope: &XmEnvelope) -> CoreEnvelope {
+    CoreEnvelope {
+        points: envelope
+            .points
+            .iter()
+            .map(|point| CoreEnvelopePoint {
+                frame: point.frame,
+                value: point.value,
+            })
+            .collect(),
+        point_count: envelope.point_count,
+        sustain_point: envelope.sustain_point,
+        loop_start_point: envelope.loop_start_point,
+        loop_end_point: envelope.loop_end_point,
+        flags: envelope.flags,
     }
 }
 
@@ -732,6 +776,7 @@ fn convert_samples_to_core(instruments: &[XmInstrument]) -> Vec<Sample> {
                 length: sample.frame_count,
                 loop_start: sample.loop_start_frames,
                 loop_length: sample.loop_length_frames,
+                loop_kind: sample.loop_kind,
                 volume: sample.volume,
                 panning: sample.panning,
                 flags: SAMPLE_DEFAULT_FLAGS,
@@ -934,6 +979,7 @@ fn read_sample_header(
         volume: vol64_to_255(volume_64),
         finetune,
         sample_type,
+        loop_kind: sample_loop_kind(sample_type),
         panning,
         relative_note,
         reserved,
@@ -993,6 +1039,15 @@ fn decode_delta16(bytes: &[u8]) -> Vec<i16> {
 
 fn is_16_bit_sample(sample_type: u8) -> bool {
     sample_type & XM_SAMPLE_16_BIT_FLAG == XM_SAMPLE_16_BIT_FLAG
+}
+
+fn sample_loop_kind(sample_type: u8) -> SampleLoopKind {
+    match sample_type & XM_SAMPLE_LOOP_MASK {
+        XM_SAMPLE_LOOP_NONE => SampleLoopKind::None,
+        XM_SAMPLE_LOOP_FORWARD => SampleLoopKind::Forward,
+        XM_SAMPLE_LOOP_PING_PONG | XM_SAMPLE_LOOP_UNDEFINED => SampleLoopKind::PingPong,
+        _ => unreachable!("loop-kind mask can only produce XM loop values"),
+    }
 }
 
 fn ensure_instrument_range(
