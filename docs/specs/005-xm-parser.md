@@ -194,5 +194,6 @@ serialization.
 - non-empty patterns are emitted as unpacked XM cells
 - note-off values are converted back from the core note-off value to XM `97`
 
-Effect inverse mapping, instrument writing, and sample payload writing are
-separate roundtrip milestones.
+Effect inverse mapping, instrument metadata writing, and sample payload writing
+now exist in the XM writer. Full normalized roundtrip equality remains a
+separate milestone.

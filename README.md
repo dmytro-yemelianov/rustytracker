@@ -56,7 +56,8 @@ Current coverage:
   pattern cell expansion, instrument/sample-header metadata, delta-coded sample
   payload decoding, ModPlug stereo sample mixing, loop-kind normalization,
   ADPCM unsupported errors, sparse order references, XM header/order and simple
-  pattern writing, end-to-end load into `rustytracker-core::Module`, and
-  malformed input checks.
+  pattern writing, XM instrument metadata and delta-coded sample payload
+  writing, end-to-end load into `rustytracker-core::Module`, and malformed
+  input checks.
 - `rustytracker-cli`: `rustytracker dump <module.xm> --format json`, schema
   validation, and golden structural dumps for bundled fixtures.

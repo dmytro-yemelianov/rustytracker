@@ -9,7 +9,7 @@ use rustytracker_core::{
 use rustytracker_xm::{
     decode_xm_patterns, parse_xm_header, parse_xm_instruments, parse_xm_module,
     parse_xm_pattern_headers, write_xm_header, write_xm_instruments, write_xm_patterns,
-    XmWriteError,
+    XmSampleField, XmWriteError,
 };
 
 const FIXTURES: &[&str] = &[
@@ -83,8 +83,20 @@ const XM_WRITER_TEST_SAMPLE_PANNING: u8 = 96;
 const XM_WRITER_TEST_SAMPLE_FINETUNE: i8 = -12;
 const XM_WRITER_TEST_SAMPLE_RELATIVE_NOTE: i8 = 7;
 const XM_WRITER_FORWARD_LOOP_SAMPLE_TYPE: u8 = 1;
-const XM_WRITER_TEST_SAMPLE_DATA_LEN: u32 = 1;
-const XM_WRITER_TEST_SAMPLE_DATA_BYTE: i8 = 1;
+const XM_WRITER_16_BIT_SAMPLE_TYPE: u8 = 0x10;
+const XM_WRITER_FORWARD_16_BIT_SAMPLE_TYPE: u8 =
+    XM_WRITER_16_BIT_SAMPLE_TYPE | XM_WRITER_FORWARD_LOOP_SAMPLE_TYPE;
+const XM_WRITER_BYTES_PER_16_BIT_SAMPLE: usize = 2;
+const XM_WRITER_TEST_SAMPLE_LOOP_START: u32 = 1;
+const XM_WRITER_TEST_SAMPLE_LOOP_LENGTH: u32 = 2;
+const XM_WRITER_TEST_SAMPLE_VALUES_8: &[i8] = &[1, 9, 22, 41];
+const XM_WRITER_TEST_SAMPLE_DELTAS_8: &[u8] = &[1, 8, 13, 19];
+const XM_WRITER_TEST_SAMPLE_VALUES_16: &[i16] = &[1_000, 500, 750, -250];
+const XM_WRITER_TEST_SAMPLE_DELTAS_16: &[u8] = &[0xe8, 0x03, 0x0c, 0xfe, 0xfa, 0x00, 0x18, 0xfc];
+const XM_WRITER_OVERLONG_SAMPLE_LOOP_START: u32 = u32::MAX;
+const XM_WRITER_U32_FIELD_MAX: u64 = u32::MAX as u64;
+const XM_WRITER_OVERLONG_16_BIT_LOOP_START_BYTE_LEN: u64 =
+    XM_WRITER_OVERLONG_SAMPLE_LOOP_START as u64 * XM_WRITER_BYTES_PER_16_BIT_SAMPLE as u64;
 
 #[test]
 fn writes_empty_module_header_and_order_table() {
@@ -278,17 +290,84 @@ fn writes_instrument_metadata_and_empty_sample_headers() {
 }
 
 #[test]
-fn rejects_sample_payloads_until_delta_encoding_is_implemented() {
+fn writes_8_bit_sample_payloads_with_delta_encoding() {
     let mut module = module_with_one_named_empty_sample();
-    module.samples[XM_WRITER_FIRST_SAMPLE_INDEX].length = XM_WRITER_TEST_SAMPLE_DATA_LEN;
+    module.samples[XM_WRITER_FIRST_SAMPLE_INDEX].loop_start = XM_WRITER_TEST_SAMPLE_LOOP_START;
+    module.samples[XM_WRITER_FIRST_SAMPLE_INDEX].loop_length = XM_WRITER_TEST_SAMPLE_LOOP_LENGTH;
     module.samples[XM_WRITER_FIRST_SAMPLE_INDEX].data =
-        SampleData::Pcm8(vec![XM_WRITER_TEST_SAMPLE_DATA_BYTE]);
+        SampleData::Pcm8(XM_WRITER_TEST_SAMPLE_VALUES_8.to_vec());
+
+    let bytes = write_header_patterns_and_instruments(&module);
+    let section = parse_written_instruments(&bytes);
+    let sample = &section.instruments[XM_WRITER_FIRST_INSTRUMENT_INDEX].samples
+        [XM_WRITER_FIRST_SAMPLE_INDEX];
+
+    assert_eq!(
+        &bytes[bytes.len() - XM_WRITER_TEST_SAMPLE_DELTAS_8.len()..],
+        XM_WRITER_TEST_SAMPLE_DELTAS_8
+    );
+    assert_eq!(sample.length, XM_WRITER_TEST_SAMPLE_VALUES_8.len() as u32);
+    assert_eq!(sample.loop_start, XM_WRITER_TEST_SAMPLE_LOOP_START);
+    assert_eq!(sample.loop_length, XM_WRITER_TEST_SAMPLE_LOOP_LENGTH);
+    assert_eq!(
+        sample.decoded_data.as_i8().unwrap(),
+        XM_WRITER_TEST_SAMPLE_VALUES_8
+    );
+}
+
+#[test]
+fn writes_16_bit_sample_payloads_with_delta_encoding() {
+    let mut module = module_with_one_named_empty_sample();
+    module.samples[XM_WRITER_FIRST_SAMPLE_INDEX].loop_start = XM_WRITER_TEST_SAMPLE_LOOP_START;
+    module.samples[XM_WRITER_FIRST_SAMPLE_INDEX].loop_length = XM_WRITER_TEST_SAMPLE_LOOP_LENGTH;
+    module.samples[XM_WRITER_FIRST_SAMPLE_INDEX].data =
+        SampleData::Pcm16(XM_WRITER_TEST_SAMPLE_VALUES_16.to_vec());
+
+    let bytes = write_header_patterns_and_instruments(&module);
+    let section = parse_written_instruments(&bytes);
+    let sample = &section.instruments[XM_WRITER_FIRST_INSTRUMENT_INDEX].samples
+        [XM_WRITER_FIRST_SAMPLE_INDEX];
+
+    assert_eq!(
+        &bytes[bytes.len() - XM_WRITER_TEST_SAMPLE_DELTAS_16.len()..],
+        XM_WRITER_TEST_SAMPLE_DELTAS_16
+    );
+    assert_eq!(
+        sample.length,
+        (XM_WRITER_TEST_SAMPLE_VALUES_16.len() * XM_WRITER_BYTES_PER_16_BIT_SAMPLE) as u32
+    );
+    assert_eq!(sample.sample_type, XM_WRITER_FORWARD_16_BIT_SAMPLE_TYPE);
+    assert_eq!(
+        sample.loop_start,
+        XM_WRITER_TEST_SAMPLE_LOOP_START * XM_WRITER_BYTES_PER_16_BIT_SAMPLE as u32
+    );
+    assert_eq!(
+        sample.loop_length,
+        XM_WRITER_TEST_SAMPLE_LOOP_LENGTH * XM_WRITER_BYTES_PER_16_BIT_SAMPLE as u32
+    );
+    assert_eq!(sample.loop_start_frames, XM_WRITER_TEST_SAMPLE_LOOP_START);
+    assert_eq!(sample.loop_length_frames, XM_WRITER_TEST_SAMPLE_LOOP_LENGTH);
+    assert_eq!(
+        sample.decoded_data.as_i16().unwrap(),
+        XM_WRITER_TEST_SAMPLE_VALUES_16
+    );
+}
+
+#[test]
+fn rejects_16_bit_sample_loop_offsets_that_do_not_fit_xm_u32_fields() {
+    let mut module = module_with_one_named_empty_sample();
+    module.samples[XM_WRITER_FIRST_SAMPLE_INDEX].loop_start = XM_WRITER_OVERLONG_SAMPLE_LOOP_START;
+    module.samples[XM_WRITER_FIRST_SAMPLE_INDEX].data =
+        SampleData::Pcm16(XM_WRITER_TEST_SAMPLE_VALUES_16.to_vec());
 
     assert_eq!(
         write_xm_instruments(&module).unwrap_err(),
-        XmWriteError::SampleDataEncodingNotImplemented {
+        XmWriteError::SampleFieldTooLarge {
             instrument_index: XM_WRITER_FIRST_INSTRUMENT_INDEX,
             sample_index: XM_WRITER_FIRST_SAMPLE_INDEX,
+            field: XmSampleField::LoopStart,
+            value: XM_WRITER_OVERLONG_16_BIT_LOOP_START_BYTE_LEN,
+            maximum: XM_WRITER_U32_FIELD_MAX,
         }
     );
 }
@@ -579,6 +658,14 @@ fn write_header_patterns_and_instruments(module: &Module) -> Vec<u8> {
     let mut bytes = write_header_and_patterns(module);
     bytes.extend_from_slice(&write_xm_instruments(module).unwrap());
     bytes
+}
+
+fn parse_written_instruments(bytes: &[u8]) -> rustytracker_xm::XmInstrumentSection {
+    let header = parse_xm_header(bytes).unwrap();
+    let pattern_headers = parse_xm_pattern_headers(bytes, &header).unwrap();
+    let instrument_offset = pattern_headers.last().unwrap().next_offset;
+
+    parse_xm_instruments(bytes, &header, instrument_offset).unwrap()
 }
 
 fn module_with_one_named_empty_sample() -> Module {
