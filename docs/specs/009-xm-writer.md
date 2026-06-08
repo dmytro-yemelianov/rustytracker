@@ -4,16 +4,18 @@
 
 The XM writer starts with the fixed module header, active order table, pattern
 headers/cells, the first MilkyTracker-compatible effect inverse mappings, and
-instrument/sample headers without payload encoding. Full roundtrip support will
-add sample-payload writing in a later slice.
+instrument/sample headers with 8-bit and 16-bit delta-coded sample payloads.
+Full normalized roundtrip support still needs the remaining symmetric effect
+coverage and end-to-end equality tests.
 
 ## References
 
 Writer behavior follows MilkyTracker's bundled XM references and save path:
 
 - `resources/reference/xm-form.txt` for pattern header and unpacked cell layout
-- `src/milkyplay/ExporterXM.cpp` `convertEffect`, `convertToVolume`, and
-  `convertEffects` for core-to-XM effect conversion and column placement
+- `src/milkyplay/ExporterXM.cpp` `convertEffect`, `convertToVolume`,
+  `convertEffects`, and sample-data writing for core-to-XM effect conversion,
+  column placement, and delta sample payload encoding
 - `src/milkyplay/LoaderXM.cpp` for the inverse parser behavior that writer
   tests must roundtrip through
 
@@ -51,9 +53,11 @@ The writer tests verify:
 - empty patterns are written with zero payload bytes
 - simple note/instrument cells roundtrip through unpacked XM pattern data
 - empty instruments are emitted as short XM instrument headers
-- active instruments are emitted with extension metadata and zero-length sample
-  headers
-- non-empty sample payloads are rejected until delta encoding is implemented
+- active instruments are emitted with extension metadata and sample headers
+- 8-bit and 16-bit sample payloads are emitted with XM delta encoding
+- 16-bit sample lengths and loop fields are written as byte counts
+- sample header fields that cannot fit XM `u32` fields fail before bytes are
+  returned
 
 ## Pattern Blocks
 
@@ -112,9 +116,25 @@ Deferred mappings:
   sample slots
 - envelope point values are scaled from core values back to XM values
 - vibrato depth and volume fadeout are scaled back to their XM stored values
-- sample headers are emitted with zero byte lengths until the sample payload
-  encoder exists
+- sample header lengths are derived from core sample data
+- empty samples keep zero byte length and zero loop byte fields
+- 16-bit sample length, loop start, and loop length fields are stored as byte
+  counts
 
-The writer rejects non-empty sample data with
-`SampleDataEncodingNotImplemented` so it cannot silently emit invalid or fake
-audio payloads.
+## Sample Payloads
+
+Sample payloads are written immediately after all sample headers for the active
+instrument, matching the XM layout parsed by `parse_xm_instruments`.
+
+The writer supports mono core sample data:
+
+- `SampleData::Pcm8` writes one delta byte per frame
+- `SampleData::Pcm16` writes one little-endian delta word per frame and sets
+  the XM 16-bit sample-type flag
+- payload deltas start from zero and use wrapping subtraction, matching
+  MilkyTracker's XM save path and the parser's wrapping accumulator
+- loop-type bits come from `SampleLoopKind`; parsed stereo samples are already
+  normalized to mono core data and are not re-emitted with the stereo flag
+
+The writer returns `SampleFieldTooLarge` when a sample length or loop byte field
+does not fit XM's `u32` storage.

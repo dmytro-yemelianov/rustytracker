@@ -9,7 +9,8 @@ RustyTracker has a test-first Rust workspace with:
 - `rustytracker-xm`: read-only XM header parsing, pattern decoding, instrument
   metadata parsing, delta-coded sample payload decoding, and end-to-end bundled
   XM loading into `rustytracker-core::Module`; XM header/order/pattern writing
-  with the first MilkyTracker-compatible effect inverse mappings
+  with the first MilkyTracker-compatible effect inverse mappings, instrument
+  metadata writing, and delta-coded sample payload writing
 - `rustytracker-cli`: normalized JSON structural dumps with golden fixture
   comparisons
 - CodeRabbit review rules requiring compatibility values and format constants to
@@ -101,10 +102,10 @@ Done:
 - add MilkyTracker-compatible inverse mappings for current core pattern effects
 - relocate compatible first-slot effects into the XM volume column
 - write XM instrument metadata and zero-length sample headers
+- write 8-bit and 16-bit sample payloads using XM delta encoding
 
 Remaining:
 
-- write sample payloads using XM delta encoding
 - add symmetric parser/writer coverage for fine volume-slide volume-column
   commands
 - add `XM -> core -> XM -> core` normalized equality tests
@@ -188,7 +189,7 @@ Acceptance:
 
 ## Immediate Backlog
 
-1. Merge the current XM instrument/sample-header writer PR after review.
-2. Write sample payloads using XM delta encoding.
-3. Add symmetric fine volume-slide volume-column coverage.
-4. Add `XM -> core -> XM -> core` normalized equality checks.
+1. Add symmetric fine volume-slide volume-column coverage.
+2. Add `XM -> core -> XM -> core` normalized equality checks.
+3. Use the normalized equality checks to drive the remaining fixture roundtrip
+   gaps.

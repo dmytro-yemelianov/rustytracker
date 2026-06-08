@@ -44,6 +44,9 @@ const XM_WRITER_EMPTY_SAMPLE_BYTE_LEN: u32 = 0;
 const XM_WRITER_SAMPLE_RESERVED: u8 = 0;
 const XM_WRITER_EMPTY_ENVELOPE_FRAME: u16 = 0;
 const XM_WRITER_EMPTY_ENVELOPE_VALUE: u16 = 0;
+const XM_WRITER_DELTA_INITIAL_8: i8 = 0;
+const XM_WRITER_DELTA_INITIAL_16: i16 = 0;
+const U32_FIELD_MAX: u64 = u32::MAX as u64;
 const XM_HEADER_FIELD_STEP: usize = 2;
 const XM_RESTART_FIELD_OFFSET: usize = HEADER_FIELDS_OFFSET + XM_HEADER_FIELD_STEP;
 const XM_CHANNELS_FIELD_OFFSET: usize = HEADER_FIELDS_OFFSET + XM_HEADER_FIELD_STEP * 2;
@@ -162,6 +165,7 @@ const XM_SAMPLE_PANNING_LEN: usize = 1;
 const XM_SAMPLE_RELATIVE_NOTE_LEN: usize = 1;
 const XM_SAMPLE_RESERVED_LEN: usize = 1;
 const XM_EMPTY_SAMPLE_DATA_LEN: u32 = 0;
+const XM_SAMPLE_8_BIT_FLAG: u8 = 0x00;
 const XM_SAMPLE_16_BIT_FLAG: u8 = 0x10;
 const XM_SAMPLE_LOOP_MASK: u8 = 0x03;
 const XM_SAMPLE_NON_LOOP_TYPE_MASK: u8 = !XM_SAMPLE_LOOP_MASK;
@@ -171,6 +175,7 @@ const XM_SAMPLE_LOOP_PING_PONG: u8 = 0x02;
 const XM_SAMPLE_LOOP_UNDEFINED: u8 = 0x03;
 const XM_SAMPLE_STEREO_FLAG: u8 = 0x20;
 const XM_SAMPLE_ADPCM_RESERVED: u8 = 0xad;
+const BYTES_PER_8_BIT_SAMPLE: usize = 1;
 const BYTES_PER_16_BIT_SAMPLE: usize = 2;
 const STEREO_CHANNEL_COUNT: usize = 2;
 const STEREO_CHANNEL_COUNT_U32: u32 = STEREO_CHANNEL_COUNT as u32;
@@ -281,13 +286,23 @@ pub enum XmWriteError {
         requested: usize,
         maximum: usize,
     },
-    SampleDataEncodingNotImplemented {
+    SampleFieldTooLarge {
         instrument_index: usize,
         sample_index: usize,
+        field: XmSampleField,
+        value: u64,
+        maximum: u64,
     },
 }
 
 pub type XmWriteResult<T> = Result<T, XmWriteError>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum XmSampleField {
+    Length,
+    LoopStart,
+    LoopLength,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XmModuleHeader {
@@ -619,31 +634,6 @@ fn sample_is_active(sample: &Sample) -> bool {
     sample != &Sample::default()
 }
 
-fn ensure_samples_can_be_written(
-    module: &Module,
-    instrument_index: usize,
-    instrument: &Instrument,
-    sample_count: usize,
-) -> XmWriteResult<()> {
-    for sample_index in 0..sample_count {
-        if let Some(sample) = instrument
-            .sample_slots
-            .get(sample_index)
-            .and_then(|sample_index| *sample_index)
-            .and_then(|sample_index| module.samples.get(sample_index))
-        {
-            if !matches!(sample.data, CoreSampleData::Empty) {
-                return Err(XmWriteError::SampleDataEncodingNotImplemented {
-                    instrument_index,
-                    sample_index,
-                });
-            }
-        }
-    }
-
-    Ok(())
-}
-
 fn write_xm_instrument(
     bytes: &mut Vec<u8>,
     module: &Module,
@@ -658,8 +648,6 @@ fn write_xm_instrument(
             maximum: SAMPLES_PER_INSTRUMENT,
         });
     }
-
-    ensure_samples_can_be_written(module, instrument_index, instrument, sample_count)?;
 
     let header_size = if sample_count == 0 {
         XM_WRITER_EMPTY_INSTRUMENT_HEADER_SIZE
@@ -702,7 +690,11 @@ fn write_xm_instrument(
     );
 
     for sample_index in 0..sample_count {
-        write_xm_sample_header(bytes, module, instrument, sample_index);
+        write_xm_sample_header(bytes, module, instrument_index, instrument, sample_index)?;
+    }
+
+    for sample_index in 0..sample_count {
+        write_xm_sample_payload(bytes, module, instrument, sample_index);
     }
 
     Ok(())
@@ -818,24 +810,37 @@ fn write_xm_envelope_points(bytes: &mut [u8], offset: usize, envelope: &CoreEnve
 fn write_xm_sample_header(
     bytes: &mut Vec<u8>,
     module: &Module,
+    instrument_index: usize,
     instrument: &Instrument,
     sample_index: usize,
-) {
-    let sample = instrument
-        .sample_slots
-        .get(sample_index)
-        .and_then(|sample_index| *sample_index)
-        .and_then(|sample_index| module.samples.get(sample_index));
+) -> XmWriteResult<()> {
+    let sample = xm_sample_for_slot(module, instrument, sample_index);
     let header_offset = bytes.len();
     bytes.resize(header_offset + XM_SAMPLE_HEADER_LEN, ASCII_NUL);
 
     if let Some(sample) = sample {
+        let sample_byte_len =
+            xm_sample_data_byte_len(&sample.data, instrument_index, sample_index)?;
+        let loop_start_byte_len = xm_sample_frame_count_to_byte_len(
+            sample.loop_start,
+            &sample.data,
+            instrument_index,
+            sample_index,
+            XmSampleField::LoopStart,
+        )?;
+        let loop_length_byte_len = xm_sample_frame_count_to_byte_len(
+            sample.loop_length,
+            &sample.data,
+            instrument_index,
+            sample_index,
+            XmSampleField::LoopLength,
+        )?;
         let mut cursor = header_offset;
-        write_u32(bytes, cursor, XM_WRITER_EMPTY_SAMPLE_BYTE_LEN);
+        write_u32(bytes, cursor, sample_byte_len);
         cursor += XM_SAMPLE_LENGTH_LEN;
-        write_u32(bytes, cursor, XM_WRITER_EMPTY_SAMPLE_BYTE_LEN);
+        write_u32(bytes, cursor, loop_start_byte_len);
         cursor += XM_SAMPLE_LOOP_START_LEN;
-        write_u32(bytes, cursor, XM_WRITER_EMPTY_SAMPLE_BYTE_LEN);
+        write_u32(bytes, cursor, loop_length_byte_len);
         cursor += XM_SAMPLE_LOOP_LENGTH_LEN;
         bytes[cursor] = vol255_to_64(sample.volume);
         cursor += XM_SAMPLE_VOLUME_LEN;
@@ -854,10 +859,20 @@ fn write_xm_sample_header(
             sample.name.as_str(),
         );
     }
+
+    Ok(())
 }
 
 fn xm_sample_type(sample: &Sample) -> u8 {
-    (sample.sample_type & XM_SAMPLE_NON_LOOP_TYPE_MASK) | xm_sample_loop_kind(sample.loop_kind)
+    xm_sample_data_type(sample) | xm_sample_loop_kind(sample.loop_kind)
+}
+
+fn xm_sample_data_type(sample: &Sample) -> u8 {
+    match &sample.data {
+        CoreSampleData::Empty => sample.sample_type & XM_SAMPLE_NON_LOOP_TYPE_MASK,
+        CoreSampleData::Pcm8(_) => XM_SAMPLE_8_BIT_FLAG,
+        CoreSampleData::Pcm16(_) => XM_SAMPLE_16_BIT_FLAG,
+    }
 }
 
 fn xm_sample_loop_kind(loop_kind: SampleLoopKind) -> u8 {
@@ -865,6 +880,117 @@ fn xm_sample_loop_kind(loop_kind: SampleLoopKind) -> u8 {
         SampleLoopKind::None => XM_SAMPLE_LOOP_NONE,
         SampleLoopKind::Forward => XM_SAMPLE_LOOP_FORWARD,
         SampleLoopKind::PingPong => XM_SAMPLE_LOOP_PING_PONG,
+    }
+}
+
+fn xm_sample_for_slot<'a>(
+    module: &'a Module,
+    instrument: &Instrument,
+    sample_index: usize,
+) -> Option<&'a Sample> {
+    instrument
+        .sample_slots
+        .get(sample_index)
+        .and_then(|sample_index| *sample_index)
+        .and_then(|sample_index| module.samples.get(sample_index))
+}
+
+fn xm_sample_data_byte_len(
+    data: &CoreSampleData,
+    instrument_index: usize,
+    sample_index: usize,
+) -> XmWriteResult<u32> {
+    if matches!(data, CoreSampleData::Empty) {
+        return Ok(XM_WRITER_EMPTY_SAMPLE_BYTE_LEN);
+    }
+
+    let frame_count = data.frame_count() as u64;
+    let byte_len = frame_count
+        .checked_mul(xm_sample_bytes_per_frame(data) as u64)
+        .unwrap_or(u64::MAX);
+
+    xm_u32_sample_field(
+        byte_len,
+        instrument_index,
+        sample_index,
+        XmSampleField::Length,
+    )
+}
+
+fn xm_sample_frame_count_to_byte_len(
+    frame_count: u32,
+    data: &CoreSampleData,
+    instrument_index: usize,
+    sample_index: usize,
+    field: XmSampleField,
+) -> XmWriteResult<u32> {
+    if matches!(data, CoreSampleData::Empty) {
+        return Ok(XM_WRITER_EMPTY_SAMPLE_BYTE_LEN);
+    }
+
+    let byte_len = u64::from(frame_count) * xm_sample_bytes_per_frame(data) as u64;
+
+    xm_u32_sample_field(byte_len, instrument_index, sample_index, field)
+}
+
+fn xm_u32_sample_field(
+    value: u64,
+    instrument_index: usize,
+    sample_index: usize,
+    field: XmSampleField,
+) -> XmWriteResult<u32> {
+    if value > U32_FIELD_MAX {
+        return Err(XmWriteError::SampleFieldTooLarge {
+            instrument_index,
+            sample_index,
+            field,
+            value,
+            maximum: U32_FIELD_MAX,
+        });
+    }
+
+    Ok(value as u32)
+}
+
+fn xm_sample_bytes_per_frame(data: &CoreSampleData) -> usize {
+    match data {
+        CoreSampleData::Empty | CoreSampleData::Pcm8(_) => BYTES_PER_8_BIT_SAMPLE,
+        CoreSampleData::Pcm16(_) => BYTES_PER_16_BIT_SAMPLE,
+    }
+}
+
+fn write_xm_sample_payload(
+    bytes: &mut Vec<u8>,
+    module: &Module,
+    instrument: &Instrument,
+    sample_index: usize,
+) {
+    if let Some(sample) = xm_sample_for_slot(module, instrument, sample_index) {
+        match &sample.data {
+            CoreSampleData::Empty => {}
+            CoreSampleData::Pcm8(values) => write_xm_delta8(bytes, values),
+            CoreSampleData::Pcm16(values) => write_xm_delta16(bytes, values),
+        }
+    }
+}
+
+fn write_xm_delta8(bytes: &mut Vec<u8>, values: &[i8]) {
+    let mut previous = XM_WRITER_DELTA_INITIAL_8;
+
+    for &value in values {
+        let delta = value.wrapping_sub(previous);
+        bytes.push(delta as u8);
+        previous = value;
+    }
+}
+
+fn write_xm_delta16(bytes: &mut Vec<u8>, values: &[i16]) {
+    let mut previous = XM_WRITER_DELTA_INITIAL_16;
+
+    for &value in values {
+        let delta = value.wrapping_sub(previous);
+        bytes.extend_from_slice(&delta.to_le_bytes());
+        previous = value;
     }
 }
 
