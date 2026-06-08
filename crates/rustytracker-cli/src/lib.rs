@@ -9,7 +9,6 @@ use rustytracker_play::{PlaybackChannelState, PlaybackRowState, PlaybackState, T
 use serde::Serialize;
 
 const DUMP_SCHEMA_VERSION: u16 = 1;
-const DUMP_FORMAT_XM: &str = "xm";
 const DUMP_COMMAND: &str = "dump";
 const PLAY_STATE_SCHEMA_VERSION: u16 = 1;
 const PLAY_STATE_FORMAT: &str = "play_state";
@@ -42,6 +41,7 @@ pub enum DumpError {
     Io(std::io::Error),
     Json(serde_json::Error),
     Xm(rustytracker_xm::XmParseError),
+    Mod(rustytracker_mod::ModParseError),
     Playback(rustytracker_play::PlaybackError),
     InvalidArguments,
     InvalidRowCount(String),
@@ -54,10 +54,11 @@ impl fmt::Display for DumpError {
             Self::Io(error) => write!(formatter, "I/O error: {error}"),
             Self::Json(error) => write!(formatter, "JSON error: {error}"),
             Self::Xm(error) => write!(formatter, "XM parse error: {error:?}"),
+            Self::Mod(error) => write!(formatter, "MOD parse error: {error:?}"),
             Self::Playback(error) => write!(formatter, "playback error: {error:?}"),
             Self::InvalidArguments => write!(
                 formatter,
-                "usage: rustytracker dump <module.xm> --format json\n       rustytracker play-state <module.xm> --rows <count>"
+                "usage: rustytracker dump <module.xm|module.mod> --format json\n       rustytracker play-state <module.xm|module.mod> --rows <count>"
             ),
             Self::InvalidRowCount(value) => write!(formatter, "invalid play-state row count: {value}"),
             Self::UnsupportedFormat(format) => {
@@ -84,6 +85,12 @@ impl From<serde_json::Error> for DumpError {
 impl From<rustytracker_xm::XmParseError> for DumpError {
     fn from(error: rustytracker_xm::XmParseError) -> Self {
         Self::Xm(error)
+    }
+}
+
+impl From<rustytracker_mod::ModParseError> for DumpError {
+    fn from(error: rustytracker_mod::ModParseError) -> Self {
+        Self::Mod(error)
     }
 }
 
@@ -244,21 +251,30 @@ struct PlayStateChannelStateDump {
     panning: u8,
 }
 
-pub fn dump_xm_file_to_json(path: &Path) -> Result<String, DumpError> {
+pub fn load_module_from_file(path: &Path) -> Result<(Module, &'static str), DumpError> {
     let bytes = std::fs::read(path)?;
-    let module = rustytracker_xm::parse_xm_module(&bytes)?;
-    dump_module_to_json(&module)
+    if bytes.len() >= 17 && &bytes[0..17] == b"Extended Module: " {
+        let module = rustytracker_xm::parse_xm_module(&bytes)?;
+        Ok((module, "xm"))
+    } else {
+        let module = rustytracker_mod::parse_mod_module(&bytes)?;
+        Ok((module, "mod"))
+    }
 }
 
-pub fn dump_module_to_json(module: &Module) -> Result<String, DumpError> {
-    let mut json = serde_json::to_string_pretty(&module_dump(module))?;
+pub fn dump_xm_file_to_json(path: &Path) -> Result<String, DumpError> {
+    let (module, format) = load_module_from_file(path)?;
+    dump_module_to_json(&module, format)
+}
+
+pub fn dump_module_to_json(module: &Module, format: &'static str) -> Result<String, DumpError> {
+    let mut json = serde_json::to_string_pretty(&module_dump(module, format))?;
     json.push_str(JSON_TRAILING_NEWLINE);
     Ok(json)
 }
 
 pub fn play_state_xm_file_to_json(path: &Path, requested_rows: usize) -> Result<String, DumpError> {
-    let bytes = std::fs::read(path)?;
-    let module = rustytracker_xm::parse_xm_module(&bytes)?;
+    let (module, _) = load_module_from_file(path)?;
     play_state_module_to_json(&module, requested_rows)
 }
 
@@ -338,10 +354,10 @@ fn validate_requested_rows(requested_rows: usize, source: String) -> Result<usiz
     Ok(requested_rows)
 }
 
-fn module_dump(module: &Module) -> ModuleDump {
+fn module_dump(module: &Module, format: &'static str) -> ModuleDump {
     ModuleDump {
         schema_version: DUMP_SCHEMA_VERSION,
-        format: DUMP_FORMAT_XM,
+        format,
         header: HeaderDump {
             title: module.header.title.as_str().to_owned(),
             channel_count: module.header.channel_count,
