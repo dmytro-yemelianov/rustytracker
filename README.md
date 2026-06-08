@@ -55,7 +55,8 @@ Current coverage:
 - `rustytracker-xm`: MilkyTracker-bundled XM headers, pattern headers, packed
   pattern cell expansion, instrument/sample-header metadata, delta-coded sample
   payload decoding, ModPlug stereo sample mixing, loop-kind normalization,
-  ADPCM unsupported errors, sparse order references, XM header/order writing,
-  end-to-end load into `rustytracker-core::Module`, and malformed input checks.
+  ADPCM unsupported errors, sparse order references, XM header/order and simple
+  pattern writing, end-to-end load into `rustytracker-core::Module`, and
+  malformed input checks.
 - `rustytracker-cli`: `rustytracker dump <module.xm> --format json`, schema
   validation, and golden structural dumps for bundled fixtures.
