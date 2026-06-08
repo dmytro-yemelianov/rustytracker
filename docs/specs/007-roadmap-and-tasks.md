@@ -9,6 +9,8 @@ RustyTracker has a test-first Rust workspace with:
 - `rustytracker-xm`: read-only XM header parsing, pattern decoding, instrument
   metadata parsing, delta-coded sample payload decoding, and end-to-end bundled
   XM loading into `rustytracker-core::Module`
+- `rustytracker-cli`: normalized JSON structural dumps with golden fixture
+  comparisons
 - CodeRabbit review rules requiring compatibility values and format constants to
   live behind named constants/enums
 
@@ -33,7 +35,7 @@ Current fixture base:
 
 Goal: bundled XM files load into a core `Module` without playback.
 
-Status: complete in PR #1, pending review/merge.
+Status: complete and merged.
 
 Done:
 
@@ -54,9 +56,7 @@ Done:
 - end-to-end `parse_xm_module`
 - fixture tests against bundled XM files
 
-Remaining:
-
-- merge PR #1 after review
+Remaining: none.
 
 Acceptance:
 
@@ -68,13 +68,19 @@ Acceptance:
 
 Goal: produce stable JSON dumps from loaded modules.
 
-Tasks:
+Status: complete in PR #2, pending review/merge.
+
+Done:
 
 - add `rustytracker-cli`
 - implement `rustytracker dump path/to/module.xm --format json`
 - add JSON schema for normalized module dumps
 - generate golden JSON for bundled fixtures
 - compare fixture dumps in tests
+
+Remaining:
+
+- merge PR #2 after review
 
 Acceptance:
 
@@ -172,8 +178,7 @@ Acceptance:
 
 ## Immediate Backlog
 
-1. Merge or continue PR #1 depending on review status.
-2. Start `rustytracker-cli` structural dump.
-3. Add JSON schema for normalized module dumps.
-4. Generate golden JSON for bundled fixtures.
-5. Compare fixture dumps in tests.
+1. Merge PR #2 after review.
+2. Start XM roundtrip writer tests.
+3. Implement XM writer for headers and order table.
+4. Add `XM -> core -> XM -> core` normalized equality checks.

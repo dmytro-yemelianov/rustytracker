@@ -1,0 +1,210 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rustytracker/rustytracker/schemas/module-dump.schema.json",
+  "title": "RustyTracker Module Structural Dump",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "format",
+    "header",
+    "orders",
+    "patterns",
+    "instruments",
+    "samples"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "format": { "const": "xm" },
+    "header": { "$ref": "#/$defs/header" },
+    "orders": {
+      "type": "array",
+      "items": { "type": "integer", "minimum": 0, "maximum": 255 }
+    },
+    "patterns": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/pattern" }
+    },
+    "instruments": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/instrument" }
+    },
+    "samples": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/sample" }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "header": {
+      "type": "object",
+      "required": [
+        "title",
+        "channel_count",
+        "frequency_table",
+        "bpm",
+        "tick_speed",
+        "main_volume",
+        "restart_position"
+      ],
+      "properties": {
+        "title": { "type": "string" },
+        "channel_count": { "type": "integer", "minimum": 1, "maximum": 32 },
+        "frequency_table": { "enum": ["amiga", "linear"] },
+        "bpm": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "tick_speed": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "main_volume": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "restart_position": { "type": "integer", "minimum": 0, "maximum": 65535 }
+      },
+      "additionalProperties": false
+    },
+    "pattern": {
+      "type": "object",
+      "required": [
+        "index",
+        "rows",
+        "channels",
+        "effect_slots",
+        "non_empty_cells",
+        "expanded_cell_checksum"
+      ],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "rows": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "channels": { "type": "integer", "minimum": 1, "maximum": 32 },
+        "effect_slots": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "non_empty_cells": { "type": "integer", "minimum": 0 },
+        "expanded_cell_checksum": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "instrument": {
+      "type": "object",
+      "required": [
+        "index",
+        "name",
+        "sample_slots",
+        "note_sample_map_checksum",
+        "volume_envelope",
+        "panning_envelope",
+        "vibrato",
+        "volume_fadeout"
+      ],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "name": { "type": "string" },
+        "sample_slots": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              { "type": "integer", "minimum": 0 },
+              { "type": "null" }
+            ]
+          }
+        },
+        "note_sample_map_checksum": { "type": "integer", "minimum": 0 },
+        "volume_envelope": { "$ref": "#/$defs/envelope" },
+        "panning_envelope": { "$ref": "#/$defs/envelope" },
+        "vibrato": { "$ref": "#/$defs/vibrato" },
+        "volume_fadeout": { "type": "integer", "minimum": 0, "maximum": 65535 }
+      },
+      "additionalProperties": false
+    },
+    "envelope": {
+      "type": "object",
+      "required": [
+        "point_count",
+        "sustain_point",
+        "loop_start_point",
+        "loop_end_point",
+        "flags",
+        "points"
+      ],
+      "properties": {
+        "point_count": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "sustain_point": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "loop_start_point": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "loop_end_point": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "flags": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "points": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/envelope_point" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "envelope_point": {
+      "type": "object",
+      "required": ["frame", "value"],
+      "properties": {
+        "frame": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "value": { "type": "integer", "minimum": 0, "maximum": 65535 }
+      },
+      "additionalProperties": false
+    },
+    "vibrato": {
+      "type": "object",
+      "required": ["waveform", "sweep", "depth", "rate"],
+      "properties": {
+        "waveform": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "sweep": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "depth": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "rate": { "type": "integer", "minimum": 0, "maximum": 255 }
+      },
+      "additionalProperties": false
+    },
+    "sample": {
+      "type": "object",
+      "required": [
+        "index",
+        "name",
+        "length",
+        "loop_start",
+        "loop_length",
+        "loop_kind",
+        "volume",
+        "panning",
+        "flags",
+        "volume_fadeout",
+        "sample_type",
+        "finetune",
+        "relative_note",
+        "data"
+      ],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "name": { "type": "string" },
+        "length": { "type": "integer", "minimum": 0 },
+        "loop_start": { "type": "integer", "minimum": 0 },
+        "loop_length": { "type": "integer", "minimum": 0 },
+        "loop_kind": { "enum": ["none", "forward", "ping_pong"] },
+        "volume": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "panning": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "flags": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "volume_fadeout": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "sample_type": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "finetune": { "type": "integer", "minimum": -128, "maximum": 127 },
+        "relative_note": { "type": "integer", "minimum": -128, "maximum": 127 },
+        "data": { "$ref": "#/$defs/sample_data" }
+      },
+      "additionalProperties": false
+    },
+    "sample_data": {
+      "type": "object",
+      "required": ["kind", "frames", "checksum", "prefix_i8", "prefix_i16"],
+      "properties": {
+        "kind": { "enum": ["empty", "pcm8", "pcm16"] },
+        "frames": { "type": "integer", "minimum": 0 },
+        "checksum": { "type": "integer", "minimum": 0 },
+        "prefix_i8": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": -128, "maximum": 127 }
+        },
+        "prefix_i16": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": -32768, "maximum": 32767 }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
