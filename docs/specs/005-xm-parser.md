@@ -83,6 +83,7 @@ Compatibility rules ported from `LoaderXM.cpp` and `XModule.cpp`:
 - `Xxx`/`0x21` becomes internal `0x40..0x4f`
 - XM note `97` becomes RustyTracker note-off value `121`
 - XM volume-column commands are converted into the first internal effect slot
+- volume-column fine volume slides `8x` / `9x` become internal `EBx` / `EAx`
 - the XM effect column is stored in the second internal effect slot
 - a pattern with `packed_pattern_data_length == 0` decodes as an allocated empty
   core pattern

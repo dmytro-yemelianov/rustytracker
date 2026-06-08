@@ -106,19 +106,23 @@ const INTERNAL_EFFECT_EXTRA_FINE_PORTA_MAX: u8 =
 const XM_VOLUME_SET_MIN: u8 = 0x10;
 const XM_VOLUME_SET_MAX: u8 = 0x50;
 const XM_VOLUME_COMMAND_MIN: u8 = 0x60;
-const XM_VOLUME_FINE_DOWN: u8 = 0x6;
-const XM_VOLUME_FINE_UP: u8 = 0x7;
-const XM_VOLUME_SET_VIBRATO_SPEED: u8 = 0x8;
-const XM_VOLUME_VIBRATO: u8 = 0x9;
+const XM_VOLUME_SLIDE_DOWN: u8 = 0x6;
+const XM_VOLUME_SLIDE_UP: u8 = 0x7;
+const XM_VOLUME_FINE_DOWN: u8 = 0x8;
+const XM_VOLUME_FINE_UP: u8 = 0x9;
+const XM_VOLUME_SET_VIBRATO_SPEED: u8 = 0xA;
+const XM_VOLUME_VIBRATO: u8 = 0xB;
 const XM_VOLUME_SET_PANNING: u8 = 0xC;
 const XM_VOLUME_PANNING_SLIDE_LEFT: u8 = 0xD;
 const XM_VOLUME_PANNING_SLIDE_RIGHT: u8 = 0xE;
 const XM_VOLUME_TONE_PORTAMENTO: u8 = 0xF;
-const XM_VOLUME_VIBRATO_SPEED_DEPTH: u8 = 0xA;
-const XM_VOLUME_VIBRATO_DEPTH_SPEED: u8 = 0xB;
 const INTERNAL_EFFECT_VOLUME_SLIDE: u8 = 0x0a;
-const INTERNAL_EFFECT_SET_VIBRATO_SPEED: u8 = 0x3b;
-const INTERNAL_EFFECT_VIBRATO: u8 = 0x3a;
+const XM_EXTENDED_FINE_VOLUME_SLIDE_UP_COMMAND: u8 = 0x0a;
+const XM_EXTENDED_FINE_VOLUME_SLIDE_DOWN_COMMAND: u8 = 0x0b;
+const INTERNAL_EFFECT_FINE_VOLUME_SLIDE_UP: u8 =
+    INTERNAL_EFFECT_EXTENDED_BASE + XM_EXTENDED_FINE_VOLUME_SLIDE_UP_COMMAND;
+const INTERNAL_EFFECT_FINE_VOLUME_SLIDE_DOWN: u8 =
+    INTERNAL_EFFECT_EXTENDED_BASE + XM_EXTENDED_FINE_VOLUME_SLIDE_DOWN_COMMAND;
 const INTERNAL_EFFECT_VIBRATO_COMPAT: u8 = 0x04;
 const INTERNAL_EFFECT_PANNING: u8 = 0x08;
 const INTERNAL_EFFECT_PANNING_SLIDE: u8 = 0x19;
@@ -1063,7 +1067,7 @@ fn xm_columns_from_core_effects(effects: &[EffectCommand]) -> (u8, EffectCommand
 
         if index == 0 {
             if !note_portamento_requires_effect_column(xm_effect) {
-                if let Some(volume_column) = xm_effect_to_volume_column(xm_effect) {
+                if let Some(volume_column) = xm_effect_to_volume_column(xm_effect, true) {
                     volume = volume_column;
                     continue;
                 }
@@ -1078,7 +1082,7 @@ fn xm_columns_from_core_effects(effects: &[EffectCommand]) -> (u8, EffectCommand
         if effect_column == EffectCommand::default() {
             effect_column = xm_effect;
         } else if volume == XM_WRITER_EMPTY_VOLUME_COLUMN {
-            if let Some(volume_column) = xm_effect_to_volume_column(xm_effect) {
+            if let Some(volume_column) = xm_effect_to_volume_column(xm_effect, false) {
                 volume = volume_column;
             }
         }
@@ -1123,9 +1127,16 @@ fn core_effect_to_xm(effect: EffectCommand) -> EffectCommand {
     }
 }
 
-fn xm_effect_to_volume_column(effect: EffectCommand) -> Option<u8> {
+fn xm_effect_to_volume_column(
+    effect: EffectCommand,
+    allow_fine_volume_slide_relocation: bool,
+) -> Option<u8> {
     match effect.effect {
         XM_EFFECT_VOLUME => Some(XM_VOLUME_SET_MIN + effect.operand.min(XM_VOLUME_MAX)),
+        XM_EFFECT_EXTENDED if allow_fine_volume_slide_relocation => {
+            xm_extended_fine_volume_slide_column(effect.operand)
+        }
+        XM_EFFECT_EXTENDED => None,
         INTERNAL_EFFECT_VOLUME_SLIDE => xm_volume_slide_column(effect.operand),
         INTERNAL_EFFECT_VIBRATO_COMPAT => xm_vibrato_column(effect.operand),
         INTERNAL_EFFECT_PANNING => Some(volume_command(
@@ -1151,12 +1162,29 @@ fn xm_volume_slide_column(operand: u8) -> Option<u8> {
     let low = operand & XM_NIBBLE_MASK;
     let high = operand >> XM_NIBBLE_SHIFT;
 
-    if low != EMPTY_OPERAND {
-        Some(volume_command(XM_VOLUME_FINE_DOWN, low))
-    } else if high != EMPTY_OPERAND {
-        Some(volume_command(XM_VOLUME_FINE_UP, high))
+    if low != EMPTY_OPERAND && high == EMPTY_OPERAND {
+        Some(volume_command(XM_VOLUME_SLIDE_DOWN, low))
+    } else if high != EMPTY_OPERAND && low == EMPTY_OPERAND {
+        Some(volume_command(XM_VOLUME_SLIDE_UP, high))
     } else {
         None
+    }
+}
+
+fn xm_extended_fine_volume_slide_column(operand: u8) -> Option<u8> {
+    let command = operand >> XM_NIBBLE_SHIFT;
+    let amount = operand & XM_NIBBLE_MASK;
+
+    if amount == EMPTY_OPERAND {
+        return None;
+    }
+
+    match command {
+        XM_EXTENDED_FINE_VOLUME_SLIDE_DOWN_COMMAND => {
+            Some(volume_command(XM_VOLUME_FINE_DOWN, amount))
+        }
+        XM_EXTENDED_FINE_VOLUME_SLIDE_UP_COMMAND => Some(volume_command(XM_VOLUME_FINE_UP, amount)),
+        _ => None,
     }
 }
 
@@ -1165,9 +1193,9 @@ fn xm_vibrato_column(operand: u8) -> Option<u8> {
     let high = operand >> XM_NIBBLE_SHIFT;
 
     if high != EMPTY_OPERAND && low == EMPTY_OPERAND {
-        Some(volume_command(XM_VOLUME_VIBRATO_SPEED_DEPTH, high))
+        Some(volume_command(XM_VOLUME_SET_VIBRATO_SPEED, high))
     } else if high == EMPTY_OPERAND {
-        Some(volume_command(XM_VOLUME_VIBRATO_DEPTH_SPEED, low))
+        Some(volume_command(XM_VOLUME_VIBRATO, low))
     } else {
         None
     }
@@ -2069,27 +2097,27 @@ fn convert_xm_volume_effect(volume: u8) -> EffectCommand {
 
         if xm_operand != EMPTY_OPERAND {
             match xm_effect {
-                XM_VOLUME_FINE_DOWN => {
+                XM_VOLUME_SLIDE_DOWN => {
                     effect = INTERNAL_EFFECT_VOLUME_SLIDE;
+                    operand = xm_operand;
+                }
+                XM_VOLUME_SLIDE_UP => {
+                    effect = INTERNAL_EFFECT_VOLUME_SLIDE;
+                    operand = xm_operand << XM_NIBBLE_SHIFT;
+                }
+                XM_VOLUME_FINE_DOWN => {
+                    effect = INTERNAL_EFFECT_FINE_VOLUME_SLIDE_DOWN;
                     operand = xm_operand;
                 }
                 XM_VOLUME_FINE_UP => {
-                    effect = INTERNAL_EFFECT_VOLUME_SLIDE;
-                    operand = xm_operand << XM_NIBBLE_SHIFT;
+                    effect = INTERNAL_EFFECT_FINE_VOLUME_SLIDE_UP;
+                    operand = xm_operand;
                 }
                 XM_VOLUME_SET_VIBRATO_SPEED => {
-                    effect = INTERNAL_EFFECT_SET_VIBRATO_SPEED;
-                    operand = xm_operand;
-                }
-                XM_VOLUME_VIBRATO => {
-                    effect = INTERNAL_EFFECT_VIBRATO;
-                    operand = xm_operand;
-                }
-                XM_VOLUME_VIBRATO_SPEED_DEPTH => {
                     effect = INTERNAL_EFFECT_VIBRATO_COMPAT;
                     operand = xm_operand << XM_NIBBLE_SHIFT;
                 }
-                XM_VOLUME_VIBRATO_DEPTH_SPEED => {
+                XM_VOLUME_VIBRATO => {
                     effect = INTERNAL_EFFECT_VIBRATO_COMPAT;
                     operand = xm_operand;
                 }
@@ -2113,7 +2141,7 @@ fn convert_xm_volume_effect(volume: u8) -> EffectCommand {
             }
         } else {
             match xm_effect {
-                XM_VOLUME_VIBRATO_DEPTH_SPEED => {
+                XM_VOLUME_VIBRATO => {
                     effect = INTERNAL_EFFECT_VIBRATO_COMPAT;
                     operand = xm_operand;
                 }

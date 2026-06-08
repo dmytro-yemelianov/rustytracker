@@ -103,11 +103,11 @@ Done:
 - relocate compatible first-slot effects into the XM volume column
 - write XM instrument metadata and zero-length sample headers
 - write 8-bit and 16-bit sample payloads using XM delta encoding
+- add symmetric parser/writer coverage for fine volume-slide volume-column
+  commands
 
 Remaining:
 
-- add symmetric parser/writer coverage for fine volume-slide volume-column
-  commands
 - add `XM -> core -> XM -> core` normalized equality tests
 
 Acceptance:
@@ -189,7 +189,6 @@ Acceptance:
 
 ## Immediate Backlog
 
-1. Add symmetric fine volume-slide volume-column coverage.
-2. Add `XM -> core -> XM -> core` normalized equality checks.
-3. Use the normalized equality checks to drive the remaining fixture roundtrip
+1. Add `XM -> core -> XM -> core` normalized equality checks.
+2. Use the normalized equality checks to drive the remaining fixture roundtrip
    gaps.
