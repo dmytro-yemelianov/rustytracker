@@ -253,6 +253,62 @@ fn schema_file_is_valid_json() {
     serde_json::from_str::<serde_json::Value>(&schema).unwrap();
 }
 
+#[test]
+fn test_cli_dumps_and_plays_mod_format() {
+    let temp_mod_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("temp_test_mod.mod");
+    write_temp_mod_file(&temp_mod_path);
+
+    // Test 1: dump_xm_file_to_json auto-detects and dumps MOD format
+    let actual_json = dump_xm_file_to_json(&temp_mod_path).unwrap();
+    let value = serde_json::from_str::<serde_json::Value>(&actual_json).unwrap();
+    assert_eq!(value["format"].as_str().unwrap(), "mod");
+    assert_eq!(value["header"]["title"].as_str().unwrap(), "Test CLI Mod");
+
+    // Test 2: play_state_xm_file_to_json auto-detects and plays MOD format
+    let play_json = play_state_xm_file_to_json(&temp_mod_path, 2).unwrap();
+    let play_val = serde_json::from_str::<serde_json::Value>(&play_json).unwrap();
+    assert_eq!(play_val["format"].as_str().unwrap(), "play_state");
+    assert_eq!(play_val["requested_rows"].as_u64().unwrap(), 2);
+
+    // Test 3: Binary execution for dump command
+    let dump_output = Command::new(env!("CARGO_BIN_EXE_rustytracker"))
+        .arg(DUMP_COMMAND)
+        .arg(&temp_mod_path)
+        .arg(FORMAT_FLAG)
+        .arg(JSON_FORMAT)
+        .output()
+        .unwrap();
+    assert!(dump_output.status.success());
+    let dump_stdout = String::from_utf8(dump_output.stdout).unwrap();
+    let dump_val = serde_json::from_str::<serde_json::Value>(&dump_stdout).unwrap();
+    assert_eq!(dump_val["format"].as_str().unwrap(), "mod");
+
+    // Test 4: Binary execution for play-state command
+    let play_output = Command::new(env!("CARGO_BIN_EXE_rustytracker"))
+        .arg(PLAY_STATE_COMMAND)
+        .arg(&temp_mod_path)
+        .arg(ROWS_FLAG)
+        .arg("2")
+        .output()
+        .unwrap();
+    assert!(play_output.status.success());
+    let play_stdout = String::from_utf8(play_output.stdout).unwrap();
+    let play_stdout_val = serde_json::from_str::<serde_json::Value>(&play_stdout).unwrap();
+    assert_eq!(play_stdout_val["format"].as_str().unwrap(), "play_state");
+
+    std::fs::remove_file(temp_mod_path).unwrap();
+}
+
+fn write_temp_mod_file(path: &Path) {
+    let mut bytes = vec![0u8; 1624];
+    bytes[0..12].copy_from_slice(b"Test CLI Mod");
+    bytes[20 + 15 * 30] = 1; // Song length
+    bytes[20 + 15 * 30 + 2] = 0; // First pattern in order list is 0
+    std::fs::write(path, bytes).unwrap();
+}
+
 fn fixture_path(file_name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../../MilkyTracker/resources/music")

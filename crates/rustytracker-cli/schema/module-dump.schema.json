@@ -14,7 +14,7 @@
   ],
   "properties": {
     "schema_version": { "const": 1 },
-    "format": { "const": "xm" },
+    "format": { "enum": ["xm", "mod"] },
     "header": { "$ref": "#/$defs/header" },
     "orders": {
       "type": "array",
