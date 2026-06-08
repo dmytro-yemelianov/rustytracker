@@ -23,6 +23,10 @@ pub const PLAYBACK_INSTRUMENT_NUMBER_BASE: u8 = 1;
 pub const PLAYBACK_SAMPLE_START_FRAME: usize = 0;
 pub const PLAYBACK_SAMPLE_FRAME_STEP: usize = 1;
 pub const PLAYBACK_EMPTY_VOLUME: u8 = 0;
+pub const PLAYBACK_PCM8_TO_I16_SHIFT: u32 = 8;
+pub const PLAYBACK_MONO_SILENCE: RawMonoPcmFrame = 0;
+
+pub type RawMonoPcmFrame = i32;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlaybackError {
@@ -90,6 +94,15 @@ pub struct PlaybackRowState {
 pub enum PlaybackSampleValue {
     Pcm8(i8),
     Pcm16(i16),
+}
+
+impl PlaybackSampleValue {
+    pub fn raw_mono_pcm(self) -> RawMonoPcmFrame {
+        match self {
+            Self::Pcm8(value) => RawMonoPcmFrame::from(value) << PLAYBACK_PCM8_TO_I16_SHIFT,
+            Self::Pcm16(value) => RawMonoPcmFrame::from(value),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -480,6 +493,30 @@ impl PlaybackState {
         }
 
         Ok(frames)
+    }
+
+    pub fn render_raw_mono_pcm(
+        &mut self,
+        module: &Module,
+        frame_count: usize,
+    ) -> PlaybackResult<Vec<RawMonoPcmFrame>> {
+        let mut rendered = Vec::with_capacity(frame_count);
+        for _ in 0..frame_count {
+            rendered.push(self.render_raw_mono_frame(module)?);
+        }
+
+        Ok(rendered)
+    }
+
+    fn render_raw_mono_frame(&mut self, module: &Module) -> PlaybackResult<RawMonoPcmFrame> {
+        let mut mixed = PLAYBACK_MONO_SILENCE;
+        for channel in &mut self.channels {
+            if let Some(frame) = channel.step_sample(module)? {
+                mixed += frame.value.raw_mono_pcm();
+            }
+        }
+
+        Ok(mixed)
     }
 
     fn trigger_current_row(&mut self, module: &Module) -> PlaybackResult<()> {

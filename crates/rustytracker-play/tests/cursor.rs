@@ -38,7 +38,9 @@ const PLAY_TEST_CHANNEL_ZERO_INSTRUMENT: u8 = 1;
 const PLAY_TEST_CHANNEL_ONE_INSTRUMENT: u8 = 2;
 const PLAY_TEST_ROW_ONE_INSTRUMENT: u8 = 3;
 const PLAY_TEST_FIRST_INSTRUMENT_INDEX: usize = 0;
+const PLAY_TEST_SECOND_INSTRUMENT_INDEX: usize = 1;
 const PLAY_TEST_FIRST_SAMPLE_INDEX: usize = 0;
+const PLAY_TEST_SECOND_SAMPLE_INDEX: usize = 1;
 const PLAY_TEST_SAMPLE_START_FRAME: usize = 0;
 const PLAY_TEST_SECOND_SAMPLE_FRAME: usize = 1;
 const PLAY_TEST_SAMPLE_VOLUME: u8 = 48;
@@ -48,6 +50,12 @@ const PLAY_TEST_PCM8_FIRST_VALUE: i8 = -2;
 const PLAY_TEST_PCM8_SECOND_VALUE: i8 = 3;
 const PLAY_TEST_PCM16_FIRST_VALUE: i16 = -512;
 const PLAY_TEST_PCM16_SECOND_VALUE: i16 = 1024;
+const PLAY_TEST_RENDER_FRAMES: usize = 3;
+const PLAY_TEST_PCM8_FIRST_MONO: i32 = -512;
+const PLAY_TEST_PCM16_HIGH_VALUE: i16 = 1024;
+const PLAY_TEST_FIRST_MIXED_MONO: i32 = 512;
+const PLAY_TEST_SECOND_MIXED_MONO: i32 = 256;
+const PLAY_TEST_SILENCE_MONO: i32 = 0;
 
 #[test]
 fn starts_at_first_order_first_row() {
@@ -653,6 +661,90 @@ fn sample_step_releases_empty_sample_data_without_frame() {
     );
 }
 
+#[test]
+fn raw_mono_render_sums_pcm8_and_pcm16_steps_by_channel() {
+    let mut module = module_with_two_channel_cells(
+        PLAY_TEST_ONE_ROW,
+        &[
+            (
+                PLAY_TEST_CHANNEL_ZERO,
+                PLAYBACK_FIRST_ROW,
+                test_cell(
+                    PLAY_TEST_CHANNEL_ZERO_NOTE,
+                    PLAY_TEST_CHANNEL_ZERO_INSTRUMENT,
+                ),
+            ),
+            (
+                PLAY_TEST_CHANNEL_ONE,
+                PLAYBACK_FIRST_ROW,
+                test_cell(PLAY_TEST_CHANNEL_ONE_NOTE, PLAY_TEST_CHANNEL_ONE_INSTRUMENT),
+            ),
+        ],
+    );
+    map_instrument_to_sample(
+        &mut module,
+        PLAY_TEST_FIRST_INSTRUMENT_INDEX,
+        PLAY_TEST_FIRST_SAMPLE_INDEX,
+    );
+    map_instrument_to_sample(
+        &mut module,
+        PLAY_TEST_SECOND_INSTRUMENT_INDEX,
+        PLAY_TEST_SECOND_SAMPLE_INDEX,
+    );
+    module.samples[PLAY_TEST_FIRST_SAMPLE_INDEX].data = SampleData::Pcm8(vec![
+        PLAY_TEST_PCM8_FIRST_VALUE,
+        PLAY_TEST_PCM8_SECOND_VALUE,
+    ]);
+    module.samples[PLAY_TEST_SECOND_SAMPLE_INDEX].data = SampleData::Pcm16(vec![
+        PLAY_TEST_PCM16_HIGH_VALUE,
+        PLAY_TEST_PCM16_FIRST_VALUE,
+    ]);
+    let mut playback = PlaybackState::start(&module).unwrap();
+
+    assert_eq!(
+        playback
+            .render_raw_mono_pcm(&module, PLAY_TEST_RENDER_FRAMES)
+            .unwrap(),
+        vec![
+            PLAY_TEST_FIRST_MIXED_MONO,
+            PLAY_TEST_SECOND_MIXED_MONO,
+            PLAY_TEST_SILENCE_MONO,
+        ]
+    );
+    assert!(!playback.channels()[PLAY_TEST_CHANNEL_ZERO as usize].active);
+    assert!(!playback.channels()[PLAY_TEST_CHANNEL_ONE as usize].active);
+}
+
+#[test]
+fn raw_mono_render_returns_requested_silence_after_sample_end() {
+    let mut module = module_with_two_channel_cells(
+        PLAY_TEST_ONE_ROW,
+        &[(
+            PLAY_TEST_CHANNEL_ZERO,
+            PLAYBACK_FIRST_ROW,
+            test_cell(
+                PLAY_TEST_CHANNEL_ZERO_NOTE,
+                PLAY_TEST_CHANNEL_ZERO_INSTRUMENT,
+            ),
+        )],
+    );
+    module.samples[PLAY_TEST_FIRST_SAMPLE_INDEX].data =
+        SampleData::Pcm8(vec![PLAY_TEST_PCM8_FIRST_VALUE]);
+    let mut playback = PlaybackState::start(&module).unwrap();
+
+    assert_eq!(
+        playback
+            .render_raw_mono_pcm(&module, PLAY_TEST_RENDER_FRAMES)
+            .unwrap(),
+        vec![
+            PLAY_TEST_PCM8_FIRST_MONO,
+            PLAY_TEST_SILENCE_MONO,
+            PLAY_TEST_SILENCE_MONO,
+        ]
+    );
+    assert!(!playback.channels()[PLAY_TEST_CHANNEL_ZERO as usize].active);
+}
+
 fn module_with_orders_and_pattern_rows(orders: Vec<u8>, rows: &[u16]) -> Module {
     let mut module = Module::empty_with_channels(PLAY_TEST_CHANNELS).unwrap();
     module.orders = orders;
@@ -697,4 +789,9 @@ fn note_only_cell(note: u8) -> PatternCell {
         note: Note::Key(note),
         ..PatternCell::default()
     }
+}
+
+fn map_instrument_to_sample(module: &mut Module, instrument_index: usize, sample_index: usize) {
+    module.instruments[instrument_index].note_sample_map =
+        vec![Some(sample_index); module.instruments[instrument_index].note_sample_map.len()];
 }

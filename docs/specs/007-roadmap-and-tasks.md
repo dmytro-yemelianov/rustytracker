@@ -13,7 +13,8 @@ RustyTracker has a test-first Rust workspace with:
   metadata writing, and delta-coded sample payload writing
 - `rustytracker-play`: initial playback cursor/order traversal, tick timing,
   current-row channel snapshots, mutable per-channel trigger state, and raw
-  decoded sample stepping without interpolation
+  decoded sample stepping plus fixed-count raw mono PCM rendering without
+  interpolation
 - `rustytracker-cli`: normalized JSON structural dumps with golden fixture
   comparisons, plus a runnable `play-state` JSON trace for the playback
   skeleton
@@ -143,14 +144,16 @@ Done:
 - implement mutable per-channel note, instrument, sample, volume, panning, and
   note-off trigger state
 - add raw decoded PCM8/PCM16 sample stepping without interpolation
+- add deterministic raw mono PCM render tests on top of sample stepping
 
 Tasks:
 
-- add short deterministic PCM fixture tests
+- connect raw mono rendering to tick/row progression and future sample-rate
+  timing
 
 Acceptance:
 
-- simple fixture modules render deterministic PCM
+- simple synthetic modules render deterministic raw mono PCM
 - playback state is testable without UI
 
 ## Milestone 5: XM Effect Parity
@@ -209,6 +212,7 @@ Acceptance:
 
 ## Immediate Backlog
 
-1. Add short deterministic PCM render tests on top of raw sample stepping.
+1. Connect raw mono rendering to tick/row progression and future sample-rate
+   timing.
 2. Keep adding focused XM writer/parser edge cases when playback or future
    compatibility work exposes a concrete gap.

@@ -5,8 +5,9 @@
 `rustytracker-play` owns headless playback state and future offline rendering.
 The first slices deliberately stop before effects, sample interpolation, and
 PCM mixing. They establish tested cursor, clock, current-row channel snapshots,
-mutable per-channel trigger state, and raw decoded sample stepping that walk the
-core module order list, pattern rows, ticks, and active module channels.
+mutable per-channel trigger state, raw decoded sample stepping, and fixed-count
+raw mono PCM rendering that walk the core module order list, pattern rows,
+ticks, and active module channels.
 
 ## References
 
@@ -116,6 +117,24 @@ the active sample without emitting a frame.
 This stepper deliberately does not yet apply pitch, interpolation, loop modes,
 volume, panning, effect memory, envelopes, or cross-channel mixing.
 
+## Raw Mono Render Contract
+
+`PlaybackState::render_raw_mono_pcm(&Module, frame_count)` renders a fixed
+number of deterministic mono PCM frames by repeatedly calling
+`step_samples(&Module)`.
+
+For each output frame:
+
+- active channel sample frames are read in channel order
+- PCM8 values are widened to signed 16-bit scale by shifting left by 8 bits
+- PCM16 values are used at their decoded signed 16-bit scale
+- channel values are summed into an `i32` mono frame without clipping
+- if no channel emits a sample frame, the mono output frame is `0`
+
+The raw mono renderer deliberately does not yet apply pitch, interpolation, loop
+modes, volume, panning, sample-rate timing, row/tick advancement, effect memory,
+or envelopes.
+
 ## CLI Trace Contract
 
 `rustytracker play-state <module.xm> --rows <count>` loads an XM file and emits
@@ -174,6 +193,8 @@ The initial `rustytracker-play` tests verify:
 - sample stepping emits decoded PCM8 and PCM16 frames without interpolation
 - sample stepping advances sample frame positions and stops after the final frame
 - empty sample data stops the active sample without emitting a frame
+- raw mono rendering widens PCM8, preserves PCM16 scale, sums active channels,
+  and emits silence for the requested frames after samples end
 - patterns with too few channels for the module are rejected
 - `play-state` rejects missing, non-numeric, or zero row counts
 - empty order lists are rejected
@@ -182,4 +203,5 @@ The initial `rustytracker-play` tests verify:
 
 ## Next Steps
 
-- add deterministic PCM render tests on top of raw sample stepping
+- connect raw mono rendering to tick/row progression and future sample-rate
+  timing
