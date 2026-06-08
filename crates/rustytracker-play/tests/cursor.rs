@@ -1,8 +1,8 @@
 use rustytracker_core::{Module, Note, Pattern, PatternCell, DEFAULT_EFFECT_SLOTS};
 use rustytracker_play::{
-    PlaybackClock, PlaybackCursor, PlaybackError, PlaybackTiming, RowAdvance, TickAdvance,
-    PLAYBACK_FIRST_ORDER_INDEX, PLAYBACK_FIRST_ROW, PLAYBACK_FIRST_TICK, PLAYBACK_ORDER_STEP,
-    PLAYBACK_ROW_STEP, PLAYBACK_TICK_STEP,
+    PlaybackClock, PlaybackCursor, PlaybackError, PlaybackState, PlaybackTiming, RowAdvance,
+    TickAdvance, PLAYBACK_FIRST_ORDER_INDEX, PLAYBACK_FIRST_ROW, PLAYBACK_FIRST_TICK,
+    PLAYBACK_ORDER_STEP, PLAYBACK_ROW_STEP, PLAYBACK_TICK_STEP,
 };
 
 const PLAY_TEST_CHANNELS: u16 = 1;
@@ -36,6 +36,12 @@ const PLAY_TEST_ROW_ONE_NOTE: u8 = 51;
 const PLAY_TEST_CHANNEL_ZERO_INSTRUMENT: u8 = 1;
 const PLAY_TEST_CHANNEL_ONE_INSTRUMENT: u8 = 2;
 const PLAY_TEST_ROW_ONE_INSTRUMENT: u8 = 3;
+const PLAY_TEST_FIRST_INSTRUMENT_INDEX: usize = 0;
+const PLAY_TEST_FIRST_SAMPLE_INDEX: usize = 0;
+const PLAY_TEST_SAMPLE_START_FRAME: usize = 0;
+const PLAY_TEST_SAMPLE_VOLUME: u8 = 48;
+const PLAY_TEST_SAMPLE_PANNING: u8 = 96;
+const PLAY_TEST_MISSING_INSTRUMENT: u8 = 200;
 
 #[test]
 fn starts_at_first_order_first_row() {
@@ -329,6 +335,192 @@ fn row_state_rejects_patterns_with_too_few_channels() {
     );
 }
 
+#[test]
+fn playback_state_triggers_initial_note_instrument_sample() {
+    let mut module = module_with_two_channel_cells(
+        PLAY_TEST_ONE_ROW,
+        &[(
+            PLAY_TEST_CHANNEL_ZERO,
+            PLAYBACK_FIRST_ROW,
+            test_cell(
+                PLAY_TEST_CHANNEL_ZERO_NOTE,
+                PLAY_TEST_CHANNEL_ZERO_INSTRUMENT,
+            ),
+        )],
+    );
+    module.samples[PLAY_TEST_FIRST_SAMPLE_INDEX].volume = PLAY_TEST_SAMPLE_VOLUME;
+    module.samples[PLAY_TEST_FIRST_SAMPLE_INDEX].panning = PLAY_TEST_SAMPLE_PANNING;
+
+    let playback = PlaybackState::start(&module).unwrap();
+    let channel = &playback.channels()[PLAY_TEST_CHANNEL_ZERO as usize];
+
+    assert!(channel.active);
+    assert_eq!(channel.channel, PLAY_TEST_CHANNEL_ZERO);
+    assert_eq!(channel.note, Note::Key(PLAY_TEST_CHANNEL_ZERO_NOTE));
+    assert_eq!(channel.instrument, PLAY_TEST_CHANNEL_ZERO_INSTRUMENT);
+    assert_eq!(
+        channel.instrument_index,
+        Some(PLAY_TEST_FIRST_INSTRUMENT_INDEX)
+    );
+    assert_eq!(channel.sample_index, Some(PLAY_TEST_FIRST_SAMPLE_INDEX));
+    assert_eq!(channel.sample_frame, PLAY_TEST_SAMPLE_START_FRAME);
+    assert_eq!(channel.volume, PLAY_TEST_SAMPLE_VOLUME);
+    assert_eq!(channel.panning, PLAY_TEST_SAMPLE_PANNING);
+}
+
+#[test]
+fn playback_state_preserves_active_channel_on_empty_rows() {
+    let mut module = module_with_two_channel_cells(
+        PLAY_TEST_TWO_ROWS,
+        &[(
+            PLAY_TEST_CHANNEL_ZERO,
+            PLAYBACK_FIRST_ROW,
+            test_cell(
+                PLAY_TEST_CHANNEL_ZERO_NOTE,
+                PLAY_TEST_CHANNEL_ZERO_INSTRUMENT,
+            ),
+        )],
+    );
+    module.header.tick_speed = PLAY_TEST_ONE_TICK_PER_ROW;
+    let mut playback = PlaybackState::start(&module).unwrap();
+
+    assert_eq!(
+        playback.advance_tick(&module).unwrap(),
+        TickAdvance::NextRow
+    );
+    let channel = &playback.channels()[PLAY_TEST_CHANNEL_ZERO as usize];
+
+    assert!(channel.active);
+    assert_eq!(channel.note, Note::Key(PLAY_TEST_CHANNEL_ZERO_NOTE));
+    assert_eq!(channel.instrument, PLAY_TEST_CHANNEL_ZERO_INSTRUMENT);
+    assert_eq!(channel.sample_index, Some(PLAY_TEST_FIRST_SAMPLE_INDEX));
+}
+
+#[test]
+fn playback_state_releases_channel_on_note_off() {
+    let mut module = module_with_two_channel_cells(
+        PLAY_TEST_TWO_ROWS,
+        &[
+            (
+                PLAY_TEST_CHANNEL_ZERO,
+                PLAYBACK_FIRST_ROW,
+                test_cell(
+                    PLAY_TEST_CHANNEL_ZERO_NOTE,
+                    PLAY_TEST_CHANNEL_ZERO_INSTRUMENT,
+                ),
+            ),
+            (
+                PLAY_TEST_CHANNEL_ZERO,
+                PLAYBACK_FIRST_ROW + PLAYBACK_ROW_STEP,
+                note_off_cell(),
+            ),
+        ],
+    );
+    module.header.tick_speed = PLAY_TEST_ONE_TICK_PER_ROW;
+    let mut playback = PlaybackState::start(&module).unwrap();
+
+    assert_eq!(
+        playback.advance_tick(&module).unwrap(),
+        TickAdvance::NextRow
+    );
+    let channel = &playback.channels()[PLAY_TEST_CHANNEL_ZERO as usize];
+
+    assert!(!channel.active);
+    assert_eq!(channel.note, Note::Off);
+    assert_eq!(channel.sample_index, None);
+    assert_eq!(channel.sample_frame, PLAY_TEST_SAMPLE_START_FRAME);
+}
+
+#[test]
+fn playback_state_reuses_previous_instrument_for_note_only_rows() {
+    let mut module = module_with_two_channel_cells(
+        PLAY_TEST_TWO_ROWS,
+        &[
+            (
+                PLAY_TEST_CHANNEL_ZERO,
+                PLAYBACK_FIRST_ROW,
+                test_cell(
+                    PLAY_TEST_CHANNEL_ZERO_NOTE,
+                    PLAY_TEST_CHANNEL_ZERO_INSTRUMENT,
+                ),
+            ),
+            (
+                PLAY_TEST_CHANNEL_ZERO,
+                PLAYBACK_FIRST_ROW + PLAYBACK_ROW_STEP,
+                note_only_cell(PLAY_TEST_ROW_ONE_NOTE),
+            ),
+        ],
+    );
+    module.header.tick_speed = PLAY_TEST_ONE_TICK_PER_ROW;
+    let mut playback = PlaybackState::start(&module).unwrap();
+
+    assert_eq!(
+        playback.advance_tick(&module).unwrap(),
+        TickAdvance::NextRow
+    );
+    let channel = &playback.channels()[PLAY_TEST_CHANNEL_ZERO as usize];
+
+    assert!(channel.active);
+    assert_eq!(channel.note, Note::Key(PLAY_TEST_ROW_ONE_NOTE));
+    assert_eq!(channel.instrument, PLAY_TEST_CHANNEL_ZERO_INSTRUMENT);
+    assert_eq!(
+        channel.instrument_index,
+        Some(PLAY_TEST_FIRST_INSTRUMENT_INDEX)
+    );
+    assert_eq!(channel.sample_index, Some(PLAY_TEST_FIRST_SAMPLE_INDEX));
+}
+
+#[test]
+fn playback_state_rejects_missing_instruments() {
+    let module = module_with_two_channel_cells(
+        PLAY_TEST_ONE_ROW,
+        &[(
+            PLAY_TEST_CHANNEL_ZERO,
+            PLAYBACK_FIRST_ROW,
+            test_cell(PLAY_TEST_CHANNEL_ZERO_NOTE, PLAY_TEST_MISSING_INSTRUMENT),
+        )],
+    );
+
+    assert_eq!(
+        PlaybackState::start(&module).unwrap_err(),
+        PlaybackError::MissingInstrument {
+            channel: PLAY_TEST_CHANNEL_ZERO,
+            instrument: PLAY_TEST_MISSING_INSTRUMENT,
+        }
+    );
+}
+
+#[test]
+fn playback_state_rejects_missing_samples() {
+    let mut module = module_with_two_channel_cells(
+        PLAY_TEST_ONE_ROW,
+        &[(
+            PLAY_TEST_CHANNEL_ZERO,
+            PLAYBACK_FIRST_ROW,
+            test_cell(
+                PLAY_TEST_CHANNEL_ZERO_NOTE,
+                PLAY_TEST_CHANNEL_ZERO_INSTRUMENT,
+            ),
+        )],
+    );
+    let missing_sample_index = module.samples.len();
+    module.instruments[PLAY_TEST_FIRST_INSTRUMENT_INDEX].note_sample_map = vec![
+            Some(missing_sample_index);
+            module.instruments[PLAY_TEST_FIRST_INSTRUMENT_INDEX]
+                .note_sample_map
+                .len()
+        ];
+
+    assert_eq!(
+        PlaybackState::start(&module).unwrap_err(),
+        PlaybackError::MissingSample {
+            channel: PLAY_TEST_CHANNEL_ZERO,
+            instrument_index: PLAY_TEST_FIRST_INSTRUMENT_INDEX,
+            sample_index: missing_sample_index,
+        }
+    );
+}
+
 fn module_with_orders_and_pattern_rows(orders: Vec<u8>, rows: &[u16]) -> Module {
     let mut module = Module::empty_with_channels(PLAY_TEST_CHANNELS).unwrap();
     module.orders = orders;
@@ -357,6 +549,20 @@ fn test_cell(note: u8, instrument: u8) -> PatternCell {
     PatternCell {
         note: Note::Key(note),
         instrument,
+        ..PatternCell::default()
+    }
+}
+
+fn note_off_cell() -> PatternCell {
+    PatternCell {
+        note: Note::Off,
+        ..PatternCell::default()
+    }
+}
+
+fn note_only_cell(note: u8) -> PatternCell {
+    PatternCell {
+        note: Note::Key(note),
         ..PatternCell::default()
     }
 }

@@ -5,7 +5,7 @@ use rustytracker_core::{
     EffectCommand, Envelope, FrequencyTable, Module, Pattern, PatternCell, Sample, SampleData,
     SampleLoopKind, DEFAULT_INSTRUMENT_NUMBER,
 };
-use rustytracker_play::{PlaybackClock, PlaybackRowState, TickAdvance};
+use rustytracker_play::{PlaybackChannelState, PlaybackRowState, PlaybackState, TickAdvance};
 use serde::Serialize;
 
 const DUMP_SCHEMA_VERSION: u16 = 1;
@@ -222,6 +222,7 @@ struct PlayStateChannelDump {
     instrument: u8,
     non_empty: bool,
     effects: Vec<PlayStateEffectDump>,
+    state: PlayStateChannelStateDump,
 }
 
 #[derive(Debug, Serialize)]
@@ -229,6 +230,18 @@ struct PlayStateEffectDump {
     slot: usize,
     effect: u8,
     operand: u8,
+}
+
+#[derive(Debug, Serialize)]
+struct PlayStateChannelStateDump {
+    active: bool,
+    note: u8,
+    instrument: u8,
+    instrument_index: Option<usize>,
+    sample_index: Option<usize>,
+    sample_frame: usize,
+    volume: u8,
+    panning: u8,
 }
 
 pub fn dump_xm_file_to_json(path: &Path) -> Result<String, DumpError> {
@@ -370,15 +383,19 @@ fn module_dump(module: &Module) -> ModuleDump {
 }
 
 fn play_state_dump(module: &Module, requested_rows: usize) -> Result<PlayStateDump, DumpError> {
-    let mut clock = PlaybackClock::start(module)?;
-    let timing = clock.timing();
+    let mut playback = PlaybackState::start(module)?;
+    let timing = playback.clock().timing();
     let mut rows = Vec::with_capacity(requested_rows);
     let mut completed = false;
 
     for _ in 0..requested_rows {
-        rows.push(play_state_row_dump(&clock.row_state(module)?, clock.tick()));
+        rows.push(play_state_row_dump(
+            &playback.row_state(module)?,
+            playback.clock().tick(),
+            playback.channels(),
+        ));
 
-        if !advance_to_next_row(&mut clock, module)? {
+        if !advance_to_next_row(&mut playback, module)? {
             completed = true;
             break;
         }
@@ -399,9 +416,9 @@ fn play_state_dump(module: &Module, requested_rows: usize) -> Result<PlayStateDu
     })
 }
 
-fn advance_to_next_row(clock: &mut PlaybackClock, module: &Module) -> Result<bool, DumpError> {
+fn advance_to_next_row(playback: &mut PlaybackState, module: &Module) -> Result<bool, DumpError> {
     loop {
-        match clock.advance_tick(module)? {
+        match playback.advance_tick(module)? {
             TickAdvance::SameRow => {}
             TickAdvance::NextRow | TickAdvance::NextOrder => return Ok(true),
             TickAdvance::SongEnd => return Ok(false),
@@ -409,7 +426,11 @@ fn advance_to_next_row(clock: &mut PlaybackClock, module: &Module) -> Result<boo
     }
 }
 
-fn play_state_row_dump(row_state: &PlaybackRowState, tick: u16) -> PlayStateRowDump {
+fn play_state_row_dump(
+    row_state: &PlaybackRowState,
+    tick: u16,
+    playback_channels: &[PlaybackChannelState],
+) -> PlayStateRowDump {
     PlayStateRowDump {
         order_index: row_state.position.order_index,
         pattern_index: row_state.position.pattern_index,
@@ -434,8 +455,26 @@ fn play_state_row_dump(row_state: &PlaybackRowState, tick: u16) -> PlayStateRowD
                         operand: effect.operand,
                     })
                     .collect(),
+                state: play_state_channel_state_dump(
+                    playback_channels
+                        .get(usize::from(channel.channel))
+                        .expect("playback state channels are initialized from row channels"),
+                ),
             })
             .collect(),
+    }
+}
+
+fn play_state_channel_state_dump(channel: &PlaybackChannelState) -> PlayStateChannelStateDump {
+    PlayStateChannelStateDump {
+        active: channel.active,
+        note: channel.note.raw(),
+        instrument: channel.instrument,
+        instrument_index: channel.instrument_index,
+        sample_index: channel.sample_index,
+        sample_frame: channel.sample_frame,
+        volume: channel.volume,
+        panning: channel.panning,
     }
 }
 

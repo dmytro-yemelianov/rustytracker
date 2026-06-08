@@ -3,7 +3,10 @@
 //! Audio mixing and effect execution will build on this crate. The first slice
 //! keeps traversal explicit and testable.
 
-use rustytracker_core::{Module, Pattern, PatternCell};
+use rustytracker_core::{
+    Module, Note, Pattern, PatternCell, DEFAULT_INSTRUMENT_NUMBER, FIRST_XM_NOTE_VALUE,
+    SAMPLE_DEFAULT_PANNING,
+};
 
 pub const PLAYBACK_FIRST_CHANNEL: u16 = 0;
 pub const PLAYBACK_FIRST_ORDER_INDEX: usize = 0;
@@ -16,6 +19,9 @@ pub const PLAYBACK_EMPTY_PATTERN_ROWS: u16 = 0;
 pub const PLAYBACK_MIN_TICK_SPEED: u16 = 1;
 pub const PLAYBACK_MIN_BPM: u16 = 1;
 pub const PLAYBACK_XM_TICK_NANOS_AT_ONE_BPM: u64 = 2_500_000_000;
+pub const PLAYBACK_INSTRUMENT_NUMBER_BASE: u8 = 1;
+pub const PLAYBACK_SAMPLE_START_FRAME: usize = 0;
+pub const PLAYBACK_EMPTY_VOLUME: u8 = 0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlaybackError {
@@ -47,6 +53,15 @@ pub enum PlaybackError {
         module_channels: u16,
         pattern_channels: u16,
     },
+    MissingInstrument {
+        channel: u16,
+        instrument: u8,
+    },
+    MissingSample {
+        channel: u16,
+        instrument_index: usize,
+        sample_index: usize,
+    },
 }
 
 pub type PlaybackResult<T> = Result<T, PlaybackError>;
@@ -68,6 +83,114 @@ pub struct ChannelRowState {
 pub struct PlaybackRowState {
     pub position: PlaybackPosition,
     pub channels: Vec<ChannelRowState>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaybackChannelState {
+    pub channel: u16,
+    pub active: bool,
+    pub note: Note,
+    pub instrument: u8,
+    pub instrument_index: Option<usize>,
+    pub sample_index: Option<usize>,
+    pub sample_frame: usize,
+    pub volume: u8,
+    pub panning: u8,
+}
+
+impl PlaybackChannelState {
+    fn empty(channel: u16) -> Self {
+        Self {
+            channel,
+            active: false,
+            note: Note::Empty,
+            instrument: DEFAULT_INSTRUMENT_NUMBER,
+            instrument_index: None,
+            sample_index: None,
+            sample_frame: PLAYBACK_SAMPLE_START_FRAME,
+            volume: PLAYBACK_EMPTY_VOLUME,
+            panning: SAMPLE_DEFAULT_PANNING,
+        }
+    }
+
+    fn apply_cell(&mut self, module: &Module, cell: &PatternCell) -> PlaybackResult<()> {
+        if cell.instrument != DEFAULT_INSTRUMENT_NUMBER {
+            self.set_instrument(module, cell.instrument)?;
+        }
+
+        match cell.note {
+            Note::Empty => Ok(()),
+            Note::Off => {
+                self.release();
+                Ok(())
+            }
+            Note::Key(note) => self.trigger_key(module, note),
+        }
+    }
+
+    fn set_instrument(&mut self, module: &Module, instrument: u8) -> PlaybackResult<()> {
+        let Some(instrument_index) = instrument_index_for_number(instrument) else {
+            return Err(PlaybackError::MissingInstrument {
+                channel: self.channel,
+                instrument,
+            });
+        };
+        if instrument_index >= module.instruments.len() {
+            return Err(PlaybackError::MissingInstrument {
+                channel: self.channel,
+                instrument,
+            });
+        }
+
+        self.instrument = instrument;
+        self.instrument_index = Some(instrument_index);
+        Ok(())
+    }
+
+    fn trigger_key(&mut self, module: &Module, note: u8) -> PlaybackResult<()> {
+        self.note = Note::Key(note);
+        self.sample_frame = PLAYBACK_SAMPLE_START_FRAME;
+
+        let Some(instrument_index) = self.instrument_index else {
+            self.active = false;
+            self.sample_index = None;
+            return Ok(());
+        };
+        let Some(note_index) = note_sample_map_index(note) else {
+            self.active = false;
+            self.sample_index = None;
+            return Ok(());
+        };
+        let Some(sample_index) = module.instruments[instrument_index]
+            .note_sample_map
+            .get(note_index)
+            .and_then(|sample_index| *sample_index)
+        else {
+            self.active = false;
+            self.sample_index = None;
+            return Ok(());
+        };
+        let Some(sample) = module.samples.get(sample_index) else {
+            return Err(PlaybackError::MissingSample {
+                channel: self.channel,
+                instrument_index,
+                sample_index,
+            });
+        };
+
+        self.active = true;
+        self.sample_index = Some(sample_index);
+        self.volume = sample.volume;
+        self.panning = sample.panning;
+        Ok(())
+    }
+
+    fn release(&mut self) {
+        self.active = false;
+        self.note = Note::Off;
+        self.sample_index = None;
+        self.sample_frame = PLAYBACK_SAMPLE_START_FRAME;
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -240,6 +363,65 @@ impl PlaybackClock {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaybackState {
+    clock: PlaybackClock,
+    channels: Vec<PlaybackChannelState>,
+}
+
+impl PlaybackState {
+    pub fn start(module: &Module) -> PlaybackResult<Self> {
+        let clock = PlaybackClock::start(module)?;
+        let row_state = clock.row_state(module)?;
+        let channels = row_state
+            .channels
+            .iter()
+            .map(|channel| PlaybackChannelState::empty(channel.channel))
+            .collect();
+        let mut state = Self { clock, channels };
+        state.apply_row_state(module, &row_state)?;
+        Ok(state)
+    }
+
+    pub fn clock(&self) -> PlaybackClock {
+        self.clock
+    }
+
+    pub fn channels(&self) -> &[PlaybackChannelState] {
+        &self.channels
+    }
+
+    pub fn row_state(&self, module: &Module) -> PlaybackResult<PlaybackRowState> {
+        self.clock.row_state(module)
+    }
+
+    pub fn advance_tick(&mut self, module: &Module) -> PlaybackResult<TickAdvance> {
+        let advance = self.clock.advance_tick(module)?;
+        match advance {
+            TickAdvance::NextRow | TickAdvance::NextOrder => self.trigger_current_row(module)?,
+            TickAdvance::SameRow | TickAdvance::SongEnd => {}
+        }
+        Ok(advance)
+    }
+
+    fn trigger_current_row(&mut self, module: &Module) -> PlaybackResult<()> {
+        let row_state = self.clock.row_state(module)?;
+        self.apply_row_state(module, &row_state)
+    }
+
+    fn apply_row_state(
+        &mut self,
+        module: &Module,
+        row_state: &PlaybackRowState,
+    ) -> PlaybackResult<()> {
+        for channel in &row_state.channels {
+            self.channels[usize::from(channel.channel)].apply_cell(module, &channel.cell)?;
+        }
+
+        Ok(())
+    }
+}
+
 fn pattern_index_for_order(module: &Module, order_index: usize) -> PlaybackResult<usize> {
     if module.orders.is_empty() {
         return Err(PlaybackError::EmptyOrderList);
@@ -307,4 +489,14 @@ fn row_state_for_position(
         .collect();
 
     Ok(PlaybackRowState { position, channels })
+}
+
+fn instrument_index_for_number(instrument: u8) -> Option<usize> {
+    instrument
+        .checked_sub(PLAYBACK_INSTRUMENT_NUMBER_BASE)
+        .map(usize::from)
+}
+
+fn note_sample_map_index(note: u8) -> Option<usize> {
+    note.checked_sub(FIRST_XM_NOTE_VALUE).map(usize::from)
 }
