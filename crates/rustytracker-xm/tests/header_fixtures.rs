@@ -1,0 +1,516 @@
+use std::fs;
+use std::path::PathBuf;
+
+use rustytracker_core::{EffectCommand, FrequencyTable, Note};
+use rustytracker_xm::{
+    decode_xm_pattern, decode_xm_patterns, parse_xm_header, parse_xm_pattern_headers,
+    XmModuleHeader, XmParseError, XmPatternHeader,
+};
+
+const FNV_OFFSET: u64 = 0xcbf29ce484222325;
+const FNV_PRIME: u64 = 0x100000001b3;
+
+#[derive(Debug)]
+struct ExpectedHeader {
+    file_name: &'static str,
+    title: &'static str,
+    song_length: u16,
+    restart_position: u16,
+    channel_count: u16,
+    pattern_count: u16,
+    instrument_count: u16,
+    default_tick_speed: u16,
+    default_bpm: u16,
+    first_orders: &'static [u8],
+    first_pattern_rows: &'static [u16],
+    first_pattern_packed_lengths: &'static [u16],
+    unique_row_counts: &'static [u16],
+    packed_pattern_data_total: usize,
+    empty_pattern_count: usize,
+    decoded_cell_count: usize,
+    non_empty_cell_count: usize,
+    expanded_pattern_checksum: u64,
+    first_non_empty_cell: (usize, u16, u16, [u8; 6]),
+}
+
+const FIXTURES: &[ExpectedHeader] = &[
+    ExpectedHeader {
+        file_name: "milky.xm",
+        title: "milk in veins",
+        song_length: 17,
+        restart_position: 0,
+        channel_count: 10,
+        pattern_count: 17,
+        instrument_count: 7,
+        default_tick_speed: 6,
+        default_bpm: 133,
+        first_orders: &[1, 2, 0, 3, 4, 5, 6, 7],
+        first_pattern_rows: &[64, 64, 64, 64, 64, 64, 64, 64],
+        first_pattern_packed_lengths: &[746, 751, 742, 746, 885, 939, 939, 939],
+        unique_row_counts: &[64],
+        packed_pattern_data_total: 16_743,
+        empty_pattern_count: 0,
+        decoded_cell_count: 10_880,
+        non_empty_cell_count: 2_756,
+        expanded_pattern_checksum: 0x8706_cb07_f884_9bc2,
+        first_non_empty_cell: (0, 0, 0, [49, 1, 0, 0, 0, 0]),
+    },
+    ExpectedHeader {
+        file_name: "slumberjack.xm",
+        title: "slumberjack",
+        song_length: 42,
+        restart_position: 0,
+        channel_count: 8,
+        pattern_count: 27,
+        instrument_count: 7,
+        default_tick_speed: 3,
+        default_bpm: 84,
+        first_orders: &[5, 5, 5, 5, 6, 0, 1, 2],
+        first_pattern_rows: &[32, 32, 32, 32, 32, 12, 32, 32],
+        first_pattern_packed_lengths: &[376, 376, 380, 388, 453, 128, 363, 457],
+        unique_row_counts: &[12, 32],
+        packed_pattern_data_total: 12_890,
+        empty_pattern_count: 0,
+        decoded_cell_count: 6_592,
+        non_empty_cell_count: 2_778,
+        expanded_pattern_checksum: 0xe7f7_954d_589a_86bb,
+        first_non_empty_cell: (0, 0, 0, [41, 1, 8, 128, 0, 0]),
+    },
+    ExpectedHeader {
+        file_name: "sv_ttt.xm",
+        title: "The Titan Turrican",
+        song_length: 16,
+        restart_position: 2,
+        channel_count: 6,
+        pattern_count: 17,
+        instrument_count: 44,
+        default_tick_speed: 4,
+        default_bpm: 135,
+        first_orders: &[9, 0, 1, 2, 3, 4, 5, 6],
+        first_pattern_rows: &[64, 64, 64, 64, 64, 64, 64, 64],
+        first_pattern_packed_lengths: &[703, 869, 761, 845, 751, 670, 744, 768],
+        unique_row_counts: &[64],
+        packed_pattern_data_total: 12_677,
+        empty_pattern_count: 0,
+        decoded_cell_count: 6_528,
+        non_empty_cell_count: 3_136,
+        expanded_pattern_checksum: 0xf594_4438_b284_a182,
+        first_non_empty_cell: (0, 0, 1, [51, 6, 25, 32, 32, 88]),
+    },
+    ExpectedHeader {
+        file_name: "theday.xm",
+        title: "the day they landed",
+        song_length: 45,
+        restart_position: 0,
+        channel_count: 8,
+        pattern_count: 42,
+        instrument_count: 7,
+        default_tick_speed: 8,
+        default_bpm: 160,
+        first_orders: &[0, 2, 3, 4, 5, 1, 6, 9],
+        first_pattern_rows: &[64, 64, 64, 64, 64, 64, 64, 64],
+        first_pattern_packed_lengths: &[1_353, 1_334, 1_373, 1_446, 1_423, 1_348, 1_325, 1_324],
+        unique_row_counts: &[64],
+        packed_pattern_data_total: 43_699,
+        empty_pattern_count: 0,
+        decoded_cell_count: 21_504,
+        non_empty_cell_count: 11_952,
+        expanded_pattern_checksum: 0x8b8c_76ca_cae2_6ae1,
+        first_non_empty_cell: (0, 0, 0, [63, 1, 12, 0, 15, 8]),
+    },
+    ExpectedHeader {
+        file_name: "universalnetwork2_real.xm",
+        title: " universal network 2",
+        song_length: 31,
+        restart_position: 0,
+        channel_count: 6,
+        pattern_count: 32,
+        instrument_count: 16,
+        default_tick_speed: 3,
+        default_bpm: 125,
+        first_orders: &[12, 13, 14, 15, 1, 17, 16, 2],
+        first_pattern_rows: &[64, 64, 64, 64, 64, 64, 64, 64],
+        first_pattern_packed_lengths: &[429, 608, 717, 840, 861, 873, 924, 774],
+        unique_row_counts: &[1, 54, 64],
+        packed_pattern_data_total: 22_222,
+        empty_pattern_count: 0,
+        decoded_cell_count: 11_472,
+        non_empty_cell_count: 5_417,
+        expanded_pattern_checksum: 0x1759_ebc9_64b5_f77b,
+        first_non_empty_cell: (0, 0, 0, [49, 11, 0, 0, 15, 3]),
+    },
+];
+
+#[test]
+fn parses_milkytracker_bundled_xm_headers() {
+    for fixture in FIXTURES {
+        let bytes = fs::read(fixture_path(fixture.file_name)).unwrap();
+        let header = parse_xm_header(&bytes).unwrap();
+
+        assert_eq!(header.title, fixture.title, "{}", fixture.file_name);
+        assert_eq!(header.tracker_name, "MilkyTracker", "{}", fixture.file_name);
+        assert_eq!(header.version, 0x0104, "{}", fixture.file_name);
+        assert_eq!(header.header_size, 276, "{}", fixture.file_name);
+        assert_eq!(
+            header.song_length, fixture.song_length,
+            "{}",
+            fixture.file_name
+        );
+        assert_eq!(
+            header.restart_position, fixture.restart_position,
+            "{}",
+            fixture.file_name
+        );
+        assert_eq!(
+            header.channel_count, fixture.channel_count,
+            "{}",
+            fixture.file_name
+        );
+        assert_eq!(
+            header.pattern_count, fixture.pattern_count,
+            "{}",
+            fixture.file_name
+        );
+        assert_eq!(
+            header.instrument_count, fixture.instrument_count,
+            "{}",
+            fixture.file_name
+        );
+        assert_eq!(header.flags, 1, "{}", fixture.file_name);
+        assert_eq!(
+            header.frequency_table,
+            FrequencyTable::Linear,
+            "{}",
+            fixture.file_name
+        );
+        assert_eq!(
+            header.default_tick_speed, fixture.default_tick_speed,
+            "{}",
+            fixture.file_name
+        );
+        assert_eq!(
+            header.default_bpm, fixture.default_bpm,
+            "{}",
+            fixture.file_name
+        );
+        assert_eq!(header.orders.len(), fixture.song_length as usize);
+        assert_eq!(
+            &header.orders[..fixture.first_orders.len()],
+            fixture.first_orders,
+            "{}",
+            fixture.file_name
+        );
+    }
+}
+
+#[test]
+fn decodes_milkytracker_bundled_xm_patterns_to_expanded_cells() {
+    for fixture in FIXTURES {
+        let bytes = fs::read(fixture_path(fixture.file_name)).unwrap();
+        let header = parse_xm_header(&bytes).unwrap();
+        let patterns = decode_xm_patterns(&bytes, &header).unwrap();
+        let stats = decoded_pattern_stats(&patterns);
+
+        assert_eq!(patterns.len(), fixture.pattern_count as usize);
+        assert_eq!(stats.cell_count, fixture.decoded_cell_count);
+        assert_eq!(stats.non_empty_count, fixture.non_empty_cell_count);
+        assert_eq!(
+            stats.checksum, fixture.expanded_pattern_checksum,
+            "{}",
+            fixture.file_name
+        );
+        assert_eq!(
+            stats.first_non_empty.unwrap(),
+            fixture.first_non_empty_cell,
+            "{}",
+            fixture.file_name
+        );
+    }
+}
+
+#[test]
+fn decodes_packed_and_unpacked_cells_with_milkytracker_normalization() {
+    let header = synthetic_header(2, 1);
+    let bytes = [
+        49, 1, 0x20, 0x0e, 0xa7, // unpacked cell
+        0x9f, 97, 2, 0xc8, 0x0c, 64, // packed cell with all fields
+    ];
+    let pattern_header = synthetic_pattern_header(1, bytes.len() as u16);
+    let pattern = decode_xm_pattern(&bytes, &header, &pattern_header).unwrap();
+
+    let first = pattern.cell(0, 0).unwrap();
+    assert_eq!(first.note, Note::Key(49));
+    assert_eq!(first.instrument, 1);
+    assert_eq!(
+        first.effects,
+        vec![
+            EffectCommand {
+                effect: 0x0c,
+                operand: 64,
+            },
+            EffectCommand {
+                effect: 0x3a,
+                operand: 7,
+            },
+        ]
+    );
+
+    let second = pattern.cell(1, 0).unwrap();
+    assert_eq!(second.note, Note::Off);
+    assert_eq!(second.instrument, 2);
+    assert_eq!(
+        second.effects,
+        vec![
+            EffectCommand {
+                effect: 0x08,
+                operand: 128,
+            },
+            EffectCommand {
+                effect: 0x0c,
+                operand: 255,
+            },
+        ]
+    );
+}
+
+#[test]
+fn rejects_packed_cells_that_end_mid_field() {
+    let header = synthetic_header(1, 1);
+    let bytes = [0x9f, 49];
+    let pattern_header = synthetic_pattern_header(1, bytes.len() as u16);
+
+    assert!(matches!(
+        decode_xm_pattern(&bytes, &header, &pattern_header),
+        Err(XmParseError::PackedPatternCellTooShort {
+            pattern_index: 0,
+            row: 0,
+            channel: 0,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn parses_milkytracker_bundled_xm_pattern_headers() {
+    for fixture in FIXTURES {
+        let bytes = fs::read(fixture_path(fixture.file_name)).unwrap();
+        let header = parse_xm_header(&bytes).unwrap();
+        let patterns = parse_xm_pattern_headers(&bytes, &header).unwrap();
+
+        assert_eq!(
+            patterns.len(),
+            fixture.pattern_count as usize,
+            "{}",
+            fixture.file_name
+        );
+        assert!(
+            patterns
+                .iter()
+                .all(|pattern| pattern.header_length == 9 && pattern.packing_type == 0),
+            "{}",
+            fixture.file_name
+        );
+        assert_eq!(
+            patterns
+                .iter()
+                .take(fixture.first_pattern_rows.len())
+                .map(|pattern| pattern.row_count)
+                .collect::<Vec<_>>(),
+            fixture.first_pattern_rows,
+            "{}",
+            fixture.file_name
+        );
+        assert_eq!(
+            patterns
+                .iter()
+                .take(fixture.first_pattern_packed_lengths.len())
+                .map(|pattern| pattern.packed_data_len)
+                .collect::<Vec<_>>(),
+            fixture.first_pattern_packed_lengths,
+            "{}",
+            fixture.file_name
+        );
+
+        let mut unique_row_counts = patterns
+            .iter()
+            .map(|pattern| pattern.row_count)
+            .collect::<Vec<_>>();
+        unique_row_counts.sort_unstable();
+        unique_row_counts.dedup();
+        assert_eq!(
+            unique_row_counts, fixture.unique_row_counts,
+            "{}",
+            fixture.file_name
+        );
+
+        assert_eq!(
+            patterns
+                .iter()
+                .map(|pattern| pattern.packed_data_len as usize)
+                .sum::<usize>(),
+            fixture.packed_pattern_data_total,
+            "{}",
+            fixture.file_name
+        );
+        assert_eq!(
+            patterns
+                .iter()
+                .filter(|pattern| pattern.packed_data_len == 0)
+                .count(),
+            fixture.empty_pattern_count,
+            "{}",
+            fixture.file_name
+        );
+    }
+}
+
+#[test]
+fn rejects_truncated_pattern_header() {
+    let mut bytes = fs::read(fixture_path("milky.xm")).unwrap();
+    let header = parse_xm_header(&bytes).unwrap();
+    bytes.truncate(336 + 5);
+
+    assert!(matches!(
+        parse_xm_pattern_headers(&bytes, &header),
+        Err(XmParseError::PatternHeaderTooShort {
+            pattern_index: 0,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn rejects_truncated_pattern_data() {
+    let mut bytes = fs::read(fixture_path("milky.xm")).unwrap();
+    let header = parse_xm_header(&bytes).unwrap();
+    bytes.truncate(336 + 9 + 10);
+
+    assert!(matches!(
+        parse_xm_pattern_headers(&bytes, &header),
+        Err(XmParseError::PatternDataTooShort {
+            pattern_index: 0,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn rejects_non_xm_signature() {
+    let mut bytes = fs::read(fixture_path("milky.xm")).unwrap();
+    bytes[0] = b'X';
+
+    assert_eq!(
+        parse_xm_header(&bytes).unwrap_err(),
+        XmParseError::InvalidSignature
+    );
+}
+
+#[test]
+fn rejects_xm_versions_milkytracker_does_not_accept() {
+    let mut bytes = fs::read(fixture_path("milky.xm")).unwrap();
+    bytes[58..60].copy_from_slice(&0x0105_u16.to_le_bytes());
+
+    assert_eq!(
+        parse_xm_header(&bytes).unwrap_err(),
+        XmParseError::UnsupportedVersion(0x0105)
+    );
+}
+
+#[test]
+fn rejects_truncated_headers() {
+    let bytes = vec![0; 32];
+
+    assert!(matches!(
+        parse_xm_header(&bytes),
+        Err(XmParseError::Truncated { .. })
+    ));
+}
+
+fn fixture_path(file_name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../MilkyTracker/resources/music")
+        .join(file_name)
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct DecodedPatternStats {
+    cell_count: usize,
+    non_empty_count: usize,
+    checksum: u64,
+    first_non_empty: Option<(usize, u16, u16, [u8; 6])>,
+}
+
+fn decoded_pattern_stats(patterns: &[rustytracker_core::Pattern]) -> DecodedPatternStats {
+    let mut cell_count = 0;
+    let mut non_empty_count = 0;
+    let mut checksum = FNV_OFFSET;
+    let mut first_non_empty = None;
+
+    for (pattern_index, pattern) in patterns.iter().enumerate() {
+        for row in 0..pattern.rows() {
+            for channel in 0..pattern.channels() {
+                let expanded = expanded_cell_bytes(pattern.cell(channel, row).unwrap());
+                cell_count += 1;
+
+                if expanded != [0; 6] {
+                    non_empty_count += 1;
+                    first_non_empty.get_or_insert((pattern_index, row, channel, expanded));
+                }
+
+                for byte in expanded {
+                    checksum ^= byte as u64;
+                    checksum = checksum.wrapping_mul(FNV_PRIME);
+                }
+            }
+        }
+    }
+
+    DecodedPatternStats {
+        cell_count,
+        non_empty_count,
+        checksum,
+        first_non_empty,
+    }
+}
+
+fn expanded_cell_bytes(cell: &rustytracker_core::PatternCell) -> [u8; 6] {
+    [
+        cell.note.raw(),
+        cell.instrument,
+        cell.effects[0].effect,
+        cell.effects[0].operand,
+        cell.effects[1].effect,
+        cell.effects[1].operand,
+    ]
+}
+
+fn synthetic_header(channel_count: u16, pattern_count: u16) -> XmModuleHeader {
+    XmModuleHeader {
+        title: String::new(),
+        tracker_name: String::new(),
+        version: 0x0104,
+        header_size: 276,
+        song_length: 1,
+        restart_position: 0,
+        channel_count,
+        pattern_count,
+        instrument_count: 0,
+        flags: 1,
+        frequency_table: FrequencyTable::Linear,
+        default_tick_speed: 6,
+        default_bpm: 125,
+        orders: vec![0],
+    }
+}
+
+fn synthetic_pattern_header(row_count: u16, packed_data_len: u16) -> XmPatternHeader {
+    XmPatternHeader {
+        index: 0,
+        header_length: 9,
+        packing_type: 0,
+        row_count,
+        packed_data_len,
+        packed_data_offset: 0,
+        next_offset: packed_data_len as usize,
+    }
+}
