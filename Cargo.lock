@@ -47,6 +47,13 @@ name = "rustytracker-core"
 version = "0.1.0"
 
 [[package]]
+name = "rustytracker-play"
+version = "0.1.0"
+dependencies = [
+ "rustytracker-core",
+]
+
+[[package]]
 name = "rustytracker-xm"
 version = "0.1.0"
 dependencies = [
