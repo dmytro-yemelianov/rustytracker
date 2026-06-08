@@ -51,4 +51,5 @@ Authoritative files for the current Rust rewrite:
 
 - XM parser and writer spec: `docs/specs/005-xm-parser.md`
 - XM writer milestone: `docs/specs/009-xm-writer.md`
+- Playback skeleton spec: `docs/specs/011-playback-skeleton.md`
 - Roadmap and active tasks: `docs/specs/007-roadmap-and-tasks.md`

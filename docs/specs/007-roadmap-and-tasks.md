@@ -11,6 +11,7 @@ RustyTracker has a test-first Rust workspace with:
   XM loading into `rustytracker-core::Module`; XM header/order/pattern writing
   with the first MilkyTracker-compatible effect inverse mappings, instrument
   metadata writing, and delta-coded sample payload writing
+- `rustytracker-play`: initial playback cursor/order traversal skeleton
 - `rustytracker-cli`: normalized JSON structural dumps with golden fixture
   comparisons
 - CodeRabbit review rules requiring compatibility values and format constants to
@@ -122,10 +123,19 @@ Acceptance:
 
 Goal: play rows/ticks and raw samples without full effect parity.
 
-Tasks:
+Status: in progress.
+
+Done:
 
 - add `rustytracker-play`
-- implement order traversal
+- implement validated playback cursor start position
+- implement row advance within a pattern
+- implement order advance after the final pattern row
+- report song end without moving the cursor into an invalid row
+- reject orders that reference missing patterns
+
+Tasks:
+
 - implement row/tick timing from speed/BPM
 - implement channel state
 - mix decoded sample data without interpolation first
@@ -192,6 +202,6 @@ Acceptance:
 
 ## Immediate Backlog
 
-1. Start Milestone 4 playback skeleton planning.
+1. Add row/tick timing from speed/BPM to `rustytracker-play`.
 2. Keep adding focused XM writer/parser edge cases when playback or future
    compatibility work exposes a concrete gap.
