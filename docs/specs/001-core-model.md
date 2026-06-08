@@ -49,3 +49,12 @@ XM packing is not part of the core model.
 - Order lists must have `1..=255` active positions.
 - Empty module construction allocates the default MilkyTracker instrument/sample
   pool shape: 128 instruments and 2048 samples.
+- Instrument note/sample maps use `Option<usize>` so imported files can
+  represent MilkyTracker's invalid `-1` sample mapping.
+- Samples keep typed payloads as `SampleData::Empty`, `SampleData::Pcm8`, or
+  `SampleData::Pcm16`; parser crates should not own long-lived sample buffers.
+- Instruments preserve envelope metadata, vibrato metadata, and volume fadeout
+  in core types so playback and editing do not need to inspect XM parser
+  structs.
+- Samples preserve a normalized `SampleLoopKind` independently from the raw
+  format-specific sample type byte.

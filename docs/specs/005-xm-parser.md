@@ -84,6 +84,8 @@ Compatibility rules ported from `LoaderXM.cpp` and `XModule.cpp`:
 - XM note `97` becomes RustyTracker note-off value `121`
 - XM volume-column commands are converted into the first internal effect slot
 - the XM effect column is stored in the second internal effect slot
+- a pattern with `packed_pattern_data_length == 0` decodes as an allocated empty
+  core pattern
 
 ## Fixture Assertions
 
@@ -100,3 +102,77 @@ The first XM fixture tests assert:
 
 This gives the later instrument/sample parser an exact byte offset to continue
 from without depending on playback code.
+
+## Instrument And Sample Header Contract
+
+For XM `0x0104`, RustyTracker now parses the instrument section after pattern
+data. The parser mirrors MilkyTracker's loader behavior:
+
+- every declared instrument starts with `u32 instrument_size`
+- short instruments in the `4..29` byte range are read through MilkyTracker's
+  padded 29-byte compatibility buffer
+- instruments with `instrument_size <= 29` have no extension/sample-header data
+- instruments with `instrument_size > 29` consume the declared extension bytes
+  even when `sample_count == 0`
+- the 96-byte note-to-sample map is preserved
+- volume and panning envelopes are read as 12 points each
+- envelope values, vibrato depth, and volume fadeout are scaled the way
+  MilkyTracker scales them during load
+- each sample header is read as the XM 40-byte sample header
+- sample loop flags are normalized to core `SampleLoopKind`
+- XM's undefined loop flag combination `0x03` is treated as ping-pong loop,
+  matching MilkyTracker's load-time normalization
+- ModPlug stereo samples are averaged to mono after delta decoding; normalized
+  sample frame counts and loop frame positions are halved
+- ADPCM-packed XM samples return `UnsupportedAdpcmSample` with instrument/sample
+  context until ADPCM decoding is ported
+- sample payload bytes are bounds checked and decoded as XM delta-coded PCM
+- 8-bit sample data is decoded into signed `i8` frames
+- 16-bit sample data is decoded little-endian into signed `i16` frames
+- sample frame counts and loop frame positions are normalized for 16-bit sample
+  headers while the original XM byte lengths are retained
+
+The parser exposes:
+
+- `XmInstrumentSection`
+- `XmInstrument`
+- `XmEnvelope`
+- `XmEnvelopePoint`
+- `XmSampleHeader`
+- `XmSampleData`
+- `parse_xm_module`
+
+Current tests assert instrument counts, empty-instrument counts, sample counts,
+sample-data byte totals, first instrument names, first sample header fields,
+instrument-section end offsets, decoded sample frame totals, decoded sample
+checksums, and truncated instrument/sample-data failures for all bundled
+MilkyTracker XM fixtures. A synthetic test covers 16-bit delta decoding because
+the bundled fixtures currently use 8-bit samples.
+
+## Core Module Conversion
+
+`parse_xm_module` composes the tested parser stages into a
+`rustytracker-core::Module`:
+
+- module title, channel count, frequency table, restart position, tick speed,
+  BPM, main volume, and active order table are copied from the XM header
+- packed XM patterns become typed core `Pattern` values
+- order entries that reference patterns past the declared pattern count append
+  MilkyTracker-compatible empty 64-row patterns
+- XM instruments become core `Instrument` values
+- sample slots use MilkyTracker's 16-slot-per-instrument pool layout
+- note-to-sample maps are converted to absolute core sample indexes where the
+  mapped sample exists, otherwise `None`
+- volume envelopes, panning envelopes, vibrato metadata, and volume fadeout are
+  copied into core instrument fields
+- XM sample headers become core `Sample` metadata
+- normalized sample loop kinds are copied into core samples
+- decoded sample payloads become core `SampleData::Pcm8` or
+  `SampleData::Pcm16`
+
+Fixture tests load every bundled MilkyTracker XM file into the core model and
+assert headers, orders, pattern counts, instrument counts, sample-pool layout,
+first instrument envelope/vibrato/fadeout metadata, first sample metadata,
+sample loop kind, decoded data prefixes, and decoded sample checksums.
+
+Next step: start the structural dump CLI and golden normalized JSON fixtures.

@@ -49,6 +49,10 @@ The test ladder is:
 Current coverage:
 
 - `rustytracker-core`: empty module defaults, pattern bounds, fixed text,
-  orders, notes, instruments, samples.
+  orders, notes, instruments, samples, envelopes, vibrato, and sample loop
+  kinds.
 - `rustytracker-xm`: MilkyTracker-bundled XM headers, pattern headers, packed
-  pattern cell expansion, and malformed input checks.
+  pattern cell expansion, instrument/sample-header metadata, delta-coded sample
+  payload decoding, ModPlug stereo sample mixing, loop-kind normalization,
+  ADPCM unsupported errors, sparse order references, end-to-end load into
+  `rustytracker-core::Module`, and malformed input checks.

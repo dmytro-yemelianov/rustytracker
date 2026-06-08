@@ -1,10 +1,12 @@
 use rustytracker_core::{
-    CoreError, EffectCommand, FrequencyTable, InstrumentName, Module, ModuleTitle, Note, NoteName,
-    OrderList, Pattern, PatternCell, SampleName, DEFAULT_BPM, DEFAULT_INSTRUMENTS,
-    DEFAULT_MAIN_VOLUME, DEFAULT_PATTERN_ROWS, DEFAULT_SAMPLE_COUNT, DEFAULT_SONG_CHANNELS,
-    DEFAULT_TICK_SPEED, EDITOR_PATTERN_CHANNELS, INSTRUMENT_NAME_LEN, MAX_ACTIVE_ORDERS,
-    MAX_XM_NOTES, NOTE_OFF_VALUE, SAMPLE_DEFAULT_FLAGS, SAMPLE_DEFAULT_PANNING,
-    SAMPLE_DEFAULT_VOLUME, SAMPLE_DEFAULT_VOLUME_FADEOUT, SAMPLE_NAME_LEN, TITLE_TEXT_LEN,
+    CoreError, EffectCommand, Envelope, FrequencyTable, InstrumentName, Module, ModuleTitle, Note,
+    NoteName, OrderList, Pattern, PatternCell, SampleData, SampleLoopKind, SampleName, Vibrato,
+    DEFAULT_BPM, DEFAULT_INSTRUMENTS, DEFAULT_MAIN_VOLUME, DEFAULT_PATTERN_ROWS,
+    DEFAULT_SAMPLE_COUNT, DEFAULT_SONG_CHANNELS, DEFAULT_TICK_SPEED, EDITOR_PATTERN_CHANNELS,
+    INSTRUMENT_NAME_LEN, MAX_ACTIVE_ORDERS, MAX_XM_NOTES, NOTE_OFF_VALUE, SAMPLE_DEFAULT_FINETUNE,
+    SAMPLE_DEFAULT_FLAGS, SAMPLE_DEFAULT_PANNING, SAMPLE_DEFAULT_RELATIVE_NOTE,
+    SAMPLE_DEFAULT_TYPE, SAMPLE_DEFAULT_VOLUME, SAMPLE_DEFAULT_VOLUME_FADEOUT, SAMPLE_NAME_LEN,
+    TITLE_TEXT_LEN,
 };
 
 #[test]
@@ -180,14 +182,24 @@ fn default_instruments_and_samples_match_empty_song_pool_defaults() {
     assert!(instrument
         .note_sample_map
         .iter()
-        .all(|&sample_index| sample_index == 0));
+        .all(|&sample_index| sample_index == Some(0)));
+    assert_eq!(instrument.volume_envelope, Envelope::default());
+    assert_eq!(instrument.panning_envelope, Envelope::default());
+    assert_eq!(instrument.vibrato, Vibrato::default());
+    assert_eq!(instrument.volume_fadeout, SAMPLE_DEFAULT_VOLUME_FADEOUT);
 
     assert_eq!(sample.name.as_str(), "");
     assert_eq!(sample.length, 0);
     assert_eq!(sample.loop_start, 0);
     assert_eq!(sample.loop_length, 0);
+    assert_eq!(sample.loop_kind, SampleLoopKind::None);
     assert_eq!(sample.volume, SAMPLE_DEFAULT_VOLUME);
     assert_eq!(sample.panning, SAMPLE_DEFAULT_PANNING);
     assert_eq!(sample.flags, SAMPLE_DEFAULT_FLAGS);
     assert_eq!(sample.volume_fadeout, SAMPLE_DEFAULT_VOLUME_FADEOUT);
+    assert_eq!(sample.sample_type, SAMPLE_DEFAULT_TYPE);
+    assert_eq!(sample.finetune, SAMPLE_DEFAULT_FINETUNE);
+    assert_eq!(sample.relative_note, SAMPLE_DEFAULT_RELATIVE_NOTE);
+    assert_eq!(sample.data, SampleData::Empty);
+    assert_eq!(sample.data.frame_count(), 0);
 }
