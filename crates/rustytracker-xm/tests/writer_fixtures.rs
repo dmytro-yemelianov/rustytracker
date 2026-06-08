@@ -63,15 +63,23 @@ const XM_WRITER_EXTRA_FINE_PORTA_SOURCE_OPERAND: u8 = 0x05;
 const XM_WRITER_EXTRA_FINE_PORTA_OPERAND: u8 = 0x15;
 const XM_WRITER_VOLUME_EFFECT: u8 = 0x0c;
 const XM_WRITER_VOLUME_SLIDE_EFFECT: u8 = 0x0a;
+const XM_WRITER_VOLUME_SLIDE_UP_OPERAND: u8 = 0x40;
+const XM_WRITER_VOLUME_SLIDE_DOWN_OPERAND: u8 = 0x04;
 const XM_WRITER_MIXED_VOLUME_SLIDE_OPERAND: u8 = 0x34;
 const XM_WRITER_FULL_VOLUME_255: u8 = 0xff;
 const XM_WRITER_FULL_VOLUME_64: u8 = 0x40;
 const XM_WRITER_FULL_VOLUME_COLUMN: u8 = 0x50;
+const XM_WRITER_VIBRATO_EFFECT: u8 = 0x04;
+const XM_WRITER_VIBRATO_SPEED_OPERAND: u8 = 0x40;
+const XM_WRITER_VIBRATO_DEPTH_OPERAND: u8 = 0x04;
 const XM_WRITER_PANNING_EFFECT: u8 = 0x08;
 const XM_WRITER_PANNING_SLIDE_EFFECT: u8 = 0x19;
+const XM_WRITER_PANNING_SLIDE_LEFT_OPERAND: u8 = 0x04;
+const XM_WRITER_PANNING_SLIDE_RIGHT_OPERAND: u8 = 0x40;
 const XM_WRITER_CENTER_PANNING_255: u8 = 0x80;
 const XM_WRITER_CENTER_PANNING_COLUMN: u8 = 0xc8;
 const XM_WRITER_TONE_PORTAMENTO_EFFECT: u8 = 0x03;
+const XM_WRITER_HIGH_NIBBLE_TONE_PORTAMENTO_OPERAND: u8 = 0x40;
 const XM_WRITER_LOW_NIBBLE_TONE_PORTAMENTO_OPERAND: u8 = 0x05;
 const XM_WRITER_EMPTY_INSTRUMENT_HEADER_SIZE: u32 = 29;
 const XM_WRITER_INSTRUMENT_HEADER_SIZE: u32 = 263;
@@ -252,6 +260,179 @@ fn roundtrips_bundled_fixtures_to_equivalent_core_modules() {
             &module_roundtrip_summary(&module),
             fixture,
         );
+    }
+}
+
+#[test]
+fn roundtrips_synthetic_effect_cells_through_full_module_writer() {
+    for (name, effects) in [
+        (
+            "effect-column arpeggio",
+            [
+                EffectCommand::default(),
+                effect(
+                    XM_WRITER_INTERNAL_ARPEGGIO_EFFECT,
+                    XM_WRITER_ARPEGGIO_OPERAND,
+                ),
+            ],
+        ),
+        (
+            "effect-column extended command",
+            [
+                EffectCommand::default(),
+                effect(
+                    XM_WRITER_INTERNAL_EXTENDED_EFFECT,
+                    XM_WRITER_EXTENDED_SOURCE_OPERAND,
+                ),
+            ],
+        ),
+        (
+            "effect-column extra-fine portamento",
+            [
+                EffectCommand::default(),
+                effect(
+                    XM_WRITER_INTERNAL_EXTRA_FINE_PORTA_EFFECT,
+                    XM_WRITER_EXTRA_FINE_PORTA_SOURCE_OPERAND,
+                ),
+            ],
+        ),
+        (
+            "volume column set volume",
+            [
+                effect(XM_WRITER_VOLUME_EFFECT, XM_WRITER_FULL_VOLUME_255),
+                effect(
+                    XM_WRITER_INTERNAL_ARPEGGIO_EFFECT,
+                    XM_WRITER_ARPEGGIO_OPERAND,
+                ),
+            ],
+        ),
+        (
+            "volume column volume slide up",
+            [
+                effect(
+                    XM_WRITER_VOLUME_SLIDE_EFFECT,
+                    XM_WRITER_VOLUME_SLIDE_UP_OPERAND,
+                ),
+                effect(
+                    XM_WRITER_INTERNAL_ARPEGGIO_EFFECT,
+                    XM_WRITER_ARPEGGIO_OPERAND,
+                ),
+            ],
+        ),
+        (
+            "volume column volume slide down",
+            [
+                effect(
+                    XM_WRITER_VOLUME_SLIDE_EFFECT,
+                    XM_WRITER_VOLUME_SLIDE_DOWN_OPERAND,
+                ),
+                effect(
+                    XM_WRITER_INTERNAL_ARPEGGIO_EFFECT,
+                    XM_WRITER_ARPEGGIO_OPERAND,
+                ),
+            ],
+        ),
+        (
+            "volume column fine volume slide up",
+            [
+                effect(
+                    XM_WRITER_INTERNAL_EXTENDED_EFFECT,
+                    XM_WRITER_FINE_VOLUME_SLIDE_UP_OPERAND,
+                ),
+                effect(
+                    XM_WRITER_INTERNAL_ARPEGGIO_EFFECT,
+                    XM_WRITER_ARPEGGIO_OPERAND,
+                ),
+            ],
+        ),
+        (
+            "volume column fine volume slide down",
+            [
+                effect(
+                    XM_WRITER_INTERNAL_FINE_VOLUME_SLIDE_DOWN_EFFECT,
+                    XM_WRITER_FINE_VOLUME_SLIDE_DOWN_OPERAND,
+                ),
+                effect(
+                    XM_WRITER_INTERNAL_ARPEGGIO_EFFECT,
+                    XM_WRITER_ARPEGGIO_OPERAND,
+                ),
+            ],
+        ),
+        (
+            "volume column vibrato speed",
+            [
+                effect(XM_WRITER_VIBRATO_EFFECT, XM_WRITER_VIBRATO_SPEED_OPERAND),
+                effect(
+                    XM_WRITER_INTERNAL_ARPEGGIO_EFFECT,
+                    XM_WRITER_ARPEGGIO_OPERAND,
+                ),
+            ],
+        ),
+        (
+            "volume column vibrato depth",
+            [
+                effect(XM_WRITER_VIBRATO_EFFECT, XM_WRITER_VIBRATO_DEPTH_OPERAND),
+                effect(
+                    XM_WRITER_INTERNAL_ARPEGGIO_EFFECT,
+                    XM_WRITER_ARPEGGIO_OPERAND,
+                ),
+            ],
+        ),
+        (
+            "volume column panning set",
+            [
+                effect(XM_WRITER_PANNING_EFFECT, XM_WRITER_CENTER_PANNING_255),
+                effect(
+                    XM_WRITER_INTERNAL_ARPEGGIO_EFFECT,
+                    XM_WRITER_ARPEGGIO_OPERAND,
+                ),
+            ],
+        ),
+        (
+            "volume column panning slide left",
+            [
+                effect(
+                    XM_WRITER_PANNING_SLIDE_EFFECT,
+                    XM_WRITER_PANNING_SLIDE_LEFT_OPERAND,
+                ),
+                effect(
+                    XM_WRITER_INTERNAL_ARPEGGIO_EFFECT,
+                    XM_WRITER_ARPEGGIO_OPERAND,
+                ),
+            ],
+        ),
+        (
+            "volume column panning slide right",
+            [
+                effect(
+                    XM_WRITER_PANNING_SLIDE_EFFECT,
+                    XM_WRITER_PANNING_SLIDE_RIGHT_OPERAND,
+                ),
+                effect(
+                    XM_WRITER_INTERNAL_ARPEGGIO_EFFECT,
+                    XM_WRITER_ARPEGGIO_OPERAND,
+                ),
+            ],
+        ),
+        (
+            "volume column tone portamento high nibble",
+            [
+                effect(
+                    XM_WRITER_TONE_PORTAMENTO_EFFECT,
+                    XM_WRITER_HIGH_NIBBLE_TONE_PORTAMENTO_OPERAND,
+                ),
+                effect(
+                    XM_WRITER_INTERNAL_ARPEGGIO_EFFECT,
+                    XM_WRITER_ARPEGGIO_OPERAND,
+                ),
+            ],
+        ),
+    ] {
+        let cell = roundtrip_single_cell_module(effects.to_vec());
+
+        assert_eq!(cell.note, Note::Key(XM_WRITER_TEST_NOTE), "{name}");
+        assert_eq!(cell.instrument, XM_WRITER_TEST_INSTRUMENT, "{name}");
+        assert_eq!(cell.effects, effects.to_vec(), "{name}");
     }
 }
 
@@ -1051,6 +1232,32 @@ fn write_single_cell_pattern(effects: Vec<EffectCommand>) -> Vec<u8> {
     module.patterns = vec![pattern];
 
     write_header_and_patterns(&module)
+}
+
+fn roundtrip_single_cell_module(effects: Vec<EffectCommand>) -> PatternCell {
+    let mut module = Module::empty_with_channels(XM_WRITER_TEST_CHANNELS).unwrap();
+    let mut pattern = Pattern::new(
+        XM_WRITER_TEST_ROWS,
+        XM_WRITER_TEST_CHANNELS,
+        XM_WRITER_TEST_EFFECT_SLOTS,
+    );
+    pattern
+        .set_cell(
+            0,
+            0,
+            PatternCell {
+                note: Note::Key(XM_WRITER_TEST_NOTE),
+                instrument: XM_WRITER_TEST_INSTRUMENT,
+                effects,
+            },
+        )
+        .unwrap();
+    module.patterns = vec![pattern];
+
+    let written = write_xm_module(&module).unwrap();
+    let reparsed = parse_xm_module(&written).unwrap();
+
+    reparsed.patterns[0].cell(0, 0).unwrap().clone()
 }
 
 fn first_raw_pattern_cell(bytes: &[u8]) -> &[u8] {

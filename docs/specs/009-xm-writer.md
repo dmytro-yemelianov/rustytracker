@@ -6,8 +6,9 @@ The XM writer starts with the fixed module header, active order table, pattern
 headers/cells, the first MilkyTracker-compatible effect inverse mappings, and
 instrument/sample headers with 8-bit and 16-bit delta-coded sample payloads.
 Bundled fixtures now have active `XM -> core -> XM -> core` normalized
-roundtrip coverage. Additional synthetic effect cases should continue expanding
-the symmetric mapping surface beyond the bundled fixture corpus.
+roundtrip coverage. Synthetic full-module tests cover the supported effect
+inverse mappings that are not guaranteed to appear in the bundled fixture
+corpus.
 
 ## References
 
@@ -61,6 +62,8 @@ The writer tests verify:
 - 16-bit sample lengths and loop fields are written as byte counts
 - bundled XM fixtures parse, write, and parse again to equivalent normalized
   core summaries
+- synthetic effect cells parse, write, and parse again through the full module
+  writer for the supported effect-column and volume-column inverse mappings
 - sample header fields that cannot fit XM `u32` fields fail before bytes are
   returned
 

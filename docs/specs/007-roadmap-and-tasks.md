@@ -106,8 +106,10 @@ Done:
 - add symmetric parser/writer coverage for fine volume-slide volume-column
   commands
 - add `XM -> core -> XM -> core` normalized equality tests for bundled fixtures
+- add synthetic full-module roundtrip coverage for supported effect-column and
+  volume-column inverse mappings
 
-Remaining: none.
+Remaining: instrument-specific synthetic edge cases.
 
 Acceptance:
 
@@ -188,7 +190,7 @@ Acceptance:
 
 ## Immediate Backlog
 
-1. Use normalized equality checks to add synthetic roundtrip coverage for effect
-   and instrument edge cases not present in the bundled fixtures.
+1. Use normalized equality checks to add synthetic roundtrip coverage for
+   instrument edge cases not present in the bundled fixtures.
 2. Start Milestone 4 playback skeleton planning once the roundtrip edge-case
    backlog is stable.
