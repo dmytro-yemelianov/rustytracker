@@ -1,4 +1,4 @@
-use rustytracker_core::{Module, Pattern, DEFAULT_EFFECT_SLOTS};
+use rustytracker_core::{Module, Note, Pattern, PatternCell, DEFAULT_EFFECT_SLOTS};
 use rustytracker_play::{
     PlaybackClock, PlaybackCursor, PlaybackError, PlaybackTiming, RowAdvance, TickAdvance,
     PLAYBACK_FIRST_ORDER_INDEX, PLAYBACK_FIRST_ROW, PLAYBACK_FIRST_TICK, PLAYBACK_ORDER_STEP,
@@ -6,6 +6,9 @@ use rustytracker_play::{
 };
 
 const PLAY_TEST_CHANNELS: u16 = 1;
+const PLAY_TEST_TWO_CHANNELS: u16 = 2;
+const PLAY_TEST_CHANNEL_ZERO: u16 = 0;
+const PLAY_TEST_CHANNEL_ONE: u16 = 1;
 const PLAY_TEST_PATTERN_ZERO: u8 = 0;
 const PLAY_TEST_PATTERN_ONE: u8 = 1;
 const PLAY_TEST_FIRST_PATTERN_INDEX: usize = 0;
@@ -15,6 +18,7 @@ const PLAY_TEST_ONE_ROW: u16 = 1;
 const PLAY_TEST_TWO_ROWS: u16 = 2;
 const PLAY_TEST_THREE_ROWS: u16 = 3;
 const PLAY_TEST_DEFAULT_TICK_SPEED: u16 = 6;
+const PLAY_TEST_ONE_TICK_PER_ROW: u16 = 1;
 const PLAY_TEST_THREE_TICKS_PER_ROW: u16 = 3;
 const PLAY_TEST_DEFAULT_BPM: u16 = 125;
 const PLAY_TEST_FAST_BPM: u16 = 250;
@@ -26,6 +30,12 @@ const PLAY_TEST_DEFAULT_ROW_NANOS: u64 =
 const PLAY_TEST_FAST_TICK_NANOS: u64 = 10_000_000;
 const PLAY_TEST_FAST_ROW_NANOS: u64 =
     PLAY_TEST_FAST_TICK_NANOS * PLAY_TEST_THREE_TICKS_PER_ROW as u64;
+const PLAY_TEST_CHANNEL_ZERO_NOTE: u8 = 49;
+const PLAY_TEST_CHANNEL_ONE_NOTE: u8 = 50;
+const PLAY_TEST_ROW_ONE_NOTE: u8 = 51;
+const PLAY_TEST_CHANNEL_ZERO_INSTRUMENT: u8 = 1;
+const PLAY_TEST_CHANNEL_ONE_INSTRUMENT: u8 = 2;
+const PLAY_TEST_ROW_ONE_INSTRUMENT: u8 = 3;
 
 #[test]
 fn starts_at_first_order_first_row() {
@@ -224,6 +234,101 @@ fn playback_clock_reports_song_end_without_moving_past_final_tick() {
     );
 }
 
+#[test]
+fn row_state_returns_current_row_cells_for_active_channels() {
+    let channel_zero_cell = test_cell(
+        PLAY_TEST_CHANNEL_ZERO_NOTE,
+        PLAY_TEST_CHANNEL_ZERO_INSTRUMENT,
+    );
+    let channel_one_cell = test_cell(PLAY_TEST_CHANNEL_ONE_NOTE, PLAY_TEST_CHANNEL_ONE_INSTRUMENT);
+    let module = module_with_two_channel_cells(
+        PLAY_TEST_ONE_ROW,
+        &[
+            (
+                PLAY_TEST_CHANNEL_ZERO,
+                PLAYBACK_FIRST_ROW,
+                channel_zero_cell.clone(),
+            ),
+            (
+                PLAY_TEST_CHANNEL_ONE,
+                PLAYBACK_FIRST_ROW,
+                channel_one_cell.clone(),
+            ),
+        ],
+    );
+    let clock = PlaybackClock::start(&module).unwrap();
+
+    let row_state = clock.row_state(&module).unwrap();
+
+    assert_eq!(row_state.position.order_index, PLAYBACK_FIRST_ORDER_INDEX);
+    assert_eq!(row_state.position.row, PLAYBACK_FIRST_ROW);
+    assert_eq!(row_state.channels.len(), PLAY_TEST_TWO_CHANNELS as usize);
+    assert_eq!(
+        row_state.channels[PLAY_TEST_CHANNEL_ZERO as usize].channel,
+        PLAY_TEST_CHANNEL_ZERO
+    );
+    assert_eq!(
+        row_state.channels[PLAY_TEST_CHANNEL_ZERO as usize].cell,
+        channel_zero_cell
+    );
+    assert_eq!(
+        row_state.channels[PLAY_TEST_CHANNEL_ONE as usize].channel,
+        PLAY_TEST_CHANNEL_ONE
+    );
+    assert_eq!(
+        row_state.channels[PLAY_TEST_CHANNEL_ONE as usize].cell,
+        channel_one_cell
+    );
+}
+
+#[test]
+fn row_state_follows_tick_driven_row_advance() {
+    let row_one_cell = test_cell(PLAY_TEST_ROW_ONE_NOTE, PLAY_TEST_ROW_ONE_INSTRUMENT);
+    let mut module = module_with_two_channel_cells(
+        PLAY_TEST_TWO_ROWS,
+        &[(
+            PLAY_TEST_CHANNEL_ZERO,
+            PLAYBACK_FIRST_ROW + PLAYBACK_ROW_STEP,
+            row_one_cell.clone(),
+        )],
+    );
+    module.header.tick_speed = PLAY_TEST_ONE_TICK_PER_ROW;
+    let mut clock = PlaybackClock::start(&module).unwrap();
+
+    assert_eq!(clock.advance_tick(&module).unwrap(), TickAdvance::NextRow);
+
+    let row_state = clock.row_state(&module).unwrap();
+    assert_eq!(
+        row_state.position.row,
+        PLAYBACK_FIRST_ROW + PLAYBACK_ROW_STEP
+    );
+    assert_eq!(
+        row_state.channels[PLAY_TEST_CHANNEL_ZERO as usize].cell,
+        row_one_cell
+    );
+}
+
+#[test]
+fn row_state_rejects_patterns_with_too_few_channels() {
+    let mut module = Module::empty_with_channels(PLAY_TEST_TWO_CHANNELS).unwrap();
+    module.orders = vec![PLAY_TEST_PATTERN_ZERO];
+    module.patterns = vec![Pattern::new(
+        PLAY_TEST_ONE_ROW,
+        PLAY_TEST_CHANNELS,
+        DEFAULT_EFFECT_SLOTS,
+    )];
+    let clock = PlaybackClock::start(&module).unwrap();
+
+    assert_eq!(
+        clock.row_state(&module).unwrap_err(),
+        PlaybackError::PatternChannelOutOfRange {
+            pattern_index: PLAY_TEST_FIRST_PATTERN_INDEX,
+            module_channels: PLAY_TEST_TWO_CHANNELS,
+            pattern_channels: PLAY_TEST_CHANNELS,
+        }
+    );
+}
+
 fn module_with_orders_and_pattern_rows(orders: Vec<u8>, rows: &[u16]) -> Module {
     let mut module = Module::empty_with_channels(PLAY_TEST_CHANNELS).unwrap();
     module.orders = orders;
@@ -233,4 +338,25 @@ fn module_with_orders_and_pattern_rows(orders: Vec<u8>, rows: &[u16]) -> Module 
         .collect();
 
     module
+}
+
+fn module_with_two_channel_cells(rows: u16, cells: &[(u16, u16, PatternCell)]) -> Module {
+    let mut module = Module::empty_with_channels(PLAY_TEST_TWO_CHANNELS).unwrap();
+    module.orders = vec![PLAY_TEST_PATTERN_ZERO];
+    let mut pattern = Pattern::new(rows, PLAY_TEST_TWO_CHANNELS, DEFAULT_EFFECT_SLOTS);
+
+    for (channel, row, cell) in cells {
+        pattern.set_cell(*channel, *row, cell.clone()).unwrap();
+    }
+
+    module.patterns = vec![pattern];
+    module
+}
+
+fn test_cell(note: u8, instrument: u8) -> PatternCell {
+    PatternCell {
+        note: Note::Key(note),
+        instrument,
+        ..PatternCell::default()
+    }
 }

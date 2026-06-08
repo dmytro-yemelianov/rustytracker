@@ -3,8 +3,9 @@
 //! Audio mixing and effect execution will build on this crate. The first slice
 //! keeps traversal explicit and testable.
 
-use rustytracker_core::{Module, Pattern};
+use rustytracker_core::{Module, Pattern, PatternCell};
 
+pub const PLAYBACK_FIRST_CHANNEL: u16 = 0;
 pub const PLAYBACK_FIRST_ORDER_INDEX: usize = 0;
 pub const PLAYBACK_FIRST_ROW: u16 = 0;
 pub const PLAYBACK_FIRST_TICK: u16 = 0;
@@ -41,6 +42,11 @@ pub enum PlaybackError {
         row: u16,
         rows: u16,
     },
+    PatternChannelOutOfRange {
+        pattern_index: usize,
+        module_channels: u16,
+        pattern_channels: u16,
+    },
 }
 
 pub type PlaybackResult<T> = Result<T, PlaybackError>;
@@ -50,6 +56,18 @@ pub struct PlaybackPosition {
     pub order_index: usize,
     pub pattern_index: usize,
     pub row: u16,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChannelRowState {
+    pub channel: u16,
+    pub cell: PatternCell,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaybackRowState {
+    pub position: PlaybackPosition,
+    pub channels: Vec<ChannelRowState>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -138,6 +156,10 @@ impl PlaybackCursor {
         })
     }
 
+    pub fn row_state(&self, module: &Module) -> PlaybackResult<PlaybackRowState> {
+        row_state_for_position(module, self.position(module)?)
+    }
+
     pub fn advance_row(&mut self, module: &Module) -> PlaybackResult<RowAdvance> {
         let position = self.position(module)?;
         let pattern = pattern_for_row(module, position.pattern_index, position.row)?;
@@ -191,6 +213,10 @@ impl PlaybackClock {
 
     pub fn position(&self, module: &Module) -> PlaybackResult<PlaybackPosition> {
         self.cursor.position(module)
+    }
+
+    pub fn row_state(&self, module: &Module) -> PlaybackResult<PlaybackRowState> {
+        self.cursor.row_state(module)
     }
 
     pub fn advance_tick(&mut self, module: &Module) -> PlaybackResult<TickAdvance> {
@@ -252,4 +278,33 @@ fn pattern_for_row(module: &Module, pattern_index: usize, row: u16) -> PlaybackR
     }
 
     Ok(pattern)
+}
+
+fn row_state_for_position(
+    module: &Module,
+    position: PlaybackPosition,
+) -> PlaybackResult<PlaybackRowState> {
+    let pattern = &module.patterns[position.pattern_index];
+    let module_channels = module.header.channel_count;
+    let pattern_channels = pattern.channels();
+
+    if module_channels > pattern_channels {
+        return Err(PlaybackError::PatternChannelOutOfRange {
+            pattern_index: position.pattern_index,
+            module_channels,
+            pattern_channels,
+        });
+    }
+
+    let channels = (PLAYBACK_FIRST_CHANNEL..module_channels)
+        .map(|channel| ChannelRowState {
+            channel,
+            cell: pattern
+                .cell(channel, position.row)
+                .expect("row state validates channel and row bounds before reading")
+                .clone(),
+        })
+        .collect();
+
+    Ok(PlaybackRowState { position, channels })
 }

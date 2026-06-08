@@ -135,10 +135,11 @@ Done:
 - report song end without moving the cursor into an invalid row
 - reject orders that reference missing patterns
 - implement row/tick timing from speed/BPM
+- expose current-row channel cell state for active module channels
 
 Tasks:
 
-- implement channel state
+- implement mutable per-channel playback state for sample/effect execution
 - mix decoded sample data without interpolation first
 - add short deterministic PCM fixture tests
 
@@ -203,6 +204,6 @@ Acceptance:
 
 ## Immediate Backlog
 
-1. Add per-channel row state to `rustytracker-play`.
+1. Add mutable per-channel playback state for sample/effect execution.
 2. Keep adding focused XM writer/parser edge cases when playback or future
    compatibility work exposes a concrete gap.
