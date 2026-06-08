@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/rustytracker-cli",
     "crates/rustytracker-core",
     "crates/rustytracker-xm",
 ]

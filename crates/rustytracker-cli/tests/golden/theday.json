@@ -1,0 +1,3993 @@
+{
+  "schema_version": 1,
+  "format": "xm",
+  "header": {
+    "title": "the day they landed",
+    "channel_count": 8,
+    "frequency_table": "linear",
+    "bpm": 160,
+    "tick_speed": 8,
+    "main_volume": 255,
+    "restart_position": 0
+  },
+  "orders": [
+    0,
+    2,
+    3,
+    4,
+    5,
+    1,
+    6,
+    9,
+    7,
+    8,
+    10,
+    15,
+    17,
+    16,
+    12,
+    14,
+    11,
+    13,
+    18,
+    19,
+    20,
+    21,
+    24,
+    25,
+    26,
+    22,
+    23,
+    27,
+    28,
+    28,
+    28,
+    29,
+    30,
+    31,
+    30,
+    32,
+    33,
+    34,
+    35,
+    36,
+    38,
+    39,
+    40,
+    37,
+    41
+  ],
+  "patterns": [
+    {
+      "index": 0,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 433,
+      "expanded_cell_checksum": 49397426816049923
+    },
+    {
+      "index": 1,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 408,
+      "expanded_cell_checksum": 17628724510381934089
+    },
+    {
+      "index": 2,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 440,
+      "expanded_cell_checksum": 13755091584950335689
+    },
+    {
+      "index": 3,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 460,
+      "expanded_cell_checksum": 8332516357863259346
+    },
+    {
+      "index": 4,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 419,
+      "expanded_cell_checksum": 17256675558665537643
+    },
+    {
+      "index": 5,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 416,
+      "expanded_cell_checksum": 966314505052798822
+    },
+    {
+      "index": 6,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 408,
+      "expanded_cell_checksum": 9808533665367225487
+    },
+    {
+      "index": 7,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 403,
+      "expanded_cell_checksum": 135940926802615476
+    },
+    {
+      "index": 8,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 418,
+      "expanded_cell_checksum": 15940465469186478158
+    },
+    {
+      "index": 9,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 402,
+      "expanded_cell_checksum": 3110595942589293051
+    },
+    {
+      "index": 10,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 284,
+      "expanded_cell_checksum": 15133459975459655409
+    },
+    {
+      "index": 11,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 250,
+      "expanded_cell_checksum": 10739713150265299048
+    },
+    {
+      "index": 12,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 235,
+      "expanded_cell_checksum": 12696268097073149863
+    },
+    {
+      "index": 13,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 236,
+      "expanded_cell_checksum": 5796085235581852531
+    },
+    {
+      "index": 14,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 255,
+      "expanded_cell_checksum": 9528019276711304607
+    },
+    {
+      "index": 15,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 318,
+      "expanded_cell_checksum": 2998953539101513996
+    },
+    {
+      "index": 16,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 277,
+      "expanded_cell_checksum": 2164379898185167863
+    },
+    {
+      "index": 17,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 319,
+      "expanded_cell_checksum": 10967620156157925582
+    },
+    {
+      "index": 18,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 322,
+      "expanded_cell_checksum": 3870210395466148062
+    },
+    {
+      "index": 19,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 346,
+      "expanded_cell_checksum": 17110221887506750427
+    },
+    {
+      "index": 20,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 348,
+      "expanded_cell_checksum": 4459551871514268213
+    },
+    {
+      "index": 21,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 342,
+      "expanded_cell_checksum": 7198339838246062145
+    },
+    {
+      "index": 22,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 370,
+      "expanded_cell_checksum": 8521641053378864371
+    },
+    {
+      "index": 23,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 343,
+      "expanded_cell_checksum": 5733505713096779887
+    },
+    {
+      "index": 24,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 349,
+      "expanded_cell_checksum": 10061973370019926803
+    },
+    {
+      "index": 25,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 348,
+      "expanded_cell_checksum": 3540890447101771091
+    },
+    {
+      "index": 26,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 344,
+      "expanded_cell_checksum": 2249785867321830268
+    },
+    {
+      "index": 27,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 359,
+      "expanded_cell_checksum": 11131168117215070137
+    },
+    {
+      "index": 28,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 117,
+      "expanded_cell_checksum": 7270227382075889326
+    },
+    {
+      "index": 29,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 119,
+      "expanded_cell_checksum": 18102075503662278331
+    },
+    {
+      "index": 30,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 151,
+      "expanded_cell_checksum": 4560051597275981196
+    },
+    {
+      "index": 31,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 90,
+      "expanded_cell_checksum": 6722155529479195003
+    },
+    {
+      "index": 32,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 107,
+      "expanded_cell_checksum": 5204538901796872991
+    },
+    {
+      "index": 33,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 172,
+      "expanded_cell_checksum": 13586096462080204544
+    },
+    {
+      "index": 34,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 171,
+      "expanded_cell_checksum": 3613053041043533934
+    },
+    {
+      "index": 35,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 172,
+      "expanded_cell_checksum": 3796208450799984252
+    },
+    {
+      "index": 36,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 180,
+      "expanded_cell_checksum": 3361437434692118612
+    },
+    {
+      "index": 37,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 187,
+      "expanded_cell_checksum": 1337857939158907824
+    },
+    {
+      "index": 38,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 175,
+      "expanded_cell_checksum": 11498100203153904165
+    },
+    {
+      "index": 39,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 171,
+      "expanded_cell_checksum": 10027089495965044886
+    },
+    {
+      "index": 40,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 172,
+      "expanded_cell_checksum": 3872041714496751252
+    },
+    {
+      "index": 41,
+      "rows": 64,
+      "channels": 8,
+      "effect_slots": 2,
+      "non_empty_cells": 116,
+      "expanded_cell_checksum": 4414219595728914961
+    }
+  ],
+  "instruments": [
+    {
+      "index": 0,
+      "name": "2                    0",
+      "sample_slots": [
+        0,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "note_sample_map_checksum": 5078316153582996741,
+      "volume_envelope": {
+        "point_count": 2,
+        "sustain_point": 0,
+        "loop_start_point": 0,
+        "loop_end_point": 1,
+        "flags": 0,
+        "points": [
+          {
+            "frame": 0,
+            "value": 256
+          },
+          {
+            "frame": 32,
+            "value": 256
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          }
+        ]
+      },
+      "panning_envelope": {
+        "point_count": 2,
+        "sustain_point": 0,
+        "loop_start_point": 0,
+        "loop_end_point": 1,
+        "flags": 0,
+        "points": [
+          {
+            "frame": 0,
+            "value": 128
+          },
+          {
+            "frame": 32,
+            "value": 128
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          }
+        ]
+      },
+      "vibrato": {
+        "waveform": 0,
+        "sweep": 0,
+        "depth": 0,
+        "rate": 0
+      },
+      "volume_fadeout": 0
+    },
+    {
+      "index": 1,
+      "name": " Ampli,",
+      "sample_slots": [
+        16,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "note_sample_map_checksum": 11547897413433257221,
+      "volume_envelope": {
+        "point_count": 2,
+        "sustain_point": 0,
+        "loop_start_point": 0,
+        "loop_end_point": 1,
+        "flags": 0,
+        "points": [
+          {
+            "frame": 0,
+            "value": 256
+          },
+          {
+            "frame": 32,
+            "value": 256
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          }
+        ]
+      },
+      "panning_envelope": {
+        "point_count": 2,
+        "sustain_point": 0,
+        "loop_start_point": 0,
+        "loop_end_point": 1,
+        "flags": 0,
+        "points": [
+          {
+            "frame": 0,
+            "value": 128
+          },
+          {
+            "frame": 32,
+            "value": 128
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          }
+        ]
+      },
+      "vibrato": {
+        "waveform": 0,
+        "sweep": 0,
+        "depth": 0,
+        "rate": 0
+      },
+      "volume_fadeout": 0
+    },
+    {
+      "index": 2,
+      "name": "       Kmuland &",
+      "sample_slots": [
+        32,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "note_sample_map_checksum": 9048114538119526789,
+      "volume_envelope": {
+        "point_count": 2,
+        "sustain_point": 0,
+        "loop_start_point": 0,
+        "loop_end_point": 1,
+        "flags": 0,
+        "points": [
+          {
+            "frame": 0,
+            "value": 256
+          },
+          {
+            "frame": 32,
+            "value": 256
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          }
+        ]
+      },
+      "panning_envelope": {
+        "point_count": 2,
+        "sustain_point": 0,
+        "loop_start_point": 0,
+        "loop_end_point": 1,
+        "flags": 0,
+        "points": [
+          {
+            "frame": 0,
+            "value": 128
+          },
+          {
+            "frame": 32,
+            "value": 128
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          }
+        ]
+      },
+      "vibrato": {
+        "waveform": 0,
+        "sweep": 0,
+        "depth": 0,
+        "rate": 0
+      },
+      "volume_fadeout": 0
+    },
+    {
+      "index": 3,
+      "name": "                raina",
+      "sample_slots": [
+        48,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "note_sample_map_checksum": 12219207969444307077,
+      "volume_envelope": {
+        "point_count": 2,
+        "sustain_point": 0,
+        "loop_start_point": 0,
+        "loop_end_point": 1,
+        "flags": 0,
+        "points": [
+          {
+            "frame": 0,
+            "value": 256
+          },
+          {
+            "frame": 32,
+            "value": 256
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          }
+        ]
+      },
+      "panning_envelope": {
+        "point_count": 2,
+        "sustain_point": 0,
+        "loop_start_point": 0,
+        "loop_end_point": 1,
+        "flags": 0,
+        "points": [
+          {
+            "frame": 0,
+            "value": 128
+          },
+          {
+            "frame": 32,
+            "value": 128
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          }
+        ]
+      },
+      "vibrato": {
+        "waveform": 0,
+        "sweep": 0,
+        "depth": 0,
+        "rate": 0
+      },
+      "volume_fadeout": 0
+    },
+    {
+      "index": 4,
+      "name": "",
+      "sample_slots": [
+        64,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "note_sample_map_checksum": 14907307567563206789,
+      "volume_envelope": {
+        "point_count": 2,
+        "sustain_point": 0,
+        "loop_start_point": 0,
+        "loop_end_point": 1,
+        "flags": 0,
+        "points": [
+          {
+            "frame": 0,
+            "value": 256
+          },
+          {
+            "frame": 32,
+            "value": 256
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          }
+        ]
+      },
+      "panning_envelope": {
+        "point_count": 2,
+        "sustain_point": 0,
+        "loop_start_point": 0,
+        "loop_end_point": 1,
+        "flags": 0,
+        "points": [
+          {
+            "frame": 0,
+            "value": 128
+          },
+          {
+            "frame": 32,
+            "value": 128
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          }
+        ]
+      },
+      "vibrato": {
+        "waveform": 0,
+        "sweep": 0,
+        "depth": 0,
+        "rate": 0
+      },
+      "volume_fadeout": 0
+    },
+    {
+      "index": 5,
+      "name": "  Trio Internacional",
+      "sample_slots": [
+        80,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "note_sample_map_checksum": 6552324959458141317,
+      "volume_envelope": {
+        "point_count": 2,
+        "sustain_point": 0,
+        "loop_start_point": 0,
+        "loop_end_point": 1,
+        "flags": 0,
+        "points": [
+          {
+            "frame": 0,
+            "value": 256
+          },
+          {
+            "frame": 32,
+            "value": 256
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          }
+        ]
+      },
+      "panning_envelope": {
+        "point_count": 2,
+        "sustain_point": 0,
+        "loop_start_point": 0,
+        "loop_end_point": 1,
+        "flags": 0,
+        "points": [
+          {
+            "frame": 0,
+            "value": 128
+          },
+          {
+            "frame": 32,
+            "value": 128
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          }
+        ]
+      },
+      "vibrato": {
+        "waveform": 0,
+        "sweep": 0,
+        "depth": 0,
+        "rate": 0
+      },
+      "volume_fadeout": 0
+    },
+    {
+      "index": 6,
+      "name": "0                    8",
+      "sample_slots": [
+        96,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "note_sample_map_checksum": 7414340622554109445,
+      "volume_envelope": {
+        "point_count": 0,
+        "sustain_point": 0,
+        "loop_start_point": 0,
+        "loop_end_point": 0,
+        "flags": 0,
+        "points": [
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          }
+        ]
+      },
+      "panning_envelope": {
+        "point_count": 0,
+        "sustain_point": 0,
+        "loop_start_point": 0,
+        "loop_end_point": 0,
+        "flags": 0,
+        "points": [
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          },
+          {
+            "frame": 0,
+            "value": 0
+          }
+        ]
+      },
+      "vibrato": {
+        "waveform": 0,
+        "sweep": 0,
+        "depth": 0,
+        "rate": 0
+      },
+      "volume_fadeout": 0
+    }
+  ],
+  "samples": [
+    {
+      "index": 0,
+      "name": "",
+      "length": 87,
+      "loop_start": 2,
+      "loop_length": 85,
+      "loop_kind": "forward",
+      "volume": 255,
+      "panning": 100,
+      "flags": 3,
+      "volume_fadeout": 0,
+      "sample_type": 1,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "pcm8",
+        "frames": 87,
+        "checksum": 17242670900743942208,
+        "prefix_i8": [
+          -9,
+          -1,
+          -1,
+          0,
+          85,
+          84,
+          81,
+          80,
+          -80,
+          -80,
+          -80,
+          -76,
+          -74,
+          -73,
+          -70,
+          -69
+        ],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 1,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 2,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 3,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 4,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 5,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 6,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 7,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 8,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 9,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 10,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 11,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 12,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 13,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 14,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 15,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 16,
+      "name": "",
+      "length": 3245,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 100,
+      "flags": 3,
+      "volume_fadeout": 0,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "pcm8",
+        "frames": 3245,
+        "checksum": 18436599229444148705,
+        "prefix_i8": [
+          20,
+          6,
+          -111,
+          -59,
+          77,
+          15,
+          -8,
+          -36,
+          4,
+          15,
+          -22,
+          -13,
+          -51,
+          52,
+          36,
+          -78
+        ],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 17,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 18,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 19,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 20,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 21,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 22,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 23,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 24,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 25,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 26,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 27,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 28,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 29,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 30,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 31,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 32,
+      "name": "",
+      "length": 9768,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 0,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "pcm8",
+        "frames": 9768,
+        "checksum": 8700325640903379492,
+        "prefix_i8": [
+          0,
+          0,
+          38,
+          36,
+          -96,
+          -72,
+          -93,
+          -81,
+          -55,
+          13,
+          90,
+          96,
+          93,
+          94,
+          89,
+          81
+        ],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 33,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 34,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 35,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 36,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 37,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 38,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 39,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 40,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 41,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 42,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 43,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 44,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 45,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 46,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 47,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 48,
+      "name": "",
+      "length": 1800,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 0,
+      "sample_type": 0,
+      "finetune": -28,
+      "relative_note": 29,
+      "data": {
+        "kind": "pcm8",
+        "frames": 1800,
+        "checksum": 3593252665877816435,
+        "prefix_i8": [
+          -1,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          -2,
+          0,
+          0,
+          -1,
+          0,
+          0,
+          0
+        ],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 49,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 50,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 51,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 52,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 53,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 54,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 55,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 56,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 57,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 58,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 59,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 60,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 61,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 62,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 63,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 64,
+      "name": "",
+      "length": 7424,
+      "loop_start": 311,
+      "loop_length": 7113,
+      "loop_kind": "ping_pong",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 0,
+      "sample_type": 2,
+      "finetune": 0,
+      "relative_note": -5,
+      "data": {
+        "kind": "pcm8",
+        "frames": 7424,
+        "checksum": 5727133122907134341,
+        "prefix_i8": [
+          40,
+          40,
+          40,
+          40,
+          40,
+          40,
+          40,
+          40,
+          40,
+          40,
+          40,
+          40,
+          40,
+          40,
+          40,
+          40
+        ],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 65,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 66,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 67,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 68,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 69,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 70,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 71,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 72,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 73,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 74,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 75,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 76,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 77,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 78,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 79,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 80,
+      "name": "",
+      "length": 5536,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 0,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": -17,
+      "data": {
+        "kind": "pcm8",
+        "frames": 5536,
+        "checksum": 720327003064466323,
+        "prefix_i8": [
+          59,
+          86,
+          77,
+          80,
+          77,
+          75,
+          30,
+          -72,
+          -115,
+          -110,
+          -114,
+          -111,
+          -113,
+          -111,
+          -113,
+          -111
+        ],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 81,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 82,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 83,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 84,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 85,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 86,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 87,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 88,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 89,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 90,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 91,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 92,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 93,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 94,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 95,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 96,
+      "name": "",
+      "length": 606,
+      "loop_start": 183,
+      "loop_length": 422,
+      "loop_kind": "ping_pong",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 0,
+      "sample_type": 2,
+      "finetune": 14,
+      "relative_note": -16,
+      "data": {
+        "kind": "pcm8",
+        "frames": 606,
+        "checksum": 10672637035821666635,
+        "prefix_i8": [
+          -2,
+          8,
+          29,
+          25,
+          26,
+          7,
+          -8,
+          -12,
+          -5,
+          28,
+          18,
+          36,
+          8,
+          -14,
+          -31,
+          -30
+        ],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 97,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 98,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 99,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 100,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 101,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 102,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 103,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 104,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 105,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 106,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 107,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 108,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 109,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 110,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    },
+    {
+      "index": 111,
+      "name": "",
+      "length": 0,
+      "loop_start": 0,
+      "loop_length": 0,
+      "loop_kind": "none",
+      "volume": 255,
+      "panning": 128,
+      "flags": 3,
+      "volume_fadeout": 65535,
+      "sample_type": 0,
+      "finetune": 0,
+      "relative_note": 0,
+      "data": {
+        "kind": "empty",
+        "frames": 0,
+        "checksum": 14695981039346656037,
+        "prefix_i8": [],
+        "prefix_i16": []
+      }
+    }
+  ]
+}

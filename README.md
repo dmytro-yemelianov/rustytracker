@@ -20,6 +20,7 @@ MilkyTracker's output.
 ```text
 crates/
   rustytracker-core/   Typed module, pattern, note, instrument, and sample model
+  rustytracker-cli/    Structural dump CLI and golden fixture tests
   rustytracker-xm/     Read-only XM header, pattern metadata, and packed cell decoder
 docs/specs/            Rewrite specs and TDD plan
 ```
@@ -56,3 +57,5 @@ Current coverage:
   payload decoding, ModPlug stereo sample mixing, loop-kind normalization,
   ADPCM unsupported errors, sparse order references, end-to-end load into
   `rustytracker-core::Module`, and malformed input checks.
+- `rustytracker-cli`: `rustytracker dump <module.xm> --format json`, schema
+  validation, and golden structural dumps for bundled fixtures.
