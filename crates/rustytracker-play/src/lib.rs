@@ -146,7 +146,11 @@ pub struct PlaybackEnvelopeState {
 
 impl PlaybackEnvelopeState {
     pub fn new() -> Self {
-        Self { a: 0, b: 1, step: 0 }
+        Self {
+            a: 0,
+            b: 1,
+            step: 0,
+        }
     }
 
     pub fn reset(&mut self) {
@@ -161,13 +165,13 @@ impl PlaybackEnvelopeState {
         }
 
         let num = env.points.len();
-        
+
         // if we're sitting on a sustain point and key is on, we don't advance further
-        if (env.flags & 0x02) != 0 
-            && self.a == env.sustain_point as usize 
+        if (env.flags & 0x02) != 0
+            && self.a == env.sustain_point as usize
             && self.a < num
-            && self.step == env.points[self.a].frame 
-            && keyon 
+            && self.step == env.points[self.a].frame
+            && keyon
         {
             return;
         }
@@ -179,10 +183,9 @@ impl PlaybackEnvelopeState {
         if self.b < num && self.step == env.points[self.b].frame {
             // Check loop
             if (env.flags & 0x04) != 0 {
-                let break_loop = !keyon 
-                    && (env.flags & 0x02) != 0 
-                    && env.sustain_point == env.loop_end_point;
-                
+                let break_loop =
+                    !keyon && (env.flags & 0x02) != 0 && env.sustain_point == env.loop_end_point;
+
                 if !break_loop && self.b == env.loop_end_point as usize {
                     self.a = env.loop_start_point as usize;
                     self.b = (env.loop_start_point + 1) as usize;
@@ -328,7 +331,10 @@ impl PlaybackChannelState {
             }
         }
 
-        let tone_porta = cell.effects.iter().any(|eff| eff.effect == EFFECT_TONE_PORTAMENTO);
+        let tone_porta = cell
+            .effects
+            .iter()
+            .any(|eff| eff.effect == EFFECT_TONE_PORTAMENTO);
 
         match cell.note {
             Note::Empty => Ok(()),
@@ -337,7 +343,8 @@ impl PlaybackChannelState {
                     let volume_envelope_enabled = if let Some(ins_idx) = self.instrument_index {
                         if ins_idx < module.instruments.len() {
                             let ins = &module.instruments[ins_idx];
-                            (ins.volume_envelope.flags & 0x01) != 0 && !ins.volume_envelope.points.is_empty()
+                            (ins.volume_envelope.flags & 0x01) != 0
+                                && !ins.volume_envelope.points.is_empty()
                         } else {
                             false
                         }
@@ -553,8 +560,8 @@ impl PlaybackChannelState {
         if let Some(slot) = active_vibrato_slot {
             let vm = self.calc_vibrato(slot);
             if tick > 0 {
-                self.vibrato_pos[slot] = self.vibrato_pos[slot]
-                    .wrapping_add(self.vibrato_speed[slot]);
+                self.vibrato_pos[slot] =
+                    self.vibrato_pos[slot].wrapping_add(self.vibrato_speed[slot]);
             }
             pitch_offset += vm;
         }
@@ -583,20 +590,30 @@ impl PlaybackChannelState {
                     let ins = &module.instruments[ins_idx];
 
                     // 1. Get values first
-                    volume_envelope_val = self.volume_envelope_state.get_value(&ins.volume_envelope, 256);
-                    panning_envelope_val = self.panning_envelope_state.get_value(&ins.panning_envelope, 128);
+                    volume_envelope_val = self
+                        .volume_envelope_state
+                        .get_value(&ins.volume_envelope, 256);
+                    panning_envelope_val = self
+                        .panning_envelope_state
+                        .get_value(&ins.panning_envelope, 128);
 
                     // 2. Update fadeout
                     if !self.keyon {
-                        self.fadeout_volume = self.fadeout_volume.saturating_sub(u32::from(ins.volume_fadeout));
+                        self.fadeout_volume = self
+                            .fadeout_volume
+                            .saturating_sub(u32::from(ins.volume_fadeout));
                     }
 
                     // 3. Advance envelopes for next tick
-                    self.volume_envelope_state.advance(&ins.volume_envelope, self.keyon);
-                    self.panning_envelope_state.advance(&ins.panning_envelope, self.keyon);
+                    self.volume_envelope_state
+                        .advance(&ins.volume_envelope, self.keyon);
+                    self.panning_envelope_state
+                        .advance(&ins.panning_envelope, self.keyon);
 
                     // 4. Deactivate channel if volume envelope or fadeout reaches 0
-                    if ((ins.volume_envelope.flags & 0x01) != 0 && volume_envelope_val == 0) || self.fadeout_volume == 0 {
+                    if ((ins.volume_envelope.flags & 0x01) != 0 && volume_envelope_val == 0)
+                        || self.fadeout_volume == 0
+                    {
                         self.stop_sample();
                     }
                 }
@@ -626,7 +643,12 @@ impl PlaybackChannelState {
         Ok(())
     }
 
-    fn trigger_key(&mut self, module: &Module, note: u8, start_offset: Option<usize>) -> PlaybackResult<()> {
+    fn trigger_key(
+        &mut self,
+        module: &Module,
+        note: u8,
+        start_offset: Option<usize>,
+    ) -> PlaybackResult<()> {
         self.note = Note::Key(note);
         self.vibrato_pos = [0; 2];
         self.sample_backward = false;
@@ -766,13 +788,16 @@ impl PlaybackChannelState {
                             self.sample_backward = false;
                             self.sample_frame = (loop_start + 1).min(loop_end - 1);
                         } else {
-                            self.sample_frame = self.sample_frame.saturating_sub(PLAYBACK_SAMPLE_FRAME_STEP);
+                            self.sample_frame =
+                                self.sample_frame.saturating_sub(PLAYBACK_SAMPLE_FRAME_STEP);
                         }
                     } else {
-                        let next_frame = self.sample_frame.saturating_add(PLAYBACK_SAMPLE_FRAME_STEP);
+                        let next_frame =
+                            self.sample_frame.saturating_add(PLAYBACK_SAMPLE_FRAME_STEP);
                         if next_frame >= loop_end {
                             self.sample_backward = true;
-                            self.sample_frame = (loop_end as i32 - 2).max(loop_start as i32) as usize;
+                            self.sample_frame =
+                                (loop_end as i32 - 2).max(loop_start as i32) as usize;
                         } else {
                             self.sample_frame = next_frame;
                         }
@@ -1127,7 +1152,11 @@ impl PlaybackState {
         Ok(rendered)
     }
 
-    fn render_raw_mono_frame(&mut self, module: &Module, sample_rate: u32) -> PlaybackResult<RawMonoPcmFrame> {
+    fn render_raw_mono_frame(
+        &mut self,
+        module: &Module,
+        sample_rate: u32,
+    ) -> PlaybackResult<RawMonoPcmFrame> {
         let mut current_bpm = self.clock.timing().bpm() as i64;
 
         if !self.initialized {
@@ -1150,7 +1179,8 @@ impl PlaybackState {
                     if new_bpm != current_bpm {
                         let old_denom = 2 * current_bpm;
                         let new_denom = 2 * new_bpm;
-                        self.tick_samples_fractional_rem = (self.tick_samples_fractional_rem * new_denom) / old_denom;
+                        self.tick_samples_fractional_rem =
+                            (self.tick_samples_fractional_rem * new_denom) / old_denom;
                         current_bpm = new_bpm;
                     }
                     self.tick_samples_fractional_rem += 5 * sample_rate as i64;
@@ -1204,7 +1234,7 @@ impl PlaybackState {
 
         if requested_order.is_some() || requested_row.is_some() {
             let current_pos = self.clock.position(module)?;
-            
+
             let target_order = match requested_order {
                 Some(order) => order,
                 None => {
