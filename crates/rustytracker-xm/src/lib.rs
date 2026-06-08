@@ -38,6 +38,7 @@ const XM_WRITER_SINGLE_EFFECT_SLOT_COUNT: usize = 1;
 const XM_WRITER_EMPTY_INSTRUMENT_HEADER_SIZE: u32 = XM_INSTRUMENT_NO_EXTENSION_MAX_SIZE;
 const XM_WRITER_INSTRUMENT_HEADER_SIZE: u32 =
     XM_INSTRUMENT_BASE_WITH_SAMPLE_HEADER_SIZE + XM_INSTRUMENT_EXTENSION_MAX_LEN as u32;
+const XM_WRITER_EMPTY_INSTRUMENT_SAMPLE_COUNT: usize = 0;
 const XM_WRITER_INSTRUMENT_TYPE: u8 = 0;
 const XM_WRITER_SAMPLE_HEADER_SIZE: u32 = XM_SAMPLE_HEADER_LEN as u32;
 const XM_WRITER_EMPTY_SAMPLE_BYTE_LEN: u32 = 0;
@@ -646,7 +647,8 @@ fn sample_is_active(sample: &Sample) -> bool {
 }
 
 fn instrument_needs_extension_header(sample_count: usize, instrument: &Instrument) -> bool {
-    sample_count != 0 || zero_sample_instrument_has_extension_metadata(instrument)
+    sample_count != XM_WRITER_EMPTY_INSTRUMENT_SAMPLE_COUNT
+        || zero_sample_instrument_has_extension_metadata(instrument)
 }
 
 fn zero_sample_instrument_has_extension_metadata(instrument: &Instrument) -> bool {
