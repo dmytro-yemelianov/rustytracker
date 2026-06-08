@@ -120,8 +120,10 @@ volume, panning, effect memory, envelopes, or cross-channel mixing.
 ## Raw Mono Render Contract
 
 `PlaybackState::render_raw_mono_pcm(&Module, frame_count)` renders a fixed
-number of deterministic mono PCM frames by repeatedly calling
-`step_samples(&Module)`.
+number of deterministic mono PCM frames using the same raw channel stepping
+semantics as `step_samples(&Module)`. The render path accumulates channel frames
+directly so it does not allocate an intermediate channel-frame vector for every
+output frame.
 
 For each output frame:
 
