@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "en-US"
+tone_instructions: "Be direct, technical, and concise. Prioritize correctness, compatibility, tests, and maintainability."
+early_access: false
+
+reviews:
+  profile: "assertive"
+  request_changes_workflow: false
+  high_level_summary: true
+  review_status: true
+  review_details: true
+  collapse_walkthrough: false
+  changed_files_summary: true
+  sequence_diagrams: false
+  poem: false
+  path_filters:
+    - "!target/**"
+    - "!**/*.rs.bk"
+  path_instructions:
+    - path: "**/*.rs"
+      instructions: |
+        RustyTracker is a test-first Rust rewrite of MilkyTracker's core tracker engine.
+        Review Rust changes for MilkyTracker compatibility, typed domain modeling, precise error context, and focused tests.
+        Do not accept scattered magic numbers in production code. Numeric compatibility values must live in named constants or enums near the relevant parser/domain module, with names that explain the format or behavior.
+        Inline literals are acceptable only for obvious zero/one loop mechanics, enum discriminants, local array indexes made clearer by existing constants, and fixture data in tests.
+    - path: "crates/rustytracker-xm/**"
+      instructions: |
+        Treat XM parser behavior as compatibility-sensitive. Check byte offsets, lengths, bit masks, effect mapping, note conversion, and packed-cell decoding against the specs in docs/specs.
+        New parser behavior must have fixture-backed tests or deterministic malformed-input tests before implementation.
+    - path: "docs/specs/**"
+      instructions: |
+        Specs are binding design notes for the rewrite. Flag docs that drift from implemented crate boundaries, TDD policy, or MilkyTracker compatibility behavior.
+  auto_review:
+    enabled: true
+    drafts: false
+    auto_incremental_review: true
+  pre_merge_checks:
+    custom_checks:
+      - mode: "error"
+        name: "Named constants"
+        instructions: |
+          Fail this check when production Rust code introduces unexplained numeric literals for file-format values, tracker limits, byte offsets, bit masks, effect IDs, note values, sizes, or conversion factors.
+          Passing code must place those values in named constants, associated constants, or enums whose names explain the MilkyTracker/XM/core behavior.
+          Do not fail fixture structs, test-only expected data, enum discriminants, or trivial zero/one loop/index mechanics when the surrounding code is clearer as written.
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "docs/specs/006-coding-standards.md"

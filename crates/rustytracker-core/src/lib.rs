@@ -6,11 +6,17 @@
 
 pub const DEFAULT_SONG_CHANNELS: u16 = 8;
 pub const EDITOR_PATTERN_CHANNELS: u16 = 32;
+pub const MIN_CHANNEL_COUNT: u16 = 1;
 pub const DEFAULT_PATTERN_ROWS: u16 = 64;
 pub const DEFAULT_EFFECT_SLOTS: u8 = 2;
 pub const DEFAULT_BPM: u16 = 125;
 pub const DEFAULT_TICK_SPEED: u16 = 6;
 pub const DEFAULT_MAIN_VOLUME: u16 = 255;
+pub const EMPTY_PATTERN_NUMBER: u8 = 0;
+pub const MIN_ACTIVE_ORDERS: usize = 1;
+pub const INSERT_AFTER_OFFSET: usize = 1;
+pub const ORDER_SEQUENCE_STEP: u8 = 1;
+pub const EMPTY_SAMPLE_LENGTH: u32 = 0;
 
 pub const MAX_ORDERS: usize = 256;
 pub const MAX_ACTIVE_ORDERS: usize = 255;
@@ -28,6 +34,11 @@ pub const SAMPLE_DEFAULT_VOLUME: u8 = 0xff;
 pub const SAMPLE_DEFAULT_PANNING: u8 = 0x80;
 pub const SAMPLE_DEFAULT_FLAGS: u8 = 3;
 pub const SAMPLE_DEFAULT_VOLUME_FADEOUT: u16 = 65_535;
+pub const NOTES_PER_OCTAVE: u8 = 12;
+pub const FIRST_XM_NOTE_VALUE: u8 = 1;
+pub const EMPTY_NOTE_VALUE: u8 = 0;
+pub const DEFAULT_INSTRUMENT_NUMBER: u8 = 0;
+pub const DEFAULT_NOTE_SAMPLE_INDEX: usize = 0;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreError {
@@ -116,11 +127,11 @@ pub enum Note {
 impl Note {
     pub fn key(octave: u8, name: NoteName) -> CoreResult<Self> {
         let value = octave
-            .saturating_mul(12)
+            .saturating_mul(NOTES_PER_OCTAVE)
             .saturating_add(name as u8)
-            .saturating_add(1);
+            .saturating_add(FIRST_XM_NOTE_VALUE);
 
-        if (1..=MAX_XM_NOTES).contains(&value) {
+        if (FIRST_XM_NOTE_VALUE..=MAX_XM_NOTES).contains(&value) {
             Ok(Self::Key(value))
         } else {
             Err(CoreError::InvalidNote {
@@ -132,7 +143,7 @@ impl Note {
 
     pub fn raw(self) -> u8 {
         match self {
-            Self::Empty => 0,
+            Self::Empty => EMPTY_NOTE_VALUE,
             Self::Key(value) => value,
             Self::Off => NOTE_OFF_VALUE,
         }
@@ -156,7 +167,7 @@ impl Default for PatternCell {
     fn default() -> Self {
         Self {
             note: Note::Empty,
-            instrument: 0,
+            instrument: DEFAULT_INSTRUMENT_NUMBER,
             effects: vec![EffectCommand::default(); DEFAULT_EFFECT_SLOTS as usize],
         }
     }
@@ -250,7 +261,9 @@ pub struct OrderList {
 
 impl Default for OrderList {
     fn default() -> Self {
-        Self { orders: vec![0] }
+        Self {
+            orders: vec![EMPTY_PATTERN_NUMBER],
+        }
     }
 }
 
@@ -283,8 +296,8 @@ impl OrderList {
     }
 
     pub fn set_len_clamped(&mut self, requested: usize) {
-        let target = requested.clamp(1, MAX_ACTIVE_ORDERS);
-        self.orders.resize(target, 0);
+        let target = requested.clamp(MIN_ACTIVE_ORDERS, MAX_ACTIVE_ORDERS);
+        self.orders.resize(target, EMPTY_PATTERN_NUMBER);
     }
 
     pub fn insert_duplicate_after(&mut self, index: usize) -> CoreResult<()> {
@@ -303,9 +316,14 @@ impl OrderList {
             });
         }
 
-        let highest = self.orders.iter().copied().max().unwrap_or(0);
+        let highest = self
+            .orders
+            .iter()
+            .copied()
+            .max()
+            .unwrap_or(EMPTY_PATTERN_NUMBER);
         let next = highest
-            .checked_add(1)
+            .checked_add(ORDER_SEQUENCE_STEP)
             .ok_or(CoreError::PatternNumberOverflow)?;
         self.insert_after(index, next)?;
         Ok(next)
@@ -319,7 +337,7 @@ impl OrderList {
             });
         }
 
-        if self.orders.len() > 1 {
+        if self.orders.len() > MIN_ACTIVE_ORDERS {
             self.orders.remove(index);
         }
 
@@ -329,7 +347,7 @@ impl OrderList {
     fn insert_after(&mut self, index: usize, pattern: u8) -> CoreResult<()> {
         if self.orders.len() >= MAX_ACTIVE_ORDERS {
             return Err(CoreError::TooManyOrders {
-                requested: self.orders.len() + 1,
+                requested: self.orders.len() + INSERT_AFTER_OFFSET,
                 maximum: MAX_ACTIVE_ORDERS,
             });
         }
@@ -341,7 +359,7 @@ impl OrderList {
             });
         }
 
-        self.orders.insert(index + 1, pattern);
+        self.orders.insert(index + INSERT_AFTER_OFFSET, pattern);
         Ok(())
     }
 }
@@ -363,7 +381,7 @@ impl Instrument {
         Self {
             name: InstrumentName::default(),
             sample_slots,
-            note_sample_map: vec![0; MAX_XM_NOTES as usize],
+            note_sample_map: vec![DEFAULT_NOTE_SAMPLE_INDEX; MAX_XM_NOTES as usize],
         }
     }
 }
@@ -384,9 +402,9 @@ impl Default for Sample {
     fn default() -> Self {
         Self {
             name: SampleName::default(),
-            length: 0,
-            loop_start: 0,
-            loop_length: 0,
+            length: EMPTY_SAMPLE_LENGTH,
+            loop_start: EMPTY_SAMPLE_LENGTH,
+            loop_length: EMPTY_SAMPLE_LENGTH,
             volume: SAMPLE_DEFAULT_VOLUME,
             panning: SAMPLE_DEFAULT_PANNING,
             flags: SAMPLE_DEFAULT_FLAGS,
@@ -422,7 +440,7 @@ impl Module {
     }
 
     pub fn empty_with_channels(channel_count: u16) -> CoreResult<Self> {
-        if channel_count == 0 || channel_count > EDITOR_PATTERN_CHANNELS {
+        if channel_count < MIN_CHANNEL_COUNT || channel_count > EDITOR_PATTERN_CHANNELS {
             return Err(CoreError::InvalidChannelCount(channel_count));
         }
 
@@ -434,9 +452,9 @@ impl Module {
                 bpm: DEFAULT_BPM,
                 tick_speed: DEFAULT_TICK_SPEED,
                 main_volume: DEFAULT_MAIN_VOLUME,
-                restart_position: 0,
+                restart_position: EMPTY_PATTERN_NUMBER as u16,
             },
-            orders: vec![0],
+            orders: vec![EMPTY_PATTERN_NUMBER],
             patterns: vec![Pattern::empty_editor_pattern()],
             instruments: (0..DEFAULT_INSTRUMENTS).map(Instrument::empty).collect(),
             samples: vec![Sample::default(); DEFAULT_SAMPLE_COUNT],
