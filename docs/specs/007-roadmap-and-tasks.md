@@ -108,8 +108,10 @@ Done:
 - add `XM -> core -> XM -> core` normalized equality tests for bundled fixtures
 - add synthetic full-module roundtrip coverage for supported effect-column and
   volume-column inverse mappings
+- add synthetic full-module roundtrip coverage for instrument note-map remapping
+  from nonzero core sample indexes into XM-local sample slots
 
-Remaining: instrument-specific synthetic edge cases.
+Remaining: none identified before playback skeleton work.
 
 Acceptance:
 
@@ -190,7 +192,6 @@ Acceptance:
 
 ## Immediate Backlog
 
-1. Use normalized equality checks to add synthetic roundtrip coverage for
-   instrument edge cases not present in the bundled fixtures.
-2. Start Milestone 4 playback skeleton planning once the roundtrip edge-case
-   backlog is stable.
+1. Start Milestone 4 playback skeleton planning.
+2. Keep adding focused XM writer/parser edge cases when playback or future
+   compatibility work exposes a concrete gap.
