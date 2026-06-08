@@ -188,5 +188,11 @@ serialization.
 - linear/amiga frequency-table flag
 - default tick speed and BPM
 
-The writer currently stops at the header/order table. Pattern, instrument, and
-sample payload writing are separate roundtrip milestones.
+`write_xm_patterns` emits pattern headers after the module header:
+
+- empty patterns use zero packed payload bytes
+- non-empty patterns are emitted as unpacked XM cells
+- note-off values are converted back from the core note-off value to XM `97`
+
+Effect inverse mapping, instrument writing, and sample payload writing are
+separate roundtrip milestones.

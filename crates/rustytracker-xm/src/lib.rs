@@ -31,6 +31,9 @@ const XM_WRITER_TRACKER_NAME: &str = "RustyTracker";
 const XM_WRITER_HEADER_SIZE: u32 = 276;
 const XM_WRITER_AMIGA_FLAGS: u16 = 0x0000;
 const XM_WRITER_EMPTY_ORDER: u8 = 0;
+const XM_WRITER_PATTERN_HEADER_LEN: u32 = XM_PATTERN_HEADER_LEN as u32;
+const XM_WRITER_PATTERN_PACKING_TYPE: u8 = 0;
+const XM_WRITER_EMPTY_VOLUME_COLUMN: u8 = 0;
 const XM_HEADER_FIELD_STEP: usize = 2;
 const XM_RESTART_FIELD_OFFSET: usize = HEADER_FIELDS_OFFSET + XM_HEADER_FIELD_STEP;
 const XM_CHANNELS_FIELD_OFFSET: usize = HEADER_FIELDS_OFFSET + XM_HEADER_FIELD_STEP * 2;
@@ -235,9 +238,23 @@ pub type XmResult<T> = Result<T, XmParseError>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum XmWriteError {
-    TooManyOrders { requested: usize, maximum: usize },
-    TooManyPatterns { requested: usize, maximum: usize },
-    TooManyInstruments { requested: usize, maximum: usize },
+    TooManyOrders {
+        requested: usize,
+        maximum: usize,
+    },
+    TooManyPatterns {
+        requested: usize,
+        maximum: usize,
+    },
+    TooManyInstruments {
+        requested: usize,
+        maximum: usize,
+    },
+    PatternDataTooLong {
+        pattern_index: usize,
+        byte_len: usize,
+        maximum: usize,
+    },
 }
 
 pub type XmWriteResult<T> = Result<T, XmWriteError>;
@@ -503,6 +520,104 @@ pub fn write_xm_header(module: &Module) -> XmWriteResult<Vec<u8>> {
         .copy_from_slice(&module.orders);
 
     Ok(bytes)
+}
+
+pub fn write_xm_patterns(module: &Module) -> XmWriteResult<Vec<u8>> {
+    let mut bytes = Vec::new();
+
+    for (pattern_index, pattern) in module.patterns.iter().enumerate() {
+        let data = if pattern_is_empty(pattern) {
+            Vec::new()
+        } else {
+            write_xm_pattern_data(pattern)
+        };
+
+        if data.len() > U16_MAX_AS_USIZE {
+            return Err(XmWriteError::PatternDataTooLong {
+                pattern_index,
+                byte_len: data.len(),
+                maximum: U16_MAX_AS_USIZE,
+            });
+        }
+
+        let header_offset = bytes.len();
+        bytes.resize(header_offset + XM_PATTERN_HEADER_LEN, ASCII_NUL);
+        write_u32(&mut bytes, header_offset, XM_WRITER_PATTERN_HEADER_LEN);
+        bytes[header_offset + XM_PATTERN_TYPE_OFFSET] = XM_WRITER_PATTERN_PACKING_TYPE;
+        write_u16(
+            &mut bytes,
+            header_offset + XM_PATTERN_ROWS_OFFSET,
+            pattern.rows(),
+        );
+        write_u16(
+            &mut bytes,
+            header_offset + XM_PATTERN_DATA_LEN_OFFSET,
+            data.len() as u16,
+        );
+        bytes.extend_from_slice(&data);
+    }
+
+    Ok(bytes)
+}
+
+fn pattern_is_empty(pattern: &Pattern) -> bool {
+    for row in 0..pattern.rows() {
+        for channel in 0..pattern.channels() {
+            let cell = pattern
+                .cell(channel, row)
+                .expect("writer walks cells inside pattern bounds");
+            if cell.note != Note::Empty
+                || cell.instrument != EMPTY_OPERAND
+                || cell
+                    .effects
+                    .iter()
+                    .any(|effect| *effect != EffectCommand::default())
+            {
+                return false;
+            }
+        }
+    }
+
+    true
+}
+
+fn write_xm_pattern_data(pattern: &Pattern) -> Vec<u8> {
+    let mut bytes = Vec::new();
+
+    for row in 0..pattern.rows() {
+        for channel in 0..pattern.channels() {
+            let cell = pattern
+                .cell(channel, row)
+                .expect("writer walks cells inside pattern bounds");
+            write_xm_cell(&mut bytes, cell);
+        }
+    }
+
+    bytes
+}
+
+fn write_xm_cell(bytes: &mut Vec<u8>, cell: &PatternCell) {
+    let effect = cell
+        .effects
+        .iter()
+        .rev()
+        .find(|effect| **effect != EffectCommand::default())
+        .copied()
+        .unwrap_or_default();
+
+    bytes.push(core_note_to_xm(cell.note));
+    bytes.push(cell.instrument);
+    bytes.push(XM_WRITER_EMPTY_VOLUME_COLUMN);
+    bytes.push(effect.effect);
+    bytes.push(effect.operand);
+}
+
+fn core_note_to_xm(note: Note) -> u8 {
+    match note {
+        Note::Empty => XM_NOTE_EMPTY,
+        Note::Key(value) => value,
+        Note::Off => XM_NOTE_OFF,
+    }
 }
 
 pub fn parse_xm_pattern_headers(

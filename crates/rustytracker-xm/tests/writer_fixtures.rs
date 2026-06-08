@@ -1,8 +1,11 @@
 use std::fs;
 use std::path::PathBuf;
 
-use rustytracker_core::{FrequencyTable, Module, ModuleTitle};
-use rustytracker_xm::{parse_xm_header, parse_xm_module, write_xm_header, XmWriteError};
+use rustytracker_core::{FrequencyTable, Module, ModuleTitle, Note, Pattern, PatternCell};
+use rustytracker_xm::{
+    decode_xm_patterns, parse_xm_header, parse_xm_module, parse_xm_pattern_headers,
+    write_xm_header, write_xm_patterns, XmWriteError,
+};
 
 const FIXTURES: &[&str] = &[
     "milky.xm",
@@ -16,6 +19,14 @@ const XM_WRITER_TEST_HEADER_SIZE: u32 = 276;
 const XM_WRITER_TEST_ORDERS: &[u8] = &[0, 0, 0];
 const XM_WRITER_ORDER_TABLE_LEN: usize = 256;
 const XM_WRITER_OVERLONG_ORDER_LEN: usize = XM_WRITER_ORDER_TABLE_LEN + 1;
+const XM_WRITER_TEST_ROWS: u16 = 1;
+const XM_WRITER_TEST_CHANNELS: u16 = 2;
+const XM_WRITER_TEST_EFFECT_SLOTS: u8 = 2;
+const XM_WRITER_TEST_NOTE: u8 = 49;
+const XM_WRITER_TEST_INSTRUMENT: u8 = 3;
+const XM_WRITER_PATTERN_HEADER_LEN: u32 = 9;
+const XM_WRITER_PATTERN_PACKING_TYPE: u8 = 0;
+const XM_WRITER_EMPTY_PATTERN_DATA_LEN: u16 = 0;
 
 #[test]
 fn writes_empty_module_header_and_order_table() {
@@ -95,8 +106,70 @@ fn rejects_order_tables_that_do_not_fit_in_xm_header() {
     );
 }
 
+#[test]
+fn writes_empty_pattern_headers_without_payload_data() {
+    let module = Module::empty();
+    let bytes = write_header_and_patterns(&module);
+    let header = parse_xm_header(&bytes).unwrap();
+    let pattern_headers = parse_xm_pattern_headers(&bytes, &header).unwrap();
+    let patterns = decode_xm_patterns(&bytes, &header).unwrap();
+
+    assert_eq!(pattern_headers.len(), module.patterns.len());
+    assert_eq!(
+        pattern_headers[0].header_length,
+        XM_WRITER_PATTERN_HEADER_LEN
+    );
+    assert_eq!(
+        pattern_headers[0].packing_type,
+        XM_WRITER_PATTERN_PACKING_TYPE
+    );
+    assert_eq!(
+        pattern_headers[0].packed_data_len,
+        XM_WRITER_EMPTY_PATTERN_DATA_LEN
+    );
+    assert_eq!(patterns[0].rows(), module.patterns[0].rows());
+    assert_eq!(patterns[0].channels(), module.header.channel_count);
+}
+
+#[test]
+fn writes_simple_unpacked_pattern_cells() {
+    let mut module = Module::empty_with_channels(XM_WRITER_TEST_CHANNELS).unwrap();
+    let mut pattern = Pattern::new(
+        XM_WRITER_TEST_ROWS,
+        XM_WRITER_TEST_CHANNELS,
+        XM_WRITER_TEST_EFFECT_SLOTS,
+    );
+    pattern
+        .set_cell(
+            0,
+            0,
+            PatternCell {
+                note: Note::Key(XM_WRITER_TEST_NOTE),
+                instrument: XM_WRITER_TEST_INSTRUMENT,
+                ..PatternCell::default()
+            },
+        )
+        .unwrap();
+    module.patterns = vec![pattern];
+
+    let bytes = write_header_and_patterns(&module);
+    let header = parse_xm_header(&bytes).unwrap();
+    let patterns = decode_xm_patterns(&bytes, &header).unwrap();
+    let cell = patterns[0].cell(0, 0).unwrap();
+
+    assert_eq!(cell.note, Note::Key(XM_WRITER_TEST_NOTE));
+    assert_eq!(cell.instrument, XM_WRITER_TEST_INSTRUMENT);
+    assert_eq!(cell.effects, PatternCell::default().effects);
+}
+
 fn fixture_path(file_name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../../MilkyTracker/resources/music")
         .join(file_name)
+}
+
+fn write_header_and_patterns(module: &Module) -> Vec<u8> {
+    let mut bytes = write_xm_header(module).unwrap();
+    bytes.extend_from_slice(&write_xm_patterns(module).unwrap());
+    bytes
 }

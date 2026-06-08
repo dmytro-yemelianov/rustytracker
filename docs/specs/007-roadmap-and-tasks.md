@@ -89,15 +89,16 @@ Acceptance:
 
 Goal: load and write enough XM to prove structural roundtrip.
 
-Status: in progress in PR #3.
+Status: in progress in PR #4.
 
 Done:
 
 - implement XM writer for header/order table
+- write empty pattern headers and simple unpacked pattern cells
 
 Remaining:
 
-- write patterns from core cells into XM packed pattern data
+- add effect-column inverse mapping for pattern writing
 - write instruments and sample headers
 - write sample payloads using XM delta encoding
 - add `XM -> core -> XM -> core` normalized equality tests
@@ -181,8 +182,8 @@ Acceptance:
 
 ## Immediate Backlog
 
-1. Merge PR #3 after review.
-2. Write patterns from core cells into XM packed pattern data.
+1. Merge PR #4 after review.
+2. Add effect-column inverse mapping for pattern writing.
 3. Write instruments and sample headers.
 4. Write sample payloads using XM delta encoding.
 5. Add `XM -> core -> XM -> core` normalized equality checks.
