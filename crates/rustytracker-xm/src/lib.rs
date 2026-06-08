@@ -98,6 +98,38 @@ const VOL64_TO_255_SHIFT: u32 = 16;
 const BYTE_MASK: u32 = 0xff;
 const XM_PAN_COLUMN_MAX: u8 = 0x0f;
 const FULL_PANNING: u8 = 0xff;
+const XM_INSTRUMENT_SIZE_LEN: usize = 4;
+const XM_INSTRUMENT_SHORT_SIZE_MIN: u32 = 4;
+const XM_INSTRUMENT_NO_EXTENSION_MAX_SIZE: u32 = 29;
+const XM_INSTRUMENT_SHORT_BUFFER_LEN: usize = 29;
+const XM_INSTRUMENT_FIXED_FIELDS_LEN: usize = 25;
+const XM_INSTRUMENT_NAME_LEN: usize = 22;
+const XM_INSTRUMENT_TYPE_OFFSET: usize = 22;
+const XM_INSTRUMENT_SAMPLE_COUNT_OFFSET: usize = 23;
+const XM_INSTRUMENT_BASE_WITH_SAMPLE_HEADER_SIZE: u32 = 33;
+const XM_INSTRUMENT_EXTENSION_MAX_LEN: usize = 230;
+const XM_NOTE_SAMPLE_MAP_LEN: usize = 96;
+const XM_ENVELOPE_POINT_COUNT: usize = 12;
+const XM_ENVELOPE_POINT_BYTES: usize = 4;
+const XM_ENVELOPE_X_OFFSET: usize = 0;
+const XM_ENVELOPE_Y_OFFSET: usize = 2;
+const XM_ENVELOPE_VALUE_SHIFT: u16 = 2;
+const XM_SAMPLE_HEADER_SIZE_LEN: usize = 4;
+const XM_SAMPLE_HEADER_LEN: usize = 40;
+const XM_SAMPLE_NAME_LEN: usize = 22;
+const XM_ENVELOPE_POINT_COUNT_MAX: u8 = XM_ENVELOPE_POINT_COUNT as u8;
+const XM_VIBRATO_DEPTH_SHIFT: u8 = 1;
+const XM_VOLUME_FADEOUT_SHIFT: u16 = 1;
+const XM_SAMPLE_LENGTH_LEN: usize = 4;
+const XM_SAMPLE_LOOP_START_LEN: usize = 4;
+const XM_SAMPLE_LOOP_LENGTH_LEN: usize = 4;
+const XM_SAMPLE_VOLUME_LEN: usize = 1;
+const XM_SAMPLE_FINETUNE_LEN: usize = 1;
+const XM_SAMPLE_TYPE_LEN: usize = 1;
+const XM_SAMPLE_PANNING_LEN: usize = 1;
+const XM_SAMPLE_RELATIVE_NOTE_LEN: usize = 1;
+const XM_SAMPLE_RESERVED_LEN: usize = 1;
+const XM_EMPTY_SAMPLE_DATA_LEN: u32 = 0;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum XmParseError {
@@ -134,6 +166,42 @@ pub enum XmParseError {
         consumed: usize,
         declared: usize,
     },
+    InstrumentHeaderTooShort {
+        instrument_index: usize,
+        expected: usize,
+        actual: usize,
+    },
+    InstrumentBodyTooShort {
+        instrument_index: usize,
+        expected: usize,
+        actual: usize,
+    },
+    InvalidInstrumentSize {
+        instrument_index: usize,
+        size: u32,
+    },
+    InstrumentExtensionTooLong {
+        instrument_index: usize,
+        extension_len: usize,
+        maximum: usize,
+    },
+    TooManyInstrumentSamples {
+        instrument_index: usize,
+        sample_count: u16,
+        maximum: usize,
+    },
+    SampleHeaderTooShort {
+        instrument_index: usize,
+        sample_index: usize,
+        expected: usize,
+        actual: usize,
+    },
+    SampleDataTooShort {
+        instrument_index: usize,
+        sample_index: usize,
+        expected: usize,
+        actual: usize,
+    },
 }
 
 pub type XmResult<T> = Result<T, XmParseError>;
@@ -165,6 +233,66 @@ pub struct XmPatternHeader {
     pub packed_data_len: u16,
     pub packed_data_offset: usize,
     pub next_offset: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct XmInstrumentSection {
+    pub instruments: Vec<XmInstrument>,
+    pub next_offset: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct XmInstrument {
+    pub index: usize,
+    pub header_size: u32,
+    pub name: String,
+    pub instrument_type: u8,
+    pub sample_count: u16,
+    pub sample_header_size: Option<u32>,
+    pub note_sample_map: Option<Vec<u8>>,
+    pub volume_envelope: Option<XmEnvelope>,
+    pub panning_envelope: Option<XmEnvelope>,
+    pub vibrato_type: Option<u8>,
+    pub vibrato_sweep: Option<u8>,
+    pub vibrato_depth: Option<u8>,
+    pub vibrato_rate: Option<u8>,
+    pub volume_fadeout: Option<u16>,
+    pub samples: Vec<XmSampleHeader>,
+    pub next_offset: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct XmEnvelope {
+    pub points: Vec<XmEnvelopePoint>,
+    pub point_count: u8,
+    pub sustain_point: u8,
+    pub loop_start_point: u8,
+    pub loop_end_point: u8,
+    pub flags: u8,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct XmEnvelopePoint {
+    pub frame: u16,
+    pub value: u16,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct XmSampleHeader {
+    pub index: usize,
+    pub length: u32,
+    pub loop_start: u32,
+    pub loop_length: u32,
+    pub volume_64: u8,
+    pub volume: u8,
+    pub finetune: i8,
+    pub sample_type: u8,
+    pub panning: u8,
+    pub relative_note: i8,
+    pub reserved: u8,
+    pub name: String,
+    pub data_offset: usize,
+    pub data_end: usize,
 }
 
 pub fn parse_xm_header(bytes: &[u8]) -> XmResult<XmModuleHeader> {
@@ -336,6 +464,355 @@ pub fn decode_xm_pattern(
     }
 
     Ok(pattern)
+}
+
+pub fn parse_xm_instruments(
+    bytes: &[u8],
+    header: &XmModuleHeader,
+    start_offset: usize,
+) -> XmResult<XmInstrumentSection> {
+    let mut offset = start_offset;
+    let mut instruments = Vec::with_capacity(header.instrument_count as usize);
+
+    for instrument_index in 0..header.instrument_count as usize {
+        let parsed = parse_xm_instrument(bytes, instrument_index, offset)?;
+        offset = parsed.next_offset;
+        instruments.push(parsed);
+    }
+
+    Ok(XmInstrumentSection {
+        instruments,
+        next_offset: offset,
+    })
+}
+
+fn parse_xm_instrument(
+    bytes: &[u8],
+    instrument_index: usize,
+    start_offset: usize,
+) -> XmResult<XmInstrument> {
+    ensure_instrument_range(
+        bytes,
+        start_offset,
+        XM_INSTRUMENT_SIZE_LEN,
+        instrument_index,
+        true,
+    )?;
+
+    let header_size = read_u32(bytes, start_offset);
+    let mut offset = start_offset + XM_INSTRUMENT_SIZE_LEN;
+    let (name, instrument_type, sample_count) =
+        read_instrument_identity(bytes, instrument_index, header_size, &mut offset)?;
+
+    if sample_count as usize > XM_NOTE_SAMPLE_MAP_LEN {
+        return Err(XmParseError::TooManyInstrumentSamples {
+            instrument_index,
+            sample_count,
+            maximum: XM_NOTE_SAMPLE_MAP_LEN,
+        });
+    }
+
+    let mut instrument = XmInstrument {
+        index: instrument_index,
+        header_size,
+        name,
+        instrument_type,
+        sample_count,
+        sample_header_size: None,
+        note_sample_map: None,
+        volume_envelope: None,
+        panning_envelope: None,
+        vibrato_type: None,
+        vibrato_sweep: None,
+        vibrato_depth: None,
+        vibrato_rate: None,
+        volume_fadeout: None,
+        samples: Vec::with_capacity(sample_count as usize),
+        next_offset: offset,
+    };
+
+    if header_size <= XM_INSTRUMENT_NO_EXTENSION_MAX_SIZE {
+        return Ok(instrument);
+    }
+
+    ensure_instrument_range(
+        bytes,
+        offset,
+        XM_SAMPLE_HEADER_SIZE_LEN,
+        instrument_index,
+        false,
+    )?;
+    instrument.sample_header_size = Some(read_u32(bytes, offset));
+    offset += XM_SAMPLE_HEADER_SIZE_LEN;
+
+    let extension_len = header_size
+        .checked_sub(XM_INSTRUMENT_BASE_WITH_SAMPLE_HEADER_SIZE)
+        .ok_or(XmParseError::InvalidInstrumentSize {
+            instrument_index,
+            size: header_size,
+        })? as usize;
+
+    if extension_len > XM_INSTRUMENT_EXTENSION_MAX_LEN {
+        return Err(XmParseError::InstrumentExtensionTooLong {
+            instrument_index,
+            extension_len,
+            maximum: XM_INSTRUMENT_EXTENSION_MAX_LEN,
+        });
+    }
+
+    ensure_instrument_range(bytes, offset, extension_len, instrument_index, false)?;
+    let mut extension = [ASCII_NUL; XM_INSTRUMENT_EXTENSION_MAX_LEN];
+    extension[..extension_len].copy_from_slice(&bytes[offset..offset + extension_len]);
+    offset += extension_len;
+
+    let extension_data = parse_instrument_extension(&extension);
+    instrument.note_sample_map = Some(extension_data.note_sample_map);
+    instrument.volume_envelope = Some(extension_data.volume_envelope);
+    instrument.panning_envelope = Some(extension_data.panning_envelope);
+    instrument.vibrato_type = Some(extension_data.vibrato_type);
+    instrument.vibrato_sweep = Some(extension_data.vibrato_sweep);
+    instrument.vibrato_depth = Some(extension_data.vibrato_depth);
+    instrument.vibrato_rate = Some(extension_data.vibrato_rate);
+    instrument.volume_fadeout = Some(extension_data.volume_fadeout);
+
+    let mut samples = Vec::with_capacity(sample_count as usize);
+    for sample_index in 0..sample_count as usize {
+        let sample = read_sample_header(bytes, instrument_index, sample_index, offset)?;
+        offset += XM_SAMPLE_HEADER_LEN;
+        samples.push(sample);
+    }
+
+    let mut sample_data_offset = offset;
+    for sample in &mut samples {
+        sample.data_offset = sample_data_offset;
+        sample.data_end = sample_data_offset + sample.length as usize;
+        if sample.data_end > bytes.len() {
+            return Err(XmParseError::SampleDataTooShort {
+                instrument_index,
+                sample_index: sample.index,
+                expected: sample.data_end,
+                actual: bytes.len(),
+            });
+        }
+        sample_data_offset = sample.data_end;
+    }
+
+    instrument.samples = samples;
+    instrument.next_offset = sample_data_offset;
+    Ok(instrument)
+}
+
+fn read_instrument_identity(
+    bytes: &[u8],
+    instrument_index: usize,
+    header_size: u32,
+    offset: &mut usize,
+) -> XmResult<(String, u8, u16)> {
+    if (XM_INSTRUMENT_SHORT_SIZE_MIN..XM_INSTRUMENT_NO_EXTENSION_MAX_SIZE).contains(&header_size) {
+        let payload_len = (header_size - XM_INSTRUMENT_SIZE_LEN as u32) as usize;
+        ensure_instrument_range(bytes, *offset, payload_len, instrument_index, false)?;
+
+        let mut buffer = [ASCII_NUL; XM_INSTRUMENT_SHORT_BUFFER_LEN];
+        buffer[..payload_len].copy_from_slice(&bytes[*offset..*offset + payload_len]);
+        *offset += payload_len;
+
+        return Ok((
+            decode_fixed_text(&buffer[..XM_INSTRUMENT_NAME_LEN]),
+            buffer[XM_INSTRUMENT_TYPE_OFFSET],
+            read_u16(&buffer, XM_INSTRUMENT_SAMPLE_COUNT_OFFSET),
+        ));
+    }
+
+    ensure_instrument_range(
+        bytes,
+        *offset,
+        XM_INSTRUMENT_FIXED_FIELDS_LEN,
+        instrument_index,
+        false,
+    )?;
+
+    let name = decode_fixed_text(&bytes[*offset..*offset + XM_INSTRUMENT_NAME_LEN]);
+    *offset += XM_INSTRUMENT_NAME_LEN;
+    let instrument_type = bytes[*offset];
+    *offset += BYTE_1_OFFSET;
+    let sample_count = read_u16(bytes, *offset);
+    *offset += BYTE_2_OFFSET;
+
+    Ok((name, instrument_type, sample_count))
+}
+
+struct ParsedInstrumentExtension {
+    note_sample_map: Vec<u8>,
+    volume_envelope: XmEnvelope,
+    panning_envelope: XmEnvelope,
+    vibrato_type: u8,
+    vibrato_sweep: u8,
+    vibrato_depth: u8,
+    vibrato_rate: u8,
+    volume_fadeout: u16,
+}
+
+fn parse_instrument_extension(
+    extension: &[u8; XM_INSTRUMENT_EXTENSION_MAX_LEN],
+) -> ParsedInstrumentExtension {
+    let mut offset = 0;
+    let note_sample_map = extension[offset..offset + XM_NOTE_SAMPLE_MAP_LEN].to_vec();
+    offset += XM_NOTE_SAMPLE_MAP_LEN;
+
+    let volume_points = read_envelope_points(extension, offset);
+    offset += XM_ENVELOPE_POINT_COUNT * XM_ENVELOPE_POINT_BYTES;
+    let panning_points = read_envelope_points(extension, offset);
+    offset += XM_ENVELOPE_POINT_COUNT * XM_ENVELOPE_POINT_BYTES;
+
+    let volume_point_count = extension[offset].min(XM_ENVELOPE_POINT_COUNT_MAX);
+    offset += BYTE_1_OFFSET;
+    let panning_point_count = extension[offset].min(XM_ENVELOPE_POINT_COUNT_MAX);
+    offset += BYTE_1_OFFSET;
+    let volume_sustain_point = extension[offset];
+    offset += BYTE_1_OFFSET;
+    let volume_loop_start_point = extension[offset];
+    offset += BYTE_1_OFFSET;
+    let volume_loop_end_point = extension[offset];
+    offset += BYTE_1_OFFSET;
+    let panning_sustain_point = extension[offset];
+    offset += BYTE_1_OFFSET;
+    let panning_loop_start_point = extension[offset];
+    offset += BYTE_1_OFFSET;
+    let panning_loop_end_point = extension[offset];
+    offset += BYTE_1_OFFSET;
+    let volume_flags = extension[offset];
+    offset += BYTE_1_OFFSET;
+    let panning_flags = extension[offset];
+    offset += BYTE_1_OFFSET;
+
+    let vibrato_type = extension[offset];
+    offset += BYTE_1_OFFSET;
+    let vibrato_sweep = extension[offset];
+    offset += BYTE_1_OFFSET;
+    let vibrato_depth = extension[offset] << XM_VIBRATO_DEPTH_SHIFT;
+    offset += BYTE_1_OFFSET;
+    let vibrato_rate = extension[offset];
+    offset += BYTE_1_OFFSET;
+    let volume_fadeout = read_u16(extension, offset) << XM_VOLUME_FADEOUT_SHIFT;
+
+    ParsedInstrumentExtension {
+        note_sample_map,
+        volume_envelope: XmEnvelope {
+            points: volume_points,
+            point_count: volume_point_count,
+            sustain_point: volume_sustain_point,
+            loop_start_point: volume_loop_start_point,
+            loop_end_point: volume_loop_end_point,
+            flags: volume_flags,
+        },
+        panning_envelope: XmEnvelope {
+            points: panning_points,
+            point_count: panning_point_count,
+            sustain_point: panning_sustain_point,
+            loop_start_point: panning_loop_start_point,
+            loop_end_point: panning_loop_end_point,
+            flags: panning_flags,
+        },
+        vibrato_type,
+        vibrato_sweep,
+        vibrato_depth,
+        vibrato_rate,
+        volume_fadeout,
+    }
+}
+
+fn read_envelope_points(bytes: &[u8], offset: usize) -> Vec<XmEnvelopePoint> {
+    (0..XM_ENVELOPE_POINT_COUNT)
+        .map(|point_index| {
+            let point_offset = offset + point_index * XM_ENVELOPE_POINT_BYTES;
+            XmEnvelopePoint {
+                frame: read_u16(bytes, point_offset + XM_ENVELOPE_X_OFFSET),
+                value: read_u16(bytes, point_offset + XM_ENVELOPE_Y_OFFSET)
+                    << XM_ENVELOPE_VALUE_SHIFT,
+            }
+        })
+        .collect()
+}
+
+fn read_sample_header(
+    bytes: &[u8],
+    instrument_index: usize,
+    sample_index: usize,
+    offset: usize,
+) -> XmResult<XmSampleHeader> {
+    if offset + XM_SAMPLE_HEADER_LEN > bytes.len() {
+        return Err(XmParseError::SampleHeaderTooShort {
+            instrument_index,
+            sample_index,
+            expected: offset + XM_SAMPLE_HEADER_LEN,
+            actual: bytes.len(),
+        });
+    }
+
+    let mut cursor = offset;
+    let length = read_u32(bytes, cursor);
+    cursor += XM_SAMPLE_LENGTH_LEN;
+    let loop_start = read_u32(bytes, cursor);
+    cursor += XM_SAMPLE_LOOP_START_LEN;
+    let loop_length = read_u32(bytes, cursor);
+    cursor += XM_SAMPLE_LOOP_LENGTH_LEN;
+    let volume_64 = bytes[cursor];
+    cursor += XM_SAMPLE_VOLUME_LEN;
+    let finetune = bytes[cursor] as i8;
+    cursor += XM_SAMPLE_FINETUNE_LEN;
+    let sample_type = bytes[cursor];
+    cursor += XM_SAMPLE_TYPE_LEN;
+    let panning = bytes[cursor];
+    cursor += XM_SAMPLE_PANNING_LEN;
+    let relative_note = bytes[cursor] as i8;
+    cursor += XM_SAMPLE_RELATIVE_NOTE_LEN;
+    let reserved = bytes[cursor];
+    cursor += XM_SAMPLE_RESERVED_LEN;
+    let name = decode_fixed_text(&bytes[cursor..cursor + XM_SAMPLE_NAME_LEN]);
+
+    Ok(XmSampleHeader {
+        index: sample_index,
+        length,
+        loop_start,
+        loop_length,
+        volume_64,
+        volume: vol64_to_255(volume_64),
+        finetune,
+        sample_type,
+        panning,
+        relative_note,
+        reserved,
+        name,
+        data_offset: XM_EMPTY_SAMPLE_DATA_LEN as usize,
+        data_end: XM_EMPTY_SAMPLE_DATA_LEN as usize,
+    })
+}
+
+fn ensure_instrument_range(
+    bytes: &[u8],
+    offset: usize,
+    len: usize,
+    instrument_index: usize,
+    header: bool,
+) -> XmResult<()> {
+    let expected = offset + len;
+    if expected <= bytes.len() {
+        return Ok(());
+    }
+
+    if header {
+        Err(XmParseError::InstrumentHeaderTooShort {
+            instrument_index,
+            expected,
+            actual: bytes.len(),
+        })
+    } else {
+        Err(XmParseError::InstrumentBodyTooShort {
+            instrument_index,
+            expected,
+            actual: bytes.len(),
+        })
+    }
 }
 
 fn read_xm_slot(

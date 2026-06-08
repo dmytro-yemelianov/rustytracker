@@ -100,3 +100,38 @@ The first XM fixture tests assert:
 
 This gives the later instrument/sample parser an exact byte offset to continue
 from without depending on playback code.
+
+## Instrument And Sample Header Contract
+
+For XM `0x0104`, RustyTracker now parses the instrument section after pattern
+data. The parser mirrors MilkyTracker's loader behavior:
+
+- every declared instrument starts with `u32 instrument_size`
+- short instruments in the `4..29` byte range are read through MilkyTracker's
+  padded 29-byte compatibility buffer
+- instruments with `instrument_size <= 29` have no extension/sample-header data
+- instruments with `instrument_size > 29` consume the declared extension bytes
+  even when `sample_count == 0`
+- the 96-byte note-to-sample map is preserved
+- volume and panning envelopes are read as 12 points each
+- envelope values, vibrato depth, and volume fadeout are scaled the way
+  MilkyTracker scales them during load
+- each sample header is read as the XM 40-byte sample header
+- sample payload bytes are skipped and bounds checked, but PCM data is not yet
+  decoded
+
+The parser exposes:
+
+- `XmInstrumentSection`
+- `XmInstrument`
+- `XmEnvelope`
+- `XmEnvelopePoint`
+- `XmSampleHeader`
+
+Current tests assert instrument counts, empty-instrument counts, sample counts,
+sample-data byte totals, first instrument names, first sample header fields,
+instrument-section end offsets, and truncated instrument/sample-data failures
+for all bundled MilkyTracker XM fixtures.
+
+Next step: implement sample payload decoding for delta-coded 8-bit and 16-bit
+sample data, then normalize sample lengths/loops according to the sample type.
