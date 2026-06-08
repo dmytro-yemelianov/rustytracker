@@ -7,12 +7,23 @@ use rustytracker_core::{Module, Pattern};
 
 pub const PLAYBACK_FIRST_ORDER_INDEX: usize = 0;
 pub const PLAYBACK_FIRST_ROW: u16 = 0;
+pub const PLAYBACK_FIRST_TICK: u16 = 0;
 pub const PLAYBACK_ORDER_STEP: usize = 1;
 pub const PLAYBACK_ROW_STEP: u16 = 1;
+pub const PLAYBACK_TICK_STEP: u16 = 1;
 pub const PLAYBACK_EMPTY_PATTERN_ROWS: u16 = 0;
+pub const PLAYBACK_MIN_TICK_SPEED: u16 = 1;
+pub const PLAYBACK_MIN_BPM: u16 = 1;
+pub const PLAYBACK_XM_TICK_NANOS_AT_ONE_BPM: u64 = 2_500_000_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlaybackError {
+    InvalidTickSpeed {
+        tick_speed: u16,
+    },
+    InvalidBpm {
+        bpm: u16,
+    },
     EmptyOrderList,
     OrderIndexOutOfRange {
         order_index: usize,
@@ -46,6 +57,58 @@ pub enum RowAdvance {
     SameOrder,
     NextOrder,
     SongEnd,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TickAdvance {
+    SameRow,
+    NextRow,
+    NextOrder,
+    SongEnd,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PlaybackTiming {
+    pub tick_speed: u16,
+    pub bpm: u16,
+    pub tick_duration_nanos: u64,
+}
+
+impl PlaybackTiming {
+    pub fn from_module(module: &Module) -> PlaybackResult<Self> {
+        let tick_speed = module.header.tick_speed;
+        if tick_speed < PLAYBACK_MIN_TICK_SPEED {
+            return Err(PlaybackError::InvalidTickSpeed { tick_speed });
+        }
+
+        let bpm = module.header.bpm;
+        if bpm < PLAYBACK_MIN_BPM {
+            return Err(PlaybackError::InvalidBpm { bpm });
+        }
+
+        Ok(Self {
+            tick_speed,
+            bpm,
+            tick_duration_nanos: PLAYBACK_XM_TICK_NANOS_AT_ONE_BPM / u64::from(bpm),
+        })
+    }
+
+    pub fn ticks_per_row(&self) -> u16 {
+        self.tick_speed
+    }
+
+    pub fn bpm(&self) -> u16 {
+        self.bpm
+    }
+
+    pub fn tick_duration_nanos(&self) -> u64 {
+        self.tick_duration_nanos
+    }
+
+    pub fn row_duration_nanos(&self) -> u64 {
+        self.tick_duration_nanos
+            .saturating_mul(u64::from(self.tick_speed))
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -95,6 +158,59 @@ impl PlaybackCursor {
         }
 
         Ok(RowAdvance::SongEnd)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PlaybackClock {
+    cursor: PlaybackCursor,
+    timing: PlaybackTiming,
+    tick: u16,
+}
+
+impl PlaybackClock {
+    pub fn start(module: &Module) -> PlaybackResult<Self> {
+        Ok(Self {
+            cursor: PlaybackCursor::start(module)?,
+            timing: PlaybackTiming::from_module(module)?,
+            tick: PLAYBACK_FIRST_TICK,
+        })
+    }
+
+    pub fn cursor(&self) -> PlaybackCursor {
+        self.cursor
+    }
+
+    pub fn timing(&self) -> PlaybackTiming {
+        self.timing
+    }
+
+    pub fn tick(&self) -> u16 {
+        self.tick
+    }
+
+    pub fn position(&self, module: &Module) -> PlaybackResult<PlaybackPosition> {
+        self.cursor.position(module)
+    }
+
+    pub fn advance_tick(&mut self, module: &Module) -> PlaybackResult<TickAdvance> {
+        let next_tick = self.tick.saturating_add(PLAYBACK_TICK_STEP);
+        if next_tick < self.timing.tick_speed {
+            self.tick = next_tick;
+            return Ok(TickAdvance::SameRow);
+        }
+
+        match self.cursor.advance_row(module)? {
+            RowAdvance::SameOrder => {
+                self.tick = PLAYBACK_FIRST_TICK;
+                Ok(TickAdvance::NextRow)
+            }
+            RowAdvance::NextOrder => {
+                self.tick = PLAYBACK_FIRST_TICK;
+                Ok(TickAdvance::NextOrder)
+            }
+            RowAdvance::SongEnd => Ok(TickAdvance::SongEnd),
+        }
     }
 }
 
