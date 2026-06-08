@@ -141,7 +141,13 @@ const XM_SAMPLE_LOOP_NONE: u8 = 0x00;
 const XM_SAMPLE_LOOP_FORWARD: u8 = 0x01;
 const XM_SAMPLE_LOOP_PING_PONG: u8 = 0x02;
 const XM_SAMPLE_LOOP_UNDEFINED: u8 = 0x03;
+const XM_SAMPLE_STEREO_FLAG: u8 = 0x20;
+const XM_SAMPLE_ADPCM_RESERVED: u8 = 0xad;
 const BYTES_PER_16_BIT_SAMPLE: usize = 2;
+const STEREO_CHANNEL_COUNT: usize = 2;
+const STEREO_CHANNEL_COUNT_U32: u32 = STEREO_CHANNEL_COUNT as u32;
+const STEREO_AVERAGE_SHIFT: u8 = 1;
+const XM_ORDER_REFERENCE_PATTERN_ROWS: u16 = rustytracker_core::DEFAULT_PATTERN_ROWS;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum XmParseError {
@@ -213,6 +219,10 @@ pub enum XmParseError {
         sample_index: usize,
         expected: usize,
         actual: usize,
+    },
+    UnsupportedAdpcmSample {
+        instrument_index: usize,
+        sample_index: usize,
     },
 }
 
@@ -491,6 +501,10 @@ pub fn decode_xm_pattern(
         XM_EXPANDED_EFFECT_SLOTS,
     );
 
+    if data.is_empty() {
+        return Ok(pattern);
+    }
+
     for row in 0..pattern_header.row_count {
         for channel in 0..header.channel_count {
             let slot = read_xm_slot(data, &mut data_cursor, pattern_header.index, row, channel)?;
@@ -515,10 +529,11 @@ pub fn decode_xm_pattern(
 pub fn parse_xm_module(bytes: &[u8]) -> XmResult<Module> {
     let header = parse_xm_header(bytes)?;
     let pattern_headers = parse_xm_pattern_headers(bytes, &header)?;
-    let patterns = pattern_headers
+    let mut patterns = pattern_headers
         .iter()
         .map(|pattern_header| decode_xm_pattern(bytes, &header, pattern_header))
         .collect::<XmResult<Vec<_>>>()?;
+    extend_patterns_for_order_references(&mut patterns, &header);
     let instrument_offset = pattern_headers
         .last()
         .map(|pattern_header| pattern_header.next_offset)
@@ -544,6 +559,23 @@ pub fn parse_xm_module(bytes: &[u8]) -> XmResult<Module> {
             .collect(),
         samples: convert_samples_to_core(&instrument_section.instruments),
     })
+}
+
+fn extend_patterns_for_order_references(patterns: &mut Vec<Pattern>, header: &XmModuleHeader) {
+    let required_pattern_count = header
+        .orders
+        .iter()
+        .map(|&pattern_index| pattern_index as usize + BYTE_1_OFFSET)
+        .max()
+        .unwrap_or(patterns.len());
+
+    while patterns.len() < required_pattern_count {
+        patterns.push(Pattern::new(
+            XM_ORDER_REFERENCE_PATTERN_ROWS,
+            header.channel_count,
+            XM_EXPANDED_EFFECT_SLOTS,
+        ));
+    }
 }
 
 pub fn parse_xm_instruments(
@@ -672,6 +704,12 @@ fn parse_xm_instrument(
                 sample_index: sample.index,
                 expected: sample.data_end,
                 actual: bytes.len(),
+            });
+        }
+        if is_adpcm_sample(sample.reserved) {
+            return Err(XmParseError::UnsupportedAdpcmSample {
+                instrument_index,
+                sample_index: sample.index,
             });
         }
         sample.decoded_data = decode_sample_data(
@@ -991,10 +1029,16 @@ fn read_sample_header(
 }
 
 fn sample_frame_count(byte_len: u32, sample_type: u8) -> u32 {
-    if is_16_bit_sample(sample_type) {
+    let sample_count = if is_16_bit_sample(sample_type) {
         byte_len / BYTES_PER_16_BIT_SAMPLE as u32
     } else {
         byte_len
+    };
+
+    if is_stereo_sample(sample_type) {
+        sample_count / STEREO_CHANNEL_COUNT_U32
+    } else {
+        sample_count
     }
 }
 
@@ -1008,9 +1052,19 @@ fn empty_sample_data(sample_type: u8) -> XmSampleData {
 
 fn decode_sample_data(bytes: &[u8], sample_type: u8) -> XmSampleData {
     if is_16_bit_sample(sample_type) {
-        XmSampleData::Pcm16(decode_delta16(bytes))
+        let values = decode_delta16(bytes);
+        XmSampleData::Pcm16(if is_stereo_sample(sample_type) {
+            mix_stereo_i16_to_mono(values)
+        } else {
+            values
+        })
     } else {
-        XmSampleData::Pcm8(decode_delta8(bytes))
+        let values = decode_delta8(bytes);
+        XmSampleData::Pcm8(if is_stereo_sample(sample_type) {
+            mix_stereo_i8_to_mono(values)
+        } else {
+            values
+        })
     }
 }
 
@@ -1041,6 +1095,14 @@ fn is_16_bit_sample(sample_type: u8) -> bool {
     sample_type & XM_SAMPLE_16_BIT_FLAG == XM_SAMPLE_16_BIT_FLAG
 }
 
+fn is_stereo_sample(sample_type: u8) -> bool {
+    sample_type & XM_SAMPLE_STEREO_FLAG == XM_SAMPLE_STEREO_FLAG
+}
+
+fn is_adpcm_sample(reserved: u8) -> bool {
+    reserved == XM_SAMPLE_ADPCM_RESERVED
+}
+
 fn sample_loop_kind(sample_type: u8) -> SampleLoopKind {
     match sample_type & XM_SAMPLE_LOOP_MASK {
         XM_SAMPLE_LOOP_NONE => SampleLoopKind::None,
@@ -1048,6 +1110,32 @@ fn sample_loop_kind(sample_type: u8) -> SampleLoopKind {
         XM_SAMPLE_LOOP_PING_PONG | XM_SAMPLE_LOOP_UNDEFINED => SampleLoopKind::PingPong,
         _ => unreachable!("loop-kind mask can only produce XM loop values"),
     }
+}
+
+fn mix_stereo_i8_to_mono(values: Vec<i8>) -> Vec<i8> {
+    let frame_count = values.len() / STEREO_CHANNEL_COUNT;
+
+    (0..frame_count)
+        .map(|frame| {
+            average_stereo_sample(values[frame] as i32, values[frame + frame_count] as i32)
+                .clamp(i8::MIN as i32, i8::MAX as i32) as i8
+        })
+        .collect()
+}
+
+fn mix_stereo_i16_to_mono(values: Vec<i16>) -> Vec<i16> {
+    let frame_count = values.len() / STEREO_CHANNEL_COUNT;
+
+    (0..frame_count)
+        .map(|frame| {
+            average_stereo_sample(values[frame] as i32, values[frame + frame_count] as i32)
+                .clamp(i16::MIN as i32, i16::MAX as i32) as i16
+        })
+        .collect()
+}
+
+fn average_stereo_sample(left: i32, right: i32) -> i32 {
+    (left + right) >> STEREO_AVERAGE_SHIFT
 }
 
 fn ensure_instrument_range(

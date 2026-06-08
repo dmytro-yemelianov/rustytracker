@@ -33,7 +33,7 @@ Current fixture base:
 
 Goal: bundled XM files load into a core `Module` without playback.
 
-Status: mostly complete in PR #1.
+Status: complete in PR #1, pending review/merge.
 
 Done:
 
@@ -46,6 +46,10 @@ Done:
 - core instrument vibrato metadata
 - core sample loop kind metadata
 - undefined XM loop type `0x03` normalized as ping-pong
+- empty packed XM patterns
+- ModPlug stereo samples mixed to mono
+- explicit unsupported errors for ADPCM-packed XM samples
+- empty patterns appended for order references past the declared pattern count
 - XM 8-bit and 16-bit delta sample decode
 - end-to-end `parse_xm_module`
 - fixture tests against bundled XM files
@@ -53,9 +57,6 @@ Done:
 Remaining:
 
 - merge PR #1 after review
-- handle ModPlug stereo sample data
-- handle ADPCM-packed XM samples or return an explicit unsupported error
-- handle order entries that reference patterns past the declared pattern count
 
 Acceptance:
 
@@ -172,7 +173,7 @@ Acceptance:
 ## Immediate Backlog
 
 1. Merge or continue PR #1 depending on review status.
-2. Add explicit unsupported path for XM ADPCM samples.
-3. Add tests for out-of-range order pattern references.
-4. Handle ModPlug stereo sample data.
-5. Start `rustytracker-cli` structural dump once import semantics are stable.
+2. Start `rustytracker-cli` structural dump.
+3. Add JSON schema for normalized module dumps.
+4. Generate golden JSON for bundled fixtures.
+5. Compare fixture dumps in tests.

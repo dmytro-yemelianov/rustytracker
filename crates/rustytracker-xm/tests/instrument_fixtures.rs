@@ -10,7 +10,10 @@ use rustytracker_xm::{
 const FNV_OFFSET: u64 = 0xcbf29ce484222325;
 const FNV_PRIME: u64 = 0x100000001b3;
 const XM_TEST_16_BIT_SAMPLE_TYPE: u8 = 0x10;
+const XM_TEST_STEREO_SAMPLE_TYPE: u8 = 0x20;
 const XM_TEST_UNDEFINED_LOOP_SAMPLE_TYPE: u8 = 0x03;
+const XM_TEST_ADPCM_RESERVED: u8 = 0xad;
+const XM_TEST_NO_RESERVED_FLAGS: u8 = 0;
 
 #[derive(Debug)]
 struct ExpectedInstrumentSection {
@@ -416,7 +419,10 @@ fn parses_milkytracker_bundled_xm_instrument_sections() {
 
 #[test]
 fn decodes_16_bit_delta_sample_data() {
-    let mut bytes = synthetic_instrument_file_with_sample_type(XM_TEST_16_BIT_SAMPLE_TYPE);
+    let mut bytes = synthetic_instrument_file_with_sample_type(
+        XM_TEST_16_BIT_SAMPLE_TYPE,
+        XM_TEST_NO_RESERVED_FLAGS,
+    );
     let header = synthetic_header();
     let section = parse_xm_instruments(&bytes, &header, 0).unwrap();
     let sample = &section.instruments[0].samples[0];
@@ -443,8 +449,28 @@ fn decodes_16_bit_delta_sample_data() {
 }
 
 #[test]
+fn mixes_modplug_stereo_sample_data_to_mono() {
+    let bytes = synthetic_instrument_file_with_sample_type(
+        XM_TEST_STEREO_SAMPLE_TYPE,
+        XM_TEST_NO_RESERVED_FLAGS,
+    );
+    let header = synthetic_header();
+    let section = parse_xm_instruments(&bytes, &header, 0).unwrap();
+    let sample = &section.instruments[0].samples[0];
+
+    assert_eq!(sample.length, 8);
+    assert_eq!(sample.frame_count, 4);
+    assert_eq!(sample.loop_start_frames, 1);
+    assert_eq!(sample.loop_length_frames, 2);
+    assert_eq!(sample.decoded_data.as_i8().unwrap(), &[3, 4, 5, 6]);
+}
+
+#[test]
 fn normalizes_undefined_loop_type_as_ping_pong() {
-    let bytes = synthetic_instrument_file_with_sample_type(XM_TEST_UNDEFINED_LOOP_SAMPLE_TYPE);
+    let bytes = synthetic_instrument_file_with_sample_type(
+        XM_TEST_UNDEFINED_LOOP_SAMPLE_TYPE,
+        XM_TEST_NO_RESERVED_FLAGS,
+    );
     let header = synthetic_header();
     let section = parse_xm_instruments(&bytes, &header, 0).unwrap();
     let sample = &section.instruments[0].samples[0];
@@ -454,6 +480,23 @@ fn normalizes_undefined_loop_type_as_ping_pong() {
     assert_eq!(sample.loop_start_frames, 2);
     assert_eq!(sample.loop_length_frames, 4);
     assert_eq!(sample.loop_kind, SampleLoopKind::PingPong);
+}
+
+#[test]
+fn rejects_adpcm_packed_xm_samples_explicitly() {
+    let bytes = synthetic_instrument_file_with_sample_type(
+        XM_TEST_STEREO_SAMPLE_TYPE,
+        XM_TEST_ADPCM_RESERVED,
+    );
+    let header = synthetic_header();
+
+    assert_eq!(
+        parse_xm_instruments(&bytes, &header, 0).unwrap_err(),
+        XmParseError::UnsupportedAdpcmSample {
+            instrument_index: 0,
+            sample_index: 0,
+        }
+    );
 }
 
 #[test]
@@ -554,7 +597,7 @@ fn synthetic_header() -> XmModuleHeader {
     }
 }
 
-fn synthetic_instrument_file_with_sample_type(sample_type: u8) -> Vec<u8> {
+fn synthetic_instrument_file_with_sample_type(sample_type: u8, reserved: u8) -> Vec<u8> {
     let mut bytes = Vec::new();
 
     bytes.extend_from_slice(&263_u32.to_le_bytes());
@@ -572,7 +615,7 @@ fn synthetic_instrument_file_with_sample_type(sample_type: u8) -> Vec<u8> {
     bytes.push(sample_type);
     bytes.push(128);
     bytes.push(0);
-    bytes.push(0);
+    bytes.push(reserved);
     bytes.extend_from_slice(&[0; 22]);
 
     if sample_type == XM_TEST_16_BIT_SAMPLE_TYPE {

@@ -84,6 +84,8 @@ Compatibility rules ported from `LoaderXM.cpp` and `XModule.cpp`:
 - XM note `97` becomes RustyTracker note-off value `121`
 - XM volume-column commands are converted into the first internal effect slot
 - the XM effect column is stored in the second internal effect slot
+- a pattern with `packed_pattern_data_length == 0` decodes as an allocated empty
+  core pattern
 
 ## Fixture Assertions
 
@@ -120,6 +122,10 @@ data. The parser mirrors MilkyTracker's loader behavior:
 - sample loop flags are normalized to core `SampleLoopKind`
 - XM's undefined loop flag combination `0x03` is treated as ping-pong loop,
   matching MilkyTracker's load-time normalization
+- ModPlug stereo samples are averaged to mono after delta decoding; normalized
+  sample frame counts and loop frame positions are halved
+- ADPCM-packed XM samples return `UnsupportedAdpcmSample` with instrument/sample
+  context until ADPCM decoding is ported
 - sample payload bytes are bounds checked and decoded as XM delta-coded PCM
 - 8-bit sample data is decoded into signed `i8` frames
 - 16-bit sample data is decoded little-endian into signed `i16` frames
@@ -151,6 +157,8 @@ the bundled fixtures currently use 8-bit samples.
 - module title, channel count, frequency table, restart position, tick speed,
   BPM, main volume, and active order table are copied from the XM header
 - packed XM patterns become typed core `Pattern` values
+- order entries that reference patterns past the declared pattern count append
+  MilkyTracker-compatible empty 64-row patterns
 - XM instruments become core `Instrument` values
 - sample slots use MilkyTracker's 16-slot-per-instrument pool layout
 - note-to-sample maps are converted to absolute core sample indexes where the
@@ -167,5 +175,4 @@ assert headers, orders, pattern counts, instrument counts, sample-pool layout,
 first instrument envelope/vibrato/fadeout metadata, first sample metadata,
 sample loop kind, decoded data prefixes, and decoded sample checksums.
 
-Next step: add ModPlug stereo sample handling, ADPCM-packed sample errors, and
-out-of-range order reference tests before the structural dump CLI.
+Next step: start the structural dump CLI and golden normalized JSON fixtures.

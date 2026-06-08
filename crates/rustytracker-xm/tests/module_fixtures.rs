@@ -8,6 +8,43 @@ use rustytracker_xm::parse_xm_module;
 
 const FNV_OFFSET: u64 = 0xcbf29ce484222325;
 const FNV_PRIME: u64 = 0x100000001b3;
+const XM_TEST_SIGNATURE: &[u8; 17] = b"Extended Module: ";
+const XM_TEST_TRACKER_NAME: &[u8; 11] = b"Rusty tests";
+const XM_TEST_MARKER: u8 = 0x1a;
+const XM_TEST_U16_BYTES: usize = 2;
+const XM_TEST_U32_BYTES: usize = 4;
+const XM_TEST_SIGNATURE_OFFSET: usize = 0;
+const XM_TEST_MARKER_OFFSET: usize = 37;
+const XM_TEST_TRACKER_OFFSET: usize = 38;
+const XM_TEST_VERSION_OFFSET: usize = 58;
+const XM_TEST_HEADER_SIZE_OFFSET: usize = 60;
+const XM_TEST_SONG_LENGTH_OFFSET: usize = 64;
+const XM_TEST_RESTART_OFFSET: usize = 66;
+const XM_TEST_CHANNELS_OFFSET: usize = 68;
+const XM_TEST_PATTERNS_OFFSET: usize = 70;
+const XM_TEST_INSTRUMENTS_OFFSET: usize = 72;
+const XM_TEST_FLAGS_OFFSET: usize = 74;
+const XM_TEST_SPEED_OFFSET: usize = 76;
+const XM_TEST_BPM_OFFSET: usize = 78;
+const XM_TEST_ORDER_TABLE_OFFSET: usize = 80;
+const XM_TEST_HEADER_BYTES: usize = 336;
+const XM_TEST_HEADER_SIZE: u32 = 276;
+const XM_TEST_PATTERN_HEADER_LEN: u32 = 9;
+const XM_TEST_DEFAULT_ROWS: u16 = 64;
+const XM_TEST_CHANNELS: u16 = 2;
+const XM_TEST_SONG_LENGTH: u16 = 2;
+const XM_TEST_RESTART: u16 = 0;
+const XM_TEST_DECLARED_PATTERNS: u16 = 1;
+const XM_TEST_INSTRUMENTS: u16 = 0;
+const XM_TEST_FIRST_ORDER: u8 = 0;
+const XM_TEST_ORDER_REFERENCED_PATTERN: u8 = 2;
+const XM_TEST_VERSION: u16 = 0x0104;
+const XM_TEST_FLAGS_LINEAR: u16 = 1;
+const XM_TEST_SPEED: u16 = 6;
+const XM_TEST_BPM: u16 = 125;
+const XM_TEST_PATTERN_PACKING_TYPE: u8 = 0;
+const XM_TEST_EMPTY_PATTERN_DATA_LEN: u16 = 0;
+const XM_TEST_EFFECT_SLOTS: u8 = 2;
 
 #[derive(Debug)]
 struct ExpectedModule {
@@ -342,10 +379,66 @@ fn parses_bundled_xm_files_into_core_modules() {
     }
 }
 
+#[test]
+fn adds_empty_patterns_for_orders_past_declared_pattern_count() {
+    let bytes = synthetic_xm_with_sparse_order_reference();
+    let module = parse_xm_module(&bytes).unwrap();
+
+    assert_eq!(module.orders, vec![0, XM_TEST_ORDER_REFERENCED_PATTERN]);
+    assert_eq!(
+        module.patterns.len(),
+        XM_TEST_ORDER_REFERENCED_PATTERN as usize + 1
+    );
+
+    let appended = &module.patterns[XM_TEST_ORDER_REFERENCED_PATTERN as usize];
+    assert_eq!(appended.rows(), XM_TEST_DEFAULT_ROWS);
+    assert_eq!(appended.channels(), XM_TEST_CHANNELS);
+    assert_eq!(appended.effect_slots(), XM_TEST_EFFECT_SLOTS);
+}
+
 fn fixture_path(file_name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../../MilkyTracker/resources/music")
         .join(file_name)
+}
+
+fn synthetic_xm_with_sparse_order_reference() -> Vec<u8> {
+    let mut bytes = vec![0; XM_TEST_HEADER_BYTES];
+    bytes[XM_TEST_SIGNATURE_OFFSET..XM_TEST_SIGNATURE_OFFSET + XM_TEST_SIGNATURE.len()]
+        .copy_from_slice(XM_TEST_SIGNATURE);
+    bytes[XM_TEST_MARKER_OFFSET] = XM_TEST_MARKER;
+    bytes[XM_TEST_TRACKER_OFFSET..XM_TEST_TRACKER_OFFSET + XM_TEST_TRACKER_NAME.len()]
+        .copy_from_slice(XM_TEST_TRACKER_NAME);
+    bytes[XM_TEST_VERSION_OFFSET..XM_TEST_VERSION_OFFSET + XM_TEST_U16_BYTES]
+        .copy_from_slice(&XM_TEST_VERSION.to_le_bytes());
+    bytes[XM_TEST_HEADER_SIZE_OFFSET..XM_TEST_HEADER_SIZE_OFFSET + XM_TEST_U32_BYTES]
+        .copy_from_slice(&XM_TEST_HEADER_SIZE.to_le_bytes());
+    bytes[XM_TEST_SONG_LENGTH_OFFSET..XM_TEST_SONG_LENGTH_OFFSET + XM_TEST_U16_BYTES]
+        .copy_from_slice(&XM_TEST_SONG_LENGTH.to_le_bytes());
+    bytes[XM_TEST_RESTART_OFFSET..XM_TEST_RESTART_OFFSET + XM_TEST_U16_BYTES]
+        .copy_from_slice(&XM_TEST_RESTART.to_le_bytes());
+    bytes[XM_TEST_CHANNELS_OFFSET..XM_TEST_CHANNELS_OFFSET + XM_TEST_U16_BYTES]
+        .copy_from_slice(&XM_TEST_CHANNELS.to_le_bytes());
+    bytes[XM_TEST_PATTERNS_OFFSET..XM_TEST_PATTERNS_OFFSET + XM_TEST_U16_BYTES]
+        .copy_from_slice(&XM_TEST_DECLARED_PATTERNS.to_le_bytes());
+    bytes[XM_TEST_INSTRUMENTS_OFFSET..XM_TEST_INSTRUMENTS_OFFSET + XM_TEST_U16_BYTES]
+        .copy_from_slice(&XM_TEST_INSTRUMENTS.to_le_bytes());
+    bytes[XM_TEST_FLAGS_OFFSET..XM_TEST_FLAGS_OFFSET + XM_TEST_U16_BYTES]
+        .copy_from_slice(&XM_TEST_FLAGS_LINEAR.to_le_bytes());
+    bytes[XM_TEST_SPEED_OFFSET..XM_TEST_SPEED_OFFSET + XM_TEST_U16_BYTES]
+        .copy_from_slice(&XM_TEST_SPEED.to_le_bytes());
+    bytes[XM_TEST_BPM_OFFSET..XM_TEST_BPM_OFFSET + XM_TEST_U16_BYTES]
+        .copy_from_slice(&XM_TEST_BPM.to_le_bytes());
+    bytes[XM_TEST_ORDER_TABLE_OFFSET] = XM_TEST_FIRST_ORDER;
+    bytes[XM_TEST_ORDER_TABLE_OFFSET + usize::from(XM_TEST_SONG_LENGTH - 1)] =
+        XM_TEST_ORDER_REFERENCED_PATTERN;
+
+    bytes.extend_from_slice(&XM_TEST_PATTERN_HEADER_LEN.to_le_bytes());
+    bytes.push(XM_TEST_PATTERN_PACKING_TYPE);
+    bytes.extend_from_slice(&XM_TEST_DEFAULT_ROWS.to_le_bytes());
+    bytes.extend_from_slice(&XM_TEST_EMPTY_PATTERN_DATA_LEN.to_le_bytes());
+
+    bytes
 }
 
 fn decoded_sample_checksum(samples: &[rustytracker_core::Sample]) -> u64 {

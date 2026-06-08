@@ -53,5 +53,6 @@ Current coverage:
   kinds.
 - `rustytracker-xm`: MilkyTracker-bundled XM headers, pattern headers, packed
   pattern cell expansion, instrument/sample-header metadata, delta-coded sample
-  payload decoding, loop-kind normalization, end-to-end load into
+  payload decoding, ModPlug stereo sample mixing, loop-kind normalization,
+  ADPCM unsupported errors, sparse order references, end-to-end load into
   `rustytracker-core::Module`, and malformed input checks.
