@@ -2,10 +2,20 @@
 
 ## Scope
 
-The XM writer starts with the fixed module header, active order table, and
-pattern headers/cells. Full roundtrip support will add effect inverse mapping,
-instrument writing, sample-header writing, and sample-payload writing in later
-slices.
+The XM writer starts with the fixed module header, active order table, pattern
+headers/cells, and the first MilkyTracker-compatible effect inverse mappings.
+Full roundtrip support will add instrument writing, sample-header writing, and
+sample-payload writing in later slices.
+
+## References
+
+Writer behavior follows MilkyTracker's bundled XM references and save path:
+
+- `resources/reference/xm-form.txt` for pattern header and unpacked cell layout
+- `src/milkyplay/ExporterXM.cpp` `convertEffect`, `convertToVolume`, and
+  `convertEffects` for core-to-XM effect conversion and column placement
+- `src/milkyplay/LoaderXM.cpp` for the inverse parser behavior that writer
+  tests must roundtrip through
 
 ## Header Block
 
@@ -58,6 +68,27 @@ note, instrument, volume_column, effect, operand
 ```
 
 The current writer preserves notes and instrument numbers and writes one effect
-column from the non-empty core effect slots. Full inverse mapping for
-MilkyTracker's normalized volume/effect columns is tracked as the next pattern
-writer step.
+column plus the XM volume column using the same placement rule as
+MilkyTracker's XM exporter:
+
+- a single core effect slot is written to the XM effect column
+- when multiple core effect slots exist, slot 0 tries the XM volume column first
+- later slots use the effect column first, then the volume column if the effect
+  column is already occupied
+- tone portamento operands with a low nibble stay in the effect column because
+  the XM volume column can only preserve the high nibble
+
+Implemented inverse mappings:
+
+- internal non-zero arpeggio `0x20` -> XM effect `0`
+- internal extended commands `0x30..=0x3f` -> XM `E` command operands
+- internal extra-fine portamento `0x41..=0x42` -> XM `0x21`
+- `Cxx` and global volume operands from core `0..=255` back to XM `0..=64`
+- volume, volume slide, vibrato, panning, panning slide, and tone portamento
+  relocation into the XM volume column where the current parser can roundtrip
+  the normalized core effect
+
+Deferred mappings:
+
+- `EAx` / `EBx` relocation into volume-column `9x` / `8x` waits until parser and
+  core semantics for fine volume slides are represented symmetrically.

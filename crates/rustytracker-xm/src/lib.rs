@@ -34,6 +34,7 @@ const XM_WRITER_EMPTY_ORDER: u8 = 0;
 const XM_WRITER_PATTERN_HEADER_LEN: u32 = XM_PATTERN_HEADER_LEN as u32;
 const XM_WRITER_PATTERN_PACKING_TYPE: u8 = 0;
 const XM_WRITER_EMPTY_VOLUME_COLUMN: u8 = 0;
+const XM_WRITER_SINGLE_EFFECT_SLOT_COUNT: usize = 1;
 const XM_HEADER_FIELD_STEP: usize = 2;
 const XM_RESTART_FIELD_OFFSET: usize = HEADER_FIELDS_OFFSET + XM_HEADER_FIELD_STEP;
 const XM_CHANNELS_FIELD_OFFSET: usize = HEADER_FIELDS_OFFSET + XM_HEADER_FIELD_STEP * 2;
@@ -74,13 +75,22 @@ const BYTE_3_OFFSET: usize = 3;
 const VALID_XM_EFFECTS: &[u8] = &[
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 20, 21, 25, 27, 29, 33,
 ];
+const XM_EFFECT_PROTRACKER_MIN: u8 = 0x01;
+const XM_EFFECT_PROTRACKER_MAX: u8 = 0x11;
 const XM_EFFECT_VOLUME: u8 = 0x0c;
 const XM_EFFECT_GLOBAL_VOLUME: u8 = 0x10;
 const XM_EFFECT_EXTENDED: u8 = 0x0e;
 const XM_EFFECT_EXTRA_FINE_PORTA: u8 = 0x21;
 const INTERNAL_EFFECT_NONZERO_ARPEGGIO: u8 = 0x20;
 const INTERNAL_EFFECT_EXTENDED_BASE: u8 = 0x30;
+const INTERNAL_EFFECT_EXTENDED_MAX: u8 = INTERNAL_EFFECT_EXTENDED_BASE + XM_NIBBLE_MASK;
 const INTERNAL_EFFECT_EXTRA_FINE_PORTA_BASE: u8 = 0x40;
+const XM_EXTRA_FINE_PORTA_UP_COMMAND: u8 = 0x01;
+const XM_EXTRA_FINE_PORTA_DOWN_COMMAND: u8 = 0x02;
+const INTERNAL_EFFECT_EXTRA_FINE_PORTA_MIN: u8 =
+    INTERNAL_EFFECT_EXTRA_FINE_PORTA_BASE + XM_EXTRA_FINE_PORTA_UP_COMMAND;
+const INTERNAL_EFFECT_EXTRA_FINE_PORTA_MAX: u8 =
+    INTERNAL_EFFECT_EXTRA_FINE_PORTA_BASE + XM_EXTRA_FINE_PORTA_DOWN_COMMAND;
 const XM_VOLUME_SET_MIN: u8 = 0x10;
 const XM_VOLUME_SET_MAX: u8 = 0x50;
 const XM_VOLUME_COMMAND_MIN: u8 = 0x60;
@@ -107,6 +117,7 @@ const XM_VOLUME_MAX: u8 = 64;
 const VOL64_TO_255_SCALE: u32 = 261_120;
 const VOL64_TO_255_ROUNDING: u32 = 65_535;
 const VOL64_TO_255_SHIFT: u32 = 16;
+const CORE_VOLUME_MAX: u16 = 255;
 const BYTE_MASK: u32 = 0xff;
 const XM_PAN_COLUMN_MAX: u8 = 0x0f;
 const FULL_PANNING: u8 = 0xff;
@@ -597,19 +608,168 @@ fn write_xm_pattern_data(pattern: &Pattern) -> Vec<u8> {
 }
 
 fn write_xm_cell(bytes: &mut Vec<u8>, cell: &PatternCell) {
-    let effect = cell
-        .effects
-        .iter()
-        .rev()
-        .find(|effect| **effect != EffectCommand::default())
-        .copied()
-        .unwrap_or_default();
+    let (volume, effect) = xm_columns_from_core_effects(&cell.effects);
 
     bytes.push(core_note_to_xm(cell.note));
     bytes.push(cell.instrument);
-    bytes.push(XM_WRITER_EMPTY_VOLUME_COLUMN);
+    bytes.push(volume);
     bytes.push(effect.effect);
     bytes.push(effect.operand);
+}
+
+fn xm_columns_from_core_effects(effects: &[EffectCommand]) -> (u8, EffectCommand) {
+    if effects.len() <= XM_WRITER_SINGLE_EFFECT_SLOT_COUNT {
+        let effect = effects
+            .iter()
+            .rev()
+            .find(|effect| **effect != EffectCommand::default())
+            .copied()
+            .map(core_effect_to_xm)
+            .unwrap_or_default();
+
+        return (XM_WRITER_EMPTY_VOLUME_COLUMN, effect);
+    }
+
+    let mut volume = XM_WRITER_EMPTY_VOLUME_COLUMN;
+    let mut effect_column = EffectCommand::default();
+
+    for (index, effect) in effects.iter().copied().enumerate() {
+        if effect == EffectCommand::default() {
+            continue;
+        }
+
+        let xm_effect = core_effect_to_xm(effect);
+
+        if index == 0 {
+            if !note_portamento_requires_effect_column(xm_effect) {
+                if let Some(volume_column) = xm_effect_to_volume_column(xm_effect) {
+                    volume = volume_column;
+                    continue;
+                }
+            }
+
+            if effect_column == EffectCommand::default() {
+                effect_column = xm_effect;
+                continue;
+            }
+        }
+
+        if effect_column == EffectCommand::default() {
+            effect_column = xm_effect;
+        } else if volume == XM_WRITER_EMPTY_VOLUME_COLUMN {
+            if let Some(volume_column) = xm_effect_to_volume_column(xm_effect) {
+                volume = volume_column;
+            }
+        }
+    }
+
+    (volume, effect_column)
+}
+
+fn core_effect_to_xm(effect: EffectCommand) -> EffectCommand {
+    match effect.effect {
+        INTERNAL_EFFECT_NONZERO_ARPEGGIO => EffectCommand {
+            effect: EMPTY_EFFECT,
+            operand: effect.operand,
+        },
+        INTERNAL_EFFECT_EXTENDED_BASE..=INTERNAL_EFFECT_EXTENDED_MAX => EffectCommand {
+            effect: XM_EFFECT_EXTENDED,
+            operand: ((effect.effect - INTERNAL_EFFECT_EXTENDED_BASE) << XM_NIBBLE_SHIFT)
+                | (effect.operand & XM_NIBBLE_MASK),
+        },
+        INTERNAL_EFFECT_EXTRA_FINE_PORTA_MIN..=INTERNAL_EFFECT_EXTRA_FINE_PORTA_MAX => {
+            EffectCommand {
+                effect: XM_EFFECT_EXTRA_FINE_PORTA,
+                operand: ((effect.effect - INTERNAL_EFFECT_EXTRA_FINE_PORTA_BASE)
+                    << XM_NIBBLE_SHIFT)
+                    | effect.operand.min(XM_NIBBLE_MASK),
+            }
+        }
+        XM_EFFECT_PROTRACKER_MIN..=XM_EFFECT_PROTRACKER_MAX => {
+            let operand =
+                if effect.effect == XM_EFFECT_VOLUME || effect.effect == XM_EFFECT_GLOBAL_VOLUME {
+                    vol255_to_64(effect.operand)
+                } else {
+                    effect.operand
+                };
+
+            EffectCommand {
+                effect: effect.effect,
+                operand,
+            }
+        }
+        _ => effect,
+    }
+}
+
+fn xm_effect_to_volume_column(effect: EffectCommand) -> Option<u8> {
+    match effect.effect {
+        XM_EFFECT_VOLUME => Some(XM_VOLUME_SET_MIN + effect.operand.min(XM_VOLUME_MAX)),
+        INTERNAL_EFFECT_VOLUME_SLIDE => xm_volume_slide_column(effect.operand),
+        INTERNAL_EFFECT_VIBRATO_COMPAT => xm_vibrato_column(effect.operand),
+        INTERNAL_EFFECT_PANNING => Some(volume_command(
+            XM_VOLUME_SET_PANNING,
+            effect.operand >> XM_NIBBLE_SHIFT,
+        )),
+        INTERNAL_EFFECT_PANNING_SLIDE => xm_panning_slide_column(effect.operand),
+        INTERNAL_EFFECT_TONE_PORTAMENTO => Some(volume_command(
+            XM_VOLUME_TONE_PORTAMENTO,
+            effect.operand >> XM_NIBBLE_SHIFT,
+        )),
+        _ => None,
+    }
+}
+
+fn xm_volume_slide_column(operand: u8) -> Option<u8> {
+    let low = operand & XM_NIBBLE_MASK;
+    let high = operand >> XM_NIBBLE_SHIFT;
+
+    if operand == EMPTY_OPERAND {
+        Some(volume_command(XM_VOLUME_FINE_DOWN, EMPTY_OPERAND))
+    } else if low != EMPTY_OPERAND {
+        Some(volume_command(XM_VOLUME_FINE_DOWN, low))
+    } else if high != EMPTY_OPERAND {
+        Some(volume_command(XM_VOLUME_FINE_UP, high))
+    } else {
+        None
+    }
+}
+
+fn xm_vibrato_column(operand: u8) -> Option<u8> {
+    let low = operand & XM_NIBBLE_MASK;
+    let high = operand >> XM_NIBBLE_SHIFT;
+
+    if high != EMPTY_OPERAND && low == EMPTY_OPERAND {
+        Some(volume_command(XM_VOLUME_VIBRATO_SPEED_DEPTH, high))
+    } else if high == EMPTY_OPERAND {
+        Some(volume_command(XM_VOLUME_VIBRATO_DEPTH_SPEED, low))
+    } else {
+        None
+    }
+}
+
+fn xm_panning_slide_column(operand: u8) -> Option<u8> {
+    let low = operand & XM_NIBBLE_MASK;
+    let high = operand >> XM_NIBBLE_SHIFT;
+
+    if operand == EMPTY_OPERAND {
+        Some(volume_command(XM_VOLUME_PANNING_SLIDE_LEFT, EMPTY_OPERAND))
+    } else if low != EMPTY_OPERAND {
+        Some(volume_command(XM_VOLUME_PANNING_SLIDE_LEFT, low))
+    } else if high != EMPTY_OPERAND {
+        Some(volume_command(XM_VOLUME_PANNING_SLIDE_RIGHT, high))
+    } else {
+        None
+    }
+}
+
+fn note_portamento_requires_effect_column(effect: EffectCommand) -> bool {
+    effect.effect == INTERNAL_EFFECT_TONE_PORTAMENTO
+        && effect.operand & XM_NIBBLE_MASK != EMPTY_OPERAND
+}
+
+fn volume_command(command: u8, operand: u8) -> u8 {
+    (command << XM_NIBBLE_SHIFT) | (operand & XM_NIBBLE_MASK)
 }
 
 fn core_note_to_xm(note: Note) -> u8 {
@@ -1554,6 +1714,10 @@ fn vol64_to_255(volume: u8) -> u8 {
     (((volume.min(XM_VOLUME_MAX) as u32 * VOL64_TO_255_SCALE + VOL64_TO_255_ROUNDING)
         >> VOL64_TO_255_SHIFT)
         & BYTE_MASK) as u8
+}
+
+fn vol255_to_64(volume: u8) -> u8 {
+    ((u16::from(volume) * u16::from(XM_VOLUME_MAX)) / CORE_VOLUME_MAX) as u8
 }
 
 fn pan15_to_255(panning: u8) -> u8 {
