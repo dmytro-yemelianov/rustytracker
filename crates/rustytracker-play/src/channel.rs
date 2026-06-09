@@ -60,6 +60,11 @@ pub const VIB_TAB: [i32; 32] = [
     235, 224, 212, 197, 180, 161, 141, 120, 97, 74, 49, 24,
 ];
 
+fn should_apply_arpeggio(effect: u8, operand: u8) -> bool {
+    effect == EFFECT_ARPEGGIO_NONZERO
+        || (effect == EFFECT_ARPEGGIO_ZERO && operand != EFFECT_MEMORY_REUSE_OPERAND)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlaybackSampleValue {
     Pcm8(i8),
@@ -260,7 +265,7 @@ impl PlaybackChannelState {
     pub(crate) fn apply_cell(&mut self, module: &Module, cell: &PatternCell) -> PlaybackResult<()> {
         self.active_effects = cell.effects.clone();
         self.ensure_effect_memory_slots();
-        if cell.instrument != DEFAULT_INSTRUMENT_NUMBER {
+        if cell.instrument != DEFAULT_INSTRUMENT_NUMBER && cell.note != Note::Off {
             self.set_instrument(module, cell.instrument)?;
         }
 
@@ -411,9 +416,9 @@ impl PlaybackChannelState {
                             .saturating_sub(y.saturating_mul(EFFECT_VOLUME_SCALE));
                     }
                 }
-                EFFECT_ARPEGGIO_NONZERO => {
+                effect_id if should_apply_arpeggio(effect_id, effect.operand) => {
                     let mut op = effect.operand;
-                    if op == EFFECT_MEMORY_REUSE_OPERAND {
+                    if effect_id == EFFECT_ARPEGGIO_NONZERO && op == EFFECT_MEMORY_REUSE_OPERAND {
                         op = self.arpeggio_memory;
                     } else {
                         self.arpeggio_memory = op;

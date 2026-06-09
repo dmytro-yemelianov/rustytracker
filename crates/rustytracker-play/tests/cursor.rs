@@ -3,10 +3,10 @@ use rustytracker_core::{
     SampleLoopKind, DEFAULT_EFFECT_SLOTS,
 };
 use rustytracker_play::{
-    ChannelSampleFrame, PlaybackClock, PlaybackCursor, PlaybackError, PlaybackSampleValue,
-    PlaybackState, PlaybackTiming, RowAdvance, TickAdvance, PLAYBACK_FIRST_ORDER_INDEX,
-    PLAYBACK_FIRST_ROW, PLAYBACK_FIRST_TICK, PLAYBACK_ORDER_STEP, PLAYBACK_ROW_STEP,
-    PLAYBACK_TICK_STEP,
+    ChannelSampleFrame, PlaybackChannelState, PlaybackClock, PlaybackCursor, PlaybackEnvelopeState,
+    PlaybackError, PlaybackSampleValue, PlaybackState, PlaybackTiming, RowAdvance, TickAdvance,
+    EFFECT_ARPEGGIO_ZERO, PLAYBACK_FIRST_ORDER_INDEX, PLAYBACK_FIRST_ROW, PLAYBACK_FIRST_TICK,
+    PLAYBACK_ORDER_STEP, PLAYBACK_ROW_STEP, PLAYBACK_TICK_STEP, VIB_TAB,
 };
 
 const PLAY_TEST_CHANNELS: u16 = 1;
@@ -59,6 +59,16 @@ const PLAY_TEST_PCM8_FIRST_MONO: i32 = -512;
 const PLAY_TEST_PCM16_HIGH_VALUE: i16 = 1024;
 const PLAY_TEST_FIRST_MIXED_MONO: i32 = 512;
 const PLAY_TEST_SILENCE_MONO: i32 = 0;
+
+#[test]
+fn crate_root_re_exports_channel_api() {
+    let _ = core::mem::size_of::<PlaybackChannelState>();
+    let _ = core::mem::size_of::<PlaybackEnvelopeState>();
+    let _ = core::mem::size_of::<PlaybackSampleValue>();
+
+    assert_eq!(EFFECT_ARPEGGIO_ZERO, 0x00);
+    assert_eq!(VIB_TAB.len(), 32);
+}
 
 #[test]
 fn starts_at_first_order_first_row() {
@@ -446,6 +456,77 @@ fn playback_state_releases_channel_on_note_off() {
     assert_eq!(channel.note, Note::Off);
     assert_eq!(channel.sample_index, None);
     assert_eq!(channel.sample_frame, PLAY_TEST_SAMPLE_START_FRAME);
+}
+
+#[test]
+fn playback_state_note_off_with_instrument_releases_current_instrument() {
+    let mut note_off = note_off_cell();
+    note_off.instrument = PLAY_TEST_CHANNEL_ONE_INSTRUMENT;
+
+    let mut module = module_with_two_channel_cells(
+        PLAY_TEST_TWO_ROWS,
+        &[
+            (
+                PLAY_TEST_CHANNEL_ZERO,
+                PLAYBACK_FIRST_ROW,
+                test_cell(
+                    PLAY_TEST_CHANNEL_ZERO_NOTE,
+                    PLAY_TEST_CHANNEL_ZERO_INSTRUMENT,
+                ),
+            ),
+            (
+                PLAY_TEST_CHANNEL_ZERO,
+                PLAYBACK_FIRST_ROW + PLAYBACK_ROW_STEP,
+                note_off,
+            ),
+        ],
+    );
+    module.header.tick_speed = PLAY_TEST_ONE_TICK_PER_ROW;
+    map_instrument_to_sample(
+        &mut module,
+        PLAY_TEST_FIRST_INSTRUMENT_INDEX,
+        PLAY_TEST_FIRST_SAMPLE_INDEX,
+    );
+    map_instrument_to_sample(
+        &mut module,
+        PLAY_TEST_SECOND_INSTRUMENT_INDEX,
+        PLAY_TEST_SECOND_SAMPLE_INDEX,
+    );
+    module.instruments[PLAY_TEST_FIRST_INSTRUMENT_INDEX].volume_envelope = Envelope {
+        points: vec![
+            EnvelopePoint {
+                frame: 0,
+                value: 256,
+            },
+            EnvelopePoint {
+                frame: 2,
+                value: 128,
+            },
+            EnvelopePoint { frame: 5, value: 0 },
+        ],
+        point_count: 3,
+        sustain_point: 1,
+        loop_start_point: 0,
+        loop_end_point: 0,
+        flags: 0x01 | 0x02,
+    };
+
+    let mut playback = PlaybackState::start(&module).unwrap();
+    assert_eq!(
+        playback.advance_tick(&module).unwrap(),
+        TickAdvance::NextRow
+    );
+    let channel = &playback.channels()[PLAY_TEST_CHANNEL_ZERO as usize];
+
+    assert!(channel.active);
+    assert!(!channel.keyon);
+    assert_eq!(channel.note, Note::Off);
+    assert_eq!(channel.instrument, PLAY_TEST_CHANNEL_ZERO_INSTRUMENT);
+    assert_eq!(
+        channel.instrument_index,
+        Some(PLAY_TEST_FIRST_INSTRUMENT_INDEX)
+    );
+    assert_eq!(channel.sample_index, Some(PLAY_TEST_FIRST_SAMPLE_INDEX));
 }
 
 #[test]
@@ -1347,6 +1428,37 @@ fn test_effect_arpeggio() {
     playback.advance_tick(&module).unwrap();
     let ch = &playback.channels()[0];
     assert_eq!(ch.period, 4608 - 7 * 64); // Tick 2 -> offset 7 (from memory)
+}
+
+#[test]
+fn raw_zero_effect_nonzero_operand_applies_arpeggio() {
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_ONE_ROW]);
+    module.header.tick_speed = 3;
+
+    let cell = PatternCell {
+        note: Note::Key(49),
+        instrument: 1,
+        effects: vec![
+            EffectCommand {
+                effect: EFFECT_ARPEGGIO_ZERO,
+                operand: 0x37,
+            },
+            EffectCommand::default(),
+        ],
+    };
+    module.patterns[0].set_cell(0, 0, cell).unwrap();
+    map_instrument_to_sample(&mut module, 0, 0);
+
+    let mut playback = PlaybackState::start(&module).unwrap();
+
+    assert_eq!(playback.channels()[0].period, 4608);
+
+    playback.advance_tick(&module).unwrap();
+    assert_eq!(playback.channels()[0].period, 4608 - 3 * 64);
+
+    playback.advance_tick(&module).unwrap();
+    assert_eq!(playback.channels()[0].period, 4608 - 7 * 64);
 }
 
 #[test]
