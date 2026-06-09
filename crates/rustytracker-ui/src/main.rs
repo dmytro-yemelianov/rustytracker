@@ -860,7 +860,7 @@ impl RustyTrackerApp {
 
                     match self.active_field {
                         ActiveField::Instrument => {
-                            let new_ins = (cell.instrument << 4) | digit;
+                            let new_ins = (cell.instrument << HEX_NIBBLE_BITS) | digit;
                             let _ = self.editor.set_instrument(
                                 active_pattern_idx,
                                 self.active_channel,
@@ -998,16 +998,20 @@ impl RustyTrackerApp {
 }
 
 const EFFECT_ENTRY_MASK: u16 = 0x0fff;
-const EFFECT_COMMAND_SHIFT: u16 = 8;
+const EFFECT_NIBBLE_BITS: u32 = 4;
+const EFFECT_COMMAND_SHIFT: u32 = 8;
+const EFFECT_OPERAND_MASK: u16 = 0x00ff;
 const EFFECT_EXTENDED_COMMAND: u8 = 0x0e;
 const INTERNAL_EFFECT_NONZERO_ARPEGGIO: u8 = 0x20;
 const INTERNAL_EFFECT_EXTENDED_BASE: u8 = 0x30;
 const INTERNAL_EFFECT_EXTENDED_MAX: u8 = 0x3f;
+const HEX_NIBBLE_BITS: u32 = 4;
 const NIBBLE_MASK: u8 = 0x0f;
 
 fn append_effect_digit(effect: EffectCommand, digit: u8) -> EffectCommand {
-    let value =
-        ((effect_to_entry_value(effect) << 4) | u16::from(digit & NIBBLE_MASK)) & EFFECT_ENTRY_MASK;
+    let value = ((effect_to_entry_value(effect) << EFFECT_NIBBLE_BITS)
+        | u16::from(digit & NIBBLE_MASK))
+        & EFFECT_ENTRY_MASK;
     effect_from_entry_value(value)
 }
 
@@ -1017,7 +1021,8 @@ fn effect_to_entry_value(effect: EffectCommand) -> u16 {
     {
         (
             EFFECT_EXTENDED_COMMAND,
-            ((effect.effect - INTERNAL_EFFECT_EXTENDED_BASE) << 4) | (effect.operand & NIBBLE_MASK),
+            ((effect.effect - INTERNAL_EFFECT_EXTENDED_BASE) << EFFECT_NIBBLE_BITS)
+                | (effect.operand & NIBBLE_MASK),
         )
     } else if effect.effect == INTERNAL_EFFECT_NONZERO_ARPEGGIO {
         (0, effect.operand)
@@ -1030,7 +1035,7 @@ fn effect_to_entry_value(effect: EffectCommand) -> u16 {
 
 fn effect_from_entry_value(value: u16) -> EffectCommand {
     let command = ((value >> EFFECT_COMMAND_SHIFT) as u8) & NIBBLE_MASK;
-    let operand = (value & 0x00ff) as u8;
+    let operand = (value & EFFECT_OPERAND_MASK) as u8;
 
     if command == 0 && operand == 0 {
         EffectCommand::default()
