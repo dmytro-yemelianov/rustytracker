@@ -1103,6 +1103,10 @@ impl PlaybackState {
         &self.channels
     }
 
+    pub fn song_ended(&self) -> bool {
+        self.song_ended
+    }
+
     pub fn row_state(&self, module: &Module) -> PlaybackResult<PlaybackRowState> {
         self.clock.row_state(module)
     }
@@ -1247,10 +1251,7 @@ impl PlaybackState {
                 }
             };
 
-            let target_row = match requested_row {
-                Some(row) => row,
-                None => 0,
-            };
+            let target_row = requested_row.unwrap_or_default();
 
             self.clock.set_jump_target(PlaybackPosition {
                 order_index: target_order,

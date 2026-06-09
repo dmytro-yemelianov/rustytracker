@@ -2016,9 +2016,9 @@ fn read_xm_slot(
     let mut slot = [EMPTY_OPERAND; XM_CELL_FIELD_COUNT];
 
     if first & XM_CELL_PACKED_FLAG != EMPTY_OPERAND {
-        for field in 0..XM_CELL_FIELD_COUNT {
+        for (field, val) in slot.iter_mut().enumerate() {
             if first & (XM_FIELD_PRESENT_BIT_BASE << field) != EMPTY_OPERAND {
-                slot[field] = read_xm_slot_byte(data, data_cursor, pattern_index, row, channel)?;
+                *val = read_xm_slot_byte(data, data_cursor, pattern_index, row, channel)?;
             }
         }
     } else {
@@ -2239,7 +2239,7 @@ fn decode_fixed_text(bytes: &[u8]) -> String {
     bytes[..end]
         .iter()
         .map(|&byte| {
-            if byte == ASCII_NUL || byte < ASCII_CONTROL_MAX || byte > ASCII_DELETE {
+            if byte == ASCII_NUL || !(ASCII_CONTROL_MAX..=ASCII_DELETE).contains(&byte) {
                 ' '
             } else {
                 byte as char

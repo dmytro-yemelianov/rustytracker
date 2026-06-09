@@ -14,3 +14,4 @@ rustytracker-xm = { path = "../rustytracker-xm" }
 rustytracker-mod = { path = "../rustytracker-mod" }
 eframe = "0.27"
 rfd = "0.14"
+cpal = "0.15"

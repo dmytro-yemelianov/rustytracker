@@ -1,11 +1,12 @@
 use std::path::Path;
-use std::time::Instant;
+use std::sync::{Arc, Mutex};
 
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use eframe::egui;
 use egui::{Color32, Key, RichText, Ui};
 use rustytracker_core::{EffectCommand, Module, Note, NoteName, PatternCell};
 use rustytracker_edit::ModuleEditor;
-use rustytracker_play::{PlaybackState, TickAdvance};
+use rustytracker_play::PlaybackState;
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
@@ -18,7 +19,7 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "RustyTracker",
         options,
-        Box::new(|_cc| Box::new(RustyTrackerApp::default()) as Box<dyn eframe::App>),
+        Box::new(|_cc| Box::new(RustyTrackerApp::new()) as Box<dyn eframe::App>),
     )
 }
 
@@ -30,10 +31,195 @@ enum ActiveField {
     Effect1,
 }
 
+struct AudioEngineState {
+    playback: Option<PlaybackState>,
+    module: Option<Module>,
+    is_playing: bool,
+    sample_rate: u32,
+}
+
+struct AudioPlaybackEngine {
+    state: Arc<Mutex<AudioEngineState>>,
+    _stream: Option<cpal::Stream>,
+}
+
+impl AudioPlaybackEngine {
+    pub fn new() -> Self {
+        let host = cpal::default_host();
+        let device = match host.default_output_device() {
+            Some(d) => d,
+            None => {
+                eprintln!("No default audio output device found!");
+                return Self {
+                    state: Arc::new(Mutex::new(AudioEngineState {
+                        playback: None,
+                        module: None,
+                        is_playing: false,
+                        sample_rate: 44100,
+                    })),
+                    _stream: None,
+                };
+            }
+        };
+
+        let config = match device.default_output_config() {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("Failed to get default output config: {e}");
+                return Self {
+                    state: Arc::new(Mutex::new(AudioEngineState {
+                        playback: None,
+                        module: None,
+                        is_playing: false,
+                        sample_rate: 44100,
+                    })),
+                    _stream: None,
+                };
+            }
+        };
+
+        let sample_rate = config.sample_rate().0;
+        let state = Arc::new(Mutex::new(AudioEngineState {
+            playback: None,
+            module: None,
+            is_playing: false,
+            sample_rate,
+        }));
+
+        let state_clone = Arc::clone(&state);
+        let err_fn = |err| eprintln!("an error occurred on stream: {err}");
+
+        let stream = match config.sample_format() {
+            cpal::SampleFormat::F32 => device.build_output_stream(
+                &config.into(),
+                move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                    write_audio(data, &state_clone);
+                },
+                err_fn,
+                None,
+            ),
+            cpal::SampleFormat::I16 => device.build_output_stream(
+                &config.into(),
+                move |data: &mut [i16], _: &cpal::OutputCallbackInfo| {
+                    write_audio(data, &state_clone);
+                },
+                err_fn,
+                None,
+            ),
+            cpal::SampleFormat::U16 => device.build_output_stream(
+                &config.into(),
+                move |data: &mut [u16], _: &cpal::OutputCallbackInfo| {
+                    write_audio(data, &state_clone);
+                },
+                err_fn,
+                None,
+            ),
+            _ => Err(cpal::BuildStreamError::DeviceNotAvailable),
+        };
+
+        let stream = match stream {
+            Ok(s) => {
+                let _ = s.play();
+                Some(s)
+            }
+            Err(e) => {
+                eprintln!("Failed to build audio output stream: {e}");
+                None
+            }
+        };
+
+        Self { state, _stream: stream }
+    }
+}
+
+fn write_audio<T>(output: &mut [T], state_lock: &Arc<Mutex<AudioEngineState>>)
+where
+    T: cpal::Sample + cpal::FromSample<f32>,
+{
+    let mut state_guard = match state_lock.lock() {
+        Ok(s) => s,
+        Err(_) => {
+            for sample in output.iter_mut() {
+                *sample = T::from_sample(0.0);
+            }
+            return;
+        }
+    };
+
+    let state = &mut *state_guard;
+    if !state.is_playing {
+        for sample in output.iter_mut() {
+            *sample = T::from_sample(0.0);
+        }
+        return;
+    }
+
+    let AudioEngineState {
+        playback,
+        module,
+        sample_rate,
+        ..
+    } = state;
+
+    let playback = match playback {
+        Some(pb) => pb,
+        None => {
+            for sample in output.iter_mut() {
+                *sample = T::from_sample(0.0);
+            }
+            return;
+        }
+    };
+
+    let module = match module {
+        Some(m) => m,
+        None => {
+            for sample in output.iter_mut() {
+                *sample = T::from_sample(0.0);
+            }
+            return;
+        }
+    };
+
+    let sample_rate = *sample_rate;
+    let mut song_ended = false;
+
+    for frame in output.chunks_mut(2) {
+        let sample = if !song_ended {
+            match playback.render_raw_mono_pcm(module, sample_rate, 1) {
+                Ok(frames) => {
+                    if playback.song_ended() {
+                        song_ended = true;
+                        0.0
+                    } else {
+                        let raw = frames.first().copied().unwrap_or(0);
+                        (raw.clamp(-32768, 32767) as f32) / 32768.0
+                    }
+                }
+                Err(_) => {
+                    song_ended = true;
+                    0.0
+                }
+            }
+        } else {
+            0.0
+        };
+
+        let cpal_sample = T::from_sample(sample);
+        for channel_out in frame {
+            *channel_out = cpal_sample;
+        }
+    }
+
+    if song_ended {
+        state.is_playing = false;
+        state.playback = None;
+    }
+}
+
 struct RustyTrackerApp {
     editor: ModuleEditor,
-    playback: Option<PlaybackState>,
-    is_playing: bool,
+    audio_engine: AudioPlaybackEngine,
     edit_mode: bool,
 
     // Cursor position
@@ -45,18 +231,20 @@ struct RustyTrackerApp {
     // Input state
     selected_instrument: u8,
     octave: u8,
-
-    // Timing for visual playhead simulation
-    last_tick_time: Instant,
-    tick_accumulator_ns: u64,
 }
 
-impl Default for RustyTrackerApp {
-    fn default() -> Self {
+impl RustyTrackerApp {
+    pub fn new() -> Self {
+        let editor = ModuleEditor::new(Module::empty());
+        let audio_engine = AudioPlaybackEngine::new();
+        {
+            if let Ok(mut state) = audio_engine.state.lock() {
+                state.module = Some(editor.module().clone());
+            }
+        }
         Self {
-            editor: ModuleEditor::new(Module::empty()),
-            playback: None,
-            is_playing: false,
+            editor,
+            audio_engine,
             edit_mode: false,
             active_order_index: 0,
             active_row: 0,
@@ -64,16 +252,33 @@ impl Default for RustyTrackerApp {
             active_field: ActiveField::Note,
             selected_instrument: 1,
             octave: 4,
-            last_tick_time: Instant::now(),
-            tick_accumulator_ns: 0,
+        }
+    }
+
+    fn commit_edit_to_audio(&mut self) {
+        if let Ok(mut state) = self.audio_engine.state.lock() {
+            state.module = Some(self.editor.module().clone());
+        }
+    }
+
+    fn sync_playhead_position(&mut self) {
+        if let Ok(state) = self.audio_engine.state.lock() {
+            if state.is_playing {
+                if let (Some(playback), Some(module)) = (&state.playback, &state.module) {
+                    if let Ok(pos) = playback.clock().position(module) {
+                        self.active_order_index = pos.order_index;
+                        self.active_row = pos.row;
+                    }
+                }
+            }
         }
     }
 }
 
 impl eframe::App for RustyTrackerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // 1. Process playback timing / ticks
-        self.process_playback(ctx);
+        // 1. Sync visual cursor with playhead position
+        self.sync_playhead_position();
 
         // 2. Render GUI
         egui::TopBottomPanel::top("top_menu").show(ctx, |ui| {
@@ -105,75 +310,22 @@ impl eframe::App for RustyTrackerApp {
         // 3. Process keyboard input
         self.handle_keyboard_input(ctx);
 
-        // Request constant repaint if playing to animate the cursor/grid smoothly
-        if self.is_playing {
+        // Keep requesting repaint if audio is playing to scroll playhead smoothly
+        let is_playing = {
+            if let Ok(state) = self.audio_engine.state.lock() {
+                state.is_playing
+            } else {
+                false
+            }
+        };
+
+        if is_playing {
             ctx.request_repaint();
         }
     }
 }
 
 impl RustyTrackerApp {
-    fn process_playback(&mut self, ctx: &egui::Context) {
-        let now = Instant::now();
-        let elapsed = now.duration_since(self.last_tick_time);
-        self.last_tick_time = now;
-
-        if !self.is_playing {
-            return;
-        }
-
-        let module = self.editor.module();
-        let bpm = module.header.bpm;
-        if bpm == 0 {
-            return;
-        }
-
-        // tick duration = 2.5 seconds / BPM
-        let tick_duration_ns = 2_500_000_000u64 / u64::from(bpm);
-        self.tick_accumulator_ns += elapsed.as_nanos() as u64;
-
-        let mut state_changed = false;
-
-        // Initialize playback cursor state if missing
-        if self.playback.is_none() {
-            if let Ok(pb) = PlaybackState::start(module) {
-                self.playback = Some(pb);
-                state_changed = true;
-            }
-        }
-
-        if let Some(playback) = &mut self.playback {
-            while self.tick_accumulator_ns >= tick_duration_ns {
-                self.tick_accumulator_ns -= tick_duration_ns;
-
-                match playback.advance_tick(module) {
-                    Ok(TickAdvance::NextRow) | Ok(TickAdvance::NextOrder) => {
-                        if let Ok(pos) = playback.clock().position(module) {
-                            self.active_order_index = pos.order_index;
-                            self.active_row = pos.row;
-                            state_changed = true;
-                        }
-                    }
-                    Ok(TickAdvance::SongEnd) => {
-                        self.is_playing = false;
-                        self.playback = None;
-                        state_changed = true;
-                        break;
-                    }
-                    Ok(TickAdvance::SameRow) => {}
-                    Err(_) => {
-                        self.is_playing = false;
-                        break;
-                    }
-                }
-            }
-        }
-
-        if state_changed {
-            ctx.request_repaint();
-        }
-    }
-
     fn render_menu_bar(&mut self, ui: &mut Ui) {
         egui::menu::bar(ui, |ui| {
             ui.menu_button("File", |ui| {
@@ -201,6 +353,7 @@ impl RustyTrackerApp {
                     .clicked()
                 {
                     self.editor.undo();
+                    self.commit_edit_to_audio();
                     ui.close_menu();
                 }
                 if ui
@@ -208,6 +361,7 @@ impl RustyTrackerApp {
                     .clicked()
                 {
                     self.editor.redo();
+                    self.commit_edit_to_audio();
                     ui.close_menu();
                 }
             });
@@ -217,25 +371,41 @@ impl RustyTrackerApp {
     fn render_controls_bar(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
             // Playback controls
-            if self.is_playing {
+            let is_playing = {
+                if let Ok(state) = self.audio_engine.state.lock() {
+                    state.is_playing
+                } else {
+                    false
+                }
+            };
+
+            if is_playing {
                 if ui
                     .button(RichText::new("⏸ Pause").color(Color32::LIGHT_BLUE))
                     .clicked()
                 {
-                    self.is_playing = false;
+                    if let Ok(mut state) = self.audio_engine.state.lock() {
+                        state.is_playing = false;
+                    }
                 }
             } else if ui
                 .button(RichText::new("▶ Play").color(Color32::LIGHT_GREEN))
                 .clicked()
             {
-                self.is_playing = true;
-                self.last_tick_time = Instant::now();
-                self.tick_accumulator_ns = 0;
+                if let Ok(mut state) = self.audio_engine.state.lock() {
+                    state.is_playing = true;
+                    state.module = Some(self.editor.module().clone());
+                    if state.playback.is_none() {
+                        state.playback = PlaybackState::start(self.editor.module()).ok();
+                    }
+                }
             }
 
             if ui.button("⏹ Stop").clicked() {
-                self.is_playing = false;
-                self.playback = None;
+                if let Ok(mut state) = self.audio_engine.state.lock() {
+                    state.is_playing = false;
+                    state.playback = None;
+                }
                 self.active_row = 0;
                 self.active_order_index = 0;
             }
@@ -289,11 +459,14 @@ impl RustyTrackerApp {
         ui.horizontal(|ui| {
             if ui.button("+ Add").clicked() {
                 let _ = self.editor.insert_duplicate_order(self.active_order_index);
+                self.commit_edit_to_audio();
             }
             if ui.button("- Del").clicked() {
                 let _ = self.editor.delete_order(self.active_order_index);
+                self.commit_edit_to_audio();
                 if self.active_order_index >= self.editor.module().orders.len() {
-                    self.active_order_index = self.editor.module().orders.len().saturating_sub(1);
+                    self.active_order_index =
+                        self.editor.module().orders.len().saturating_sub(1);
                 }
             }
         });
@@ -305,7 +478,7 @@ impl RustyTrackerApp {
                 let pattern_val = self.editor.module().orders[i];
                 let is_selected = i == self.active_order_index;
 
-                let text = format!("Order {:02X} : Pattern {:02X}", i, pattern_val);
+                let text = format!("Order {i:02X} : Pattern {pattern_val:02X}");
 
                 let mut label = RichText::new(text).monospace();
                 if is_selected {
@@ -315,7 +488,9 @@ impl RustyTrackerApp {
                 let response = ui.selectable_label(is_selected, label);
                 if response.clicked() {
                     self.active_order_index = i;
-                    self.playback = None; // Reset playback position
+                    if let Ok(mut state) = self.audio_engine.state.lock() {
+                        state.playback = None; // Reset playback position
+                    }
                 }
             }
         });
@@ -328,8 +503,7 @@ impl RustyTrackerApp {
         let instruments = &self.editor.module().instruments;
 
         egui::ScrollArea::vertical().show(ui, |ui| {
-            for i in 0..instruments.len() {
-                let ins = &instruments[i];
+            for (i, ins) in instruments.iter().enumerate() {
                 let ins_num = (i + 1) as u8;
                 let is_selected = ins_num == self.selected_instrument;
 
@@ -338,7 +512,7 @@ impl RustyTrackerApp {
                 } else {
                     ins.name.as_str()
                 };
-                let text = format!("{:02X} : {}", ins_num, name);
+                let text = format!("{ins_num:02X} : {name}");
 
                 let mut label = RichText::new(text).monospace();
                 if is_selected {
@@ -368,10 +542,7 @@ impl RustyTrackerApp {
         let rows = pattern.rows();
         let channels = pattern.channels();
 
-        ui.heading(format!(
-            "Pattern Editor : Pattern {:02X}",
-            active_pattern_idx
-        ));
+        ui.heading(format!("Pattern Editor : Pattern {active_pattern_idx:02X}"));
         ui.separator();
 
         let default_cell = PatternCell::default();
@@ -401,7 +572,7 @@ impl RustyTrackerApp {
                             let is_row_active = r == self.active_row;
 
                             // Display row index (e.g. "00")
-                            let mut row_num_text = RichText::new(format!("{:02X}", r)).monospace();
+                            let mut row_num_text = RichText::new(format!("{r:02X}")).monospace();
                             if is_row_active {
                                 row_num_text = row_num_text.color(Color32::YELLOW).strong();
                             } else {
@@ -412,7 +583,7 @@ impl RustyTrackerApp {
                             // Display channel cells
                             for c in 0..channels {
                                 let cell = pattern.cell(c, r).unwrap_or(&default_cell);
-
+                                
                                 let note_str = format_note(cell.note);
                                 let ins_str = format_instrument(cell.instrument);
 
@@ -422,13 +593,11 @@ impl RustyTrackerApp {
                                 let eff0_str = format_effect(eff0_cmd);
                                 let eff1_str = format_effect(eff1_cmd);
 
-                                let cell_text =
-                                    format!("{} {} {} {}", note_str, ins_str, eff0_str, eff1_str);
+                                let cell_text = format!("{note_str} {ins_str} {eff0_str} {eff1_str}");
                                 let mut rich_text = RichText::new(cell_text).monospace();
 
                                 // Highlight cells or cursors
-                                let is_cursor_here =
-                                    c == self.active_channel && r == self.active_row;
+                                let is_cursor_here = c == self.active_channel && r == self.active_row;
 
                                 let response = if is_cursor_here {
                                     rich_text = rich_text.color(Color32::BLACK);
@@ -465,9 +634,9 @@ impl RustyTrackerApp {
     fn load_module_file(&mut self, path: &Path) {
         if let Ok(bytes) = std::fs::read(path) {
             let parsed = if bytes.len() >= 17 && &bytes[0..17] == b"Extended Module: " {
-                rustytracker_xm::parse_xm_module(&bytes).map_err(|e| format!("{:?}", e))
+                rustytracker_xm::parse_xm_module(&bytes).map_err(|e| format!("{e:?}"))
             } else {
-                rustytracker_mod::parse_mod_module(&bytes).map_err(|e| format!("{:?}", e))
+                rustytracker_mod::parse_mod_module(&bytes).map_err(|e| format!("{e:?}"))
             };
 
             match parsed {
@@ -476,11 +645,14 @@ impl RustyTrackerApp {
                     self.active_row = 0;
                     self.active_order_index = 0;
                     self.active_channel = 0;
-                    self.playback = None;
-                    self.is_playing = false;
+                    if let Ok(mut state) = self.audio_engine.state.lock() {
+                        state.module = Some(self.editor.module().clone());
+                        state.playback = None;
+                        state.is_playing = false;
+                    }
                 }
                 Err(err) => {
-                    eprintln!("Failed to parse module: {}", err);
+                    eprintln!("Failed to parse module: {err}");
                 }
             }
         }
@@ -563,6 +735,7 @@ impl RustyTrackerApp {
                             );
                         }
                     }
+                    self.commit_edit_to_audio();
                 }
 
                 // Check for Note Off key (Num1)
@@ -574,6 +747,7 @@ impl RustyTrackerApp {
                         self.active_row,
                         Note::Off,
                     );
+                    self.commit_edit_to_audio();
                     self.advance_row_after_edit();
                 }
 
@@ -633,7 +807,7 @@ impl RustyTrackerApp {
                                         self.active_row,
                                         self.selected_instrument,
                                     );
-
+                                    self.commit_edit_to_audio();
                                     self.advance_row_after_edit();
                                 }
                             }
@@ -653,18 +827,18 @@ impl RustyTrackerApp {
 
                     match self.active_field {
                         ActiveField::Instrument => {
-                            let new_ins = ((cell.instrument << 4) | digit) & 0xff;
+                            let new_ins = (cell.instrument << 4) | digit;
                             let _ = self.editor.set_instrument(
                                 active_pattern_idx,
                                 self.active_channel,
                                 self.active_row,
                                 new_ins,
                             );
+                            self.commit_edit_to_audio();
                         }
                         ActiveField::Effect0 => {
-                            // First slot: primary effect command. Shifts operand.
                             let mut cmd = cell.effects.first().copied().unwrap_or_default();
-                            cmd.operand = ((cmd.operand << 4) | digit) & 0xff;
+                            cmd.operand = (cmd.operand << 4) | digit;
                             let _ = self.editor.set_effect(
                                 active_pattern_idx,
                                 self.active_channel,
@@ -672,11 +846,11 @@ impl RustyTrackerApp {
                                 0,
                                 cmd,
                             );
+                            self.commit_edit_to_audio();
                         }
                         ActiveField::Effect1 => {
-                            // Second slot: secondary effect command. Shifts operand.
                             let mut cmd = cell.effects.get(1).copied().unwrap_or_default();
-                            cmd.operand = ((cmd.operand << 4) | digit) & 0xff;
+                            cmd.operand = (cmd.operand << 4) | digit;
                             let _ = self.editor.set_effect(
                                 active_pattern_idx,
                                 self.active_channel,
@@ -684,6 +858,7 @@ impl RustyTrackerApp {
                                 1,
                                 cmd,
                             );
+                            self.commit_edit_to_audio();
                         }
                         _ => {}
                     }
@@ -757,7 +932,7 @@ impl RustyTrackerApp {
 fn format_note(note: Note) -> String {
     match note {
         Note::Empty => "...".to_string(),
-        Note::Off => "====".to_string(), // 4 chars to align nicely
+        Note::Off => "====".to_string(),
         Note::Key(val) => {
             let val = val.saturating_sub(1);
             let octave = val / 12;
@@ -777,7 +952,7 @@ fn format_note(note: Note) -> String {
                 11 => "B-",
                 _ => "??",
             };
-            format!("{}{}", name_str, octave)
+            format!("{name_str}{octave}")
         }
     }
 }
@@ -786,7 +961,7 @@ fn format_instrument(ins: u8) -> String {
     if ins == 0 {
         "..".to_string()
     } else {
-        format!("{:02X}", ins)
+        format!("{ins:02X}")
     }
 }
 
@@ -813,7 +988,7 @@ fn format_effect(cmd: EffectCommand) -> String {
             0x0c => 'C',
             0x0d => 'D',
             0x0f => 'F',
-            0x20 => '0', // Arpeggio
+            0x20 => '0',
             _ => '?',
         };
         if effect_char == '?' {

@@ -532,7 +532,7 @@ impl Module {
     }
 
     pub fn empty_with_channels(channel_count: u16) -> CoreResult<Self> {
-        if channel_count < MIN_CHANNEL_COUNT || channel_count > EDITOR_PATTERN_CHANNELS {
+        if !(MIN_CHANNEL_COUNT..=EDITOR_PATTERN_CHANNELS).contains(&channel_count) {
             return Err(CoreError::InvalidChannelCount(channel_count));
         }
 
