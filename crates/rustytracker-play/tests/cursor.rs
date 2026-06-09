@@ -59,6 +59,7 @@ const PLAY_TEST_PCM8_FIRST_MONO: i32 = -512;
 const PLAY_TEST_PCM16_HIGH_VALUE: i16 = 1024;
 const PLAY_TEST_FIRST_MIXED_MONO: i32 = 512;
 const PLAY_TEST_SILENCE_MONO: i32 = 0;
+const PLAY_TEST_ENVELOPE_ENABLED_FLAG: u8 = 0x01;
 
 #[test]
 fn crate_root_re_exports_channel_api() {
@@ -68,6 +69,31 @@ fn crate_root_re_exports_channel_api() {
 
     assert_eq!(EFFECT_ARPEGGIO_ZERO, 0x00);
     assert_eq!(VIB_TAB.len(), 32);
+}
+
+#[test]
+fn envelope_value_clamps_before_first_point() {
+    let envelope = Envelope {
+        points: vec![
+            EnvelopePoint {
+                frame: 4,
+                value: 200,
+            },
+            EnvelopePoint {
+                frame: 8,
+                value: 100,
+            },
+        ],
+        point_count: 2,
+        sustain_point: 0,
+        loop_start_point: 0,
+        loop_end_point: 0,
+        flags: PLAY_TEST_ENVELOPE_ENABLED_FLAG,
+    };
+
+    let state = PlaybackEnvelopeState::new();
+
+    assert_eq!(state.get_value(&envelope, 256), 200);
 }
 
 #[test]
