@@ -6,6 +6,7 @@ use rustytracker_core::{
     SampleLoopKind, DEFAULT_INSTRUMENT_NUMBER,
 };
 use rustytracker_play::{PlaybackChannelState, PlaybackRowState, PlaybackState, TickAdvance};
+use rustytracker_xm::{XM_HEADER_SIGNATURE, XM_HEADER_SIGNATURE_LENGTH};
 use serde::Serialize;
 
 const DUMP_SCHEMA_VERSION: u16 = 1;
@@ -251,7 +252,9 @@ struct PlayStateChannelStateDump {
 
 pub fn load_module_from_file(path: &Path) -> Result<(Module, &'static str), DumpError> {
     let bytes = std::fs::read(path)?;
-    if bytes.len() >= 17 && &bytes[0..17] == b"Extended Module: " {
+    if bytes.len() >= XM_HEADER_SIGNATURE_LENGTH
+        && &bytes[..XM_HEADER_SIGNATURE_LENGTH] == XM_HEADER_SIGNATURE
+    {
         let module = rustytracker_xm::parse_xm_module(&bytes)?;
         Ok((module, "xm"))
     } else {

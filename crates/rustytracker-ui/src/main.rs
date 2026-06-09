@@ -9,6 +9,7 @@ use rustytracker_core::{
 };
 use rustytracker_edit::ModuleEditor;
 use rustytracker_play::PlaybackState;
+use rustytracker_xm::{XM_HEADER_SIGNATURE, XM_HEADER_SIGNATURE_LENGTH};
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
@@ -694,7 +695,9 @@ impl RustyTrackerApp {
 
     fn load_module_file(&mut self, path: &Path) {
         if let Ok(bytes) = std::fs::read(path) {
-            let (parsed, is_mod) = if bytes.len() >= 17 && &bytes[0..17] == b"Extended Module: " {
+            let (parsed, is_mod) = if bytes.len() >= XM_HEADER_SIGNATURE_LENGTH
+                && &bytes[..XM_HEADER_SIGNATURE_LENGTH] == XM_HEADER_SIGNATURE
+            {
                 (
                     rustytracker_xm::parse_xm_module(&bytes).map_err(|e| format!("{e:?}")),
                     false,

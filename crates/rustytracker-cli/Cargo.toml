@@ -17,3 +17,6 @@ rustytracker-xm = { path = "../rustytracker-xm" }
 rustytracker-mod = { path = "../rustytracker-mod" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+[dev-dependencies]
+rustytracker-test-support = { path = "../rustytracker-test-support" }

@@ -2977,6 +2977,7 @@ dependencies = [
  "rustytracker-core",
  "rustytracker-mod",
  "rustytracker-play",
+ "rustytracker-test-support",
  "rustytracker-xm",
  "serde",
  "serde_json",
@@ -3008,6 +3009,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustytracker-test-support"
+version = "0.1.0"
+
+[[package]]
 name = "rustytracker-ui"
 version = "0.1.0"
 dependencies = [
@@ -3037,6 +3042,7 @@ name = "rustytracker-xm"
 version = "0.1.0"
 dependencies = [
  "rustytracker-core",
+ "rustytracker-test-support",
 ]
 
 [[package]]

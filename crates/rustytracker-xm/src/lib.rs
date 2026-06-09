@@ -7,13 +7,14 @@ use rustytracker_core::{
     EffectCommand, Envelope as CoreEnvelope, EnvelopePoint as CoreEnvelopePoint, FrequencyTable,
     Instrument, InstrumentName, Module, ModuleHeader, ModuleTitle, Note, Pattern, PatternCell,
     Sample, SampleData as CoreSampleData, SampleLoopKind, SampleName, Vibrato as CoreVibrato,
-    EDITOR_PATTERN_CHANNELS, MAX_ACTIVE_ORDERS, MAX_INSTRUMENTS, MAX_PATTERNS, MIN_CHANNEL_COUNT,
-    SAMPLES_PER_INSTRUMENT, SAMPLE_DEFAULT_FLAGS, SAMPLE_DEFAULT_VOLUME_FADEOUT,
+    EDITOR_PATTERN_CHANNELS, MAX_ACTIVE_ORDERS, MAX_INSTRUMENTS, MAX_PATTERNS, MIN_ACTIVE_ORDERS,
+    MIN_CHANNEL_COUNT, SAMPLES_PER_INSTRUMENT, SAMPLE_DEFAULT_FLAGS, SAMPLE_DEFAULT_VOLUME_FADEOUT,
 };
 
-const XM_SIGNATURE: &[u8; 17] = b"Extended Module: ";
+pub const XM_HEADER_SIGNATURE_LENGTH: usize = 17;
+pub const XM_HEADER_SIGNATURE: &[u8; XM_HEADER_SIGNATURE_LENGTH] = b"Extended Module: ";
 const XM_MARKER: u8 = 0x1a;
-const TITLE_OFFSET: usize = 17;
+const TITLE_OFFSET: usize = XM_HEADER_SIGNATURE_LENGTH;
 const TITLE_LEN: usize = 20;
 const MARKER_OFFSET: usize = 37;
 const TRACKER_OFFSET: usize = 38;
@@ -24,7 +25,6 @@ const HEADER_FIELDS_OFFSET: usize = 64;
 const ORDER_TABLE_OFFSET: usize = 80;
 const XM_ORDER_TABLE_LEN: usize = 256;
 const XM_MIN_HEADER_BYTES: usize = ORDER_TABLE_OFFSET + XM_ORDER_TABLE_LEN;
-const XM_MIN_ACTIVE_ORDERS: usize = rustytracker_core::MIN_ACTIVE_ORDERS;
 const XM_EXPANDED_EFFECT_SLOTS: u8 = 2;
 const XM_VERSION_1_02: u16 = 0x0102;
 const XM_VERSION_1_03: u16 = 0x0103;
@@ -482,7 +482,7 @@ pub fn parse_xm_header(bytes: &[u8]) -> XmResult<XmModuleHeader> {
         });
     }
 
-    if &bytes[..XM_SIGNATURE.len()] != XM_SIGNATURE {
+    if &bytes[..XM_HEADER_SIGNATURE_LENGTH] != XM_HEADER_SIGNATURE {
         return Err(XmParseError::InvalidSignature);
     }
 
@@ -505,10 +505,10 @@ pub fn parse_xm_header(bytes: &[u8]) -> XmResult<XmModuleHeader> {
     let default_tick_speed = read_u16(bytes, XM_TICK_SPEED_FIELD_OFFSET);
     let default_bpm = read_u16(bytes, XM_BPM_FIELD_OFFSET);
 
-    if !(XM_MIN_ACTIVE_ORDERS..=MAX_ACTIVE_ORDERS).contains(&(song_length as usize)) {
+    if !(MIN_ACTIVE_ORDERS..=MAX_ACTIVE_ORDERS).contains(&(song_length as usize)) {
         return Err(XmParseError::InvalidOrderCount {
             order_count: song_length as usize,
-            minimum: XM_MIN_ACTIVE_ORDERS,
+            minimum: MIN_ACTIVE_ORDERS,
             maximum: MAX_ACTIVE_ORDERS,
         });
     }
@@ -601,7 +601,7 @@ pub fn write_xm_header(module: &Module) -> XmWriteResult<Vec<u8>> {
 
     let mut bytes = vec![ASCII_NUL; XM_MIN_HEADER_BYTES];
 
-    bytes[..XM_SIGNATURE.len()].copy_from_slice(XM_SIGNATURE);
+    bytes[..XM_HEADER_SIGNATURE_LENGTH].copy_from_slice(XM_HEADER_SIGNATURE);
     bytes[MARKER_OFFSET] = XM_MARKER;
     write_fixed_text(
         &mut bytes[TITLE_OFFSET..TITLE_OFFSET + TITLE_LEN],

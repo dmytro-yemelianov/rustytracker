@@ -115,6 +115,19 @@ fn rejects_mod_order_counts_larger_than_order_table() {
 }
 
 #[test]
+fn rejects_empty_mod_order_counts() {
+    let bytes = create_mock_mod(None, 0, &[], &[], &[], &[], &[], &[]);
+
+    assert_eq!(
+        parse_mod_module(&bytes).unwrap_err(),
+        ModParseError::InvalidOrderCount {
+            orders: 0,
+            maximum: 128,
+        }
+    );
+}
+
+#[test]
 fn rejects_mod_channel_counts_outside_core_range() {
     let bytes = create_mock_mod(Some(b"33CH"), 1, &[0], &[], &[], &[], &[], &[]);
 

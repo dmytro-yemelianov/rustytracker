@@ -5,12 +5,38 @@
 
 use rustytracker_core::{
     EffectCommand, Envelope, Instrument, Module, Note, Pattern, PatternCell, Sample, SampleData,
-    SampleLoopKind, DEFAULT_EFFECT_SLOTS, EDITOR_PATTERN_CHANNELS, MIN_CHANNEL_COUNT,
+    SampleLoopKind, DEFAULT_BPM, DEFAULT_EFFECT_SLOTS, DEFAULT_INSTRUMENTS, DEFAULT_MAIN_VOLUME,
+    DEFAULT_SAMPLE_COUNT, DEFAULT_TICK_SPEED, EDITOR_PATTERN_CHANNELS, MAX_XM_NOTES,
+    MIN_CHANNEL_COUNT, SAMPLES_PER_INSTRUMENT, SAMPLE_DEFAULT_PANNING,
+    SAMPLE_DEFAULT_RELATIVE_NOTE, SAMPLE_DEFAULT_TYPE, SAMPLE_DEFAULT_VOLUME_FADEOUT,
 };
 
+const MOD_MIN_15_INSTRUMENT_BYTES: usize = 600;
+const MOD_TITLE_LEN: usize = 20;
+const MOD_15_INSTRUMENT_COUNT: usize = 15;
+const MOD_31_INSTRUMENT_COUNT: usize = 31;
+const MOD_INSTRUMENT_HEADER_LEN: usize = 30;
+const MOD_INSTRUMENT_NAME_LEN: usize = 22;
+const MOD_INSTRUMENT_FIELDS_AFTER_NAME_LEN: usize =
+    MOD_INSTRUMENT_HEADER_LEN - MOD_INSTRUMENT_NAME_LEN;
+const MOD_SONG_LENGTH_RESTART_LEN: usize = 2;
 const MOD_ORDER_TABLE_LEN: usize = 128;
+const MOD_SIGNATURE_OFFSET: usize = 1080;
+const MOD_SIGNATURE_LEN: usize = 4;
+const MOD_SIGNATURE_END: usize = MOD_SIGNATURE_OFFSET + MOD_SIGNATURE_LEN;
+const MOD_DEFAULT_CHANNEL_COUNT: u16 = 4;
+const MOD_PATTERN_ROWS: u16 = 64;
+const MOD_CELL_BYTES: usize = 4;
+const MOD_SAMPLE_LENGTH_WORD_BYTES: u32 = 2;
+const MOD_LOOP_ENABLED_MIN_BYTES: u32 = 2;
 const MOD_MAX_SAMPLE_BYTES: usize = 131_070;
 const MOD_MAX_CHANNELS: u16 = EDITOR_PATTERN_CHANNELS;
+const MOD_MAX_PATTERNS: usize = MOD_ORDER_TABLE_LEN;
+const MOD_MAX_INSTRUMENT_NUMBER: u8 = 31;
+const MOD_RESTART_POSITION_MASK: u16 = 0x7f;
+const MOD_EMPTY_LOOP_START_WORDS: u16 = 0;
+const MOD_EMPTY_LOOP_LENGTH_WORDS: u16 = 1;
+const MOD_SAMPLE_8_BIT_FLAGS: u8 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ModParseError {
@@ -32,29 +58,32 @@ pub enum ModParseError {
 
 /// Parses a MOD file byte buffer into a core `Module`.
 pub fn parse_mod_module(bytes: &[u8]) -> Result<Module, ModParseError> {
-    if bytes.len() < 600 {
+    if bytes.len() < MOD_MIN_15_INSTRUMENT_BYTES {
         return Err(ModParseError::Truncated {
-            expected: 600,
+            expected: MOD_MIN_15_INSTRUMENT_BYTES,
             actual: bytes.len(),
         });
     }
 
     let mut is_31_ins = false;
-    let mut channel_count = 4;
-    let mut instrument_count = 15;
+    let mut channel_count = MOD_DEFAULT_CHANNEL_COUNT;
+    let mut instrument_count = MOD_15_INSTRUMENT_COUNT;
 
-    if bytes.len() >= 1084 {
-        let mut sig = [0u8; 4];
-        sig.copy_from_slice(&bytes[1080..1084]);
+    if bytes.len() >= MOD_SIGNATURE_END {
+        let mut sig = [0u8; MOD_SIGNATURE_LEN];
+        sig.copy_from_slice(&bytes[MOD_SIGNATURE_OFFSET..MOD_SIGNATURE_END]);
         if let Some(ch) = get_pt_num_channels(&sig) {
             is_31_ins = true;
             channel_count = ch;
-            instrument_count = 31;
+            instrument_count = MOD_31_INSTRUMENT_COUNT;
         }
     }
 
-    let expected_header_len =
-        20 + instrument_count as usize * 30 + 2 + 128 + if is_31_ins { 4 } else { 0 };
+    let expected_header_len = MOD_TITLE_LEN
+        + instrument_count * MOD_INSTRUMENT_HEADER_LEN
+        + MOD_SONG_LENGTH_RESTART_LEN
+        + MOD_ORDER_TABLE_LEN
+        + if is_31_ins { MOD_SIGNATURE_LEN } else { 0 };
 
     if bytes.len() < expected_header_len {
         return Err(ModParseError::Truncated {
@@ -72,25 +101,28 @@ pub fn parse_mod_module(bytes: &[u8]) -> Result<Module, ModParseError> {
     }
 
     // 1. Read Title
-    let title_bytes = &bytes[0..20];
+    let title_bytes = &bytes[0..MOD_TITLE_LEN];
     let title = clean_string(title_bytes);
 
     // 2. Read Instruments & Samples
-    let mut cursor = 20;
+    let mut cursor = MOD_TITLE_LEN;
     let mut samples = Vec::new();
     let mut instruments = Vec::new();
 
     for i in 0..instrument_count {
-        let name_bytes = &bytes[cursor..cursor + 22];
+        let name_bytes = &bytes[cursor..cursor + MOD_INSTRUMENT_NAME_LEN];
         let name = clean_string(name_bytes);
-        cursor += 22;
+        cursor += MOD_INSTRUMENT_NAME_LEN;
 
-        let smplen = u16::from_be_bytes([bytes[cursor], bytes[cursor + 1]]) as u32 * 2;
+        let smplen = u16::from_be_bytes([bytes[cursor], bytes[cursor + 1]]) as u32
+            * MOD_SAMPLE_LENGTH_WORD_BYTES;
         let finetune_nibble = bytes[cursor + 2] & 0x0f;
         let volume_64 = bytes[cursor + 3];
-        let loop_start = u16::from_be_bytes([bytes[cursor + 4], bytes[cursor + 5]]) as u32 * 2;
-        let loop_len = u16::from_be_bytes([bytes[cursor + 6], bytes[cursor + 7]]) as u32 * 2;
-        cursor += 8;
+        let loop_start = u16::from_be_bytes([bytes[cursor + 4], bytes[cursor + 5]]) as u32
+            * MOD_SAMPLE_LENGTH_WORD_BYTES;
+        let loop_len = u16::from_be_bytes([bytes[cursor + 6], bytes[cursor + 7]]) as u32
+            * MOD_SAMPLE_LENGTH_WORD_BYTES;
+        cursor += MOD_INSTRUMENT_FIELDS_AFTER_NAME_LEN;
 
         let finetune = mod_finetunes(finetune_nibble);
         let volume = vol64_to_255(volume_64);
@@ -100,18 +132,18 @@ pub fn parse_mod_module(bytes: &[u8]) -> Result<Module, ModParseError> {
             length: smplen,
             loop_start,
             loop_length: loop_len,
-            loop_kind: if loop_len > 2 {
+            loop_kind: if loop_len > MOD_LOOP_ENABLED_MIN_BYTES {
                 SampleLoopKind::Forward
             } else {
                 SampleLoopKind::None
             },
             volume,
-            panning: 128,
-            flags: 1, // 8-bit
-            volume_fadeout: 65535,
-            sample_type: 0,
+            panning: SAMPLE_DEFAULT_PANNING,
+            flags: MOD_SAMPLE_8_BIT_FLAGS,
+            volume_fadeout: SAMPLE_DEFAULT_VOLUME_FADEOUT,
+            sample_type: SAMPLE_DEFAULT_TYPE,
             finetune,
-            relative_note: 0,
+            relative_note: SAMPLE_DEFAULT_RELATIVE_NOTE,
             data: SampleData::Empty,
         };
 
@@ -124,7 +156,7 @@ pub fn parse_mod_module(bytes: &[u8]) -> Result<Module, ModParseError> {
                 sample.loop_length = sample.loop_length.saturating_sub(diff2);
             }
         }
-        if sample.loop_length <= 2 {
+        if sample.loop_length <= MOD_LOOP_ENABLED_MIN_BYTES {
             sample.loop_length = 0;
             sample.loop_kind = SampleLoopKind::None;
         }
@@ -132,9 +164,9 @@ pub fn parse_mod_module(bytes: &[u8]) -> Result<Module, ModParseError> {
         samples.push(sample);
 
         // Core instruments map note to sample index
-        let note_sample_map = vec![Some(i as usize); 96];
-        let mut sample_slots = vec![None; 16];
-        sample_slots[0] = Some(i as usize);
+        let note_sample_map = vec![Some(i); MAX_XM_NOTES as usize];
+        let mut sample_slots = vec![None; SAMPLES_PER_INSTRUMENT];
+        sample_slots[0] = Some(i);
 
         let instrument = Instrument {
             name: rustytracker_core::InstrumentName::new(&name),
@@ -143,7 +175,7 @@ pub fn parse_mod_module(bytes: &[u8]) -> Result<Module, ModParseError> {
             volume_envelope: Envelope::default(),
             panning_envelope: Envelope::default(),
             vibrato: rustytracker_core::Vibrato::default(),
-            volume_fadeout: 65535,
+            volume_fadeout: SAMPLE_DEFAULT_VOLUME_FADEOUT,
         };
         instruments.push(instrument);
     }
@@ -151,9 +183,9 @@ pub fn parse_mod_module(bytes: &[u8]) -> Result<Module, ModParseError> {
     // 3. Read Orders
     let song_length = bytes[cursor] as usize;
     let restart_position = bytes[cursor + 1];
-    cursor += 2;
+    cursor += MOD_SONG_LENGTH_RESTART_LEN;
 
-    if song_length > MOD_ORDER_TABLE_LEN {
+    if song_length == 0 || song_length > MOD_ORDER_TABLE_LEN {
         return Err(ModParseError::InvalidOrderCount {
             orders: song_length,
             maximum: MOD_ORDER_TABLE_LEN,
@@ -165,7 +197,7 @@ pub fn parse_mod_module(bytes: &[u8]) -> Result<Module, ModParseError> {
     cursor += MOD_ORDER_TABLE_LEN;
 
     if is_31_ins {
-        cursor += 4; // Skip signature
+        cursor += MOD_SIGNATURE_LEN;
     }
 
     // Determine number of patterns
@@ -178,7 +210,7 @@ pub fn parse_mod_module(bytes: &[u8]) -> Result<Module, ModParseError> {
     let num_patterns = max_pattern as usize + 1;
 
     // 4. Read Patterns
-    let pattern_size = channel_count as usize * 64 * 4;
+    let pattern_size = channel_count as usize * MOD_PATTERN_ROWS as usize * MOD_CELL_BYTES;
     let total_patterns_len = num_patterns * pattern_size;
     if bytes.len() < cursor + total_patterns_len {
         return Err(ModParseError::Truncated {
@@ -189,18 +221,18 @@ pub fn parse_mod_module(bytes: &[u8]) -> Result<Module, ModParseError> {
 
     let mut patterns = Vec::new();
     for _ in 0..num_patterns {
-        let mut pattern = Pattern::new(64, channel_count, DEFAULT_EFFECT_SLOTS);
+        let mut pattern = Pattern::new(MOD_PATTERN_ROWS, channel_count, DEFAULT_EFFECT_SLOTS);
         let pat_bytes = &bytes[cursor..cursor + pattern_size];
         cursor += pattern_size;
 
         let mut byte_idx = 0;
-        for r in 0..64 {
+        for r in 0..MOD_PATTERN_ROWS {
             for c in 0..channel_count {
                 let b1 = pat_bytes[byte_idx];
                 let b2 = pat_bytes[byte_idx + 1];
                 let b3 = pat_bytes[byte_idx + 2];
                 let b4 = pat_bytes[byte_idx + 3];
-                byte_idx += 4;
+                byte_idx += MOD_CELL_BYTES;
 
                 let note_period = (((b1 & 0x0f) as u16) << 8) | b2 as u16;
                 let ins_num = (b1 & 0xf0) | (b3 >> 4);
@@ -248,8 +280,7 @@ pub fn parse_mod_module(bytes: &[u8]) -> Result<Module, ModParseError> {
     }
 
     // 5. Read Sample Data (8-bit signed PCM)
-    for i in 0..instrument_count {
-        let sample = &mut samples[i as usize];
+    for sample in samples.iter_mut().take(instrument_count) {
         if sample.length > 0 {
             if bytes.len() < cursor + sample.length as usize {
                 return Err(ModParseError::Truncated {
@@ -269,10 +300,10 @@ pub fn parse_mod_module(bytes: &[u8]) -> Result<Module, ModParseError> {
     }
 
     // Pad instruments and samples to standard core counts:
-    while instruments.len() < 128 {
+    while instruments.len() < DEFAULT_INSTRUMENTS {
         instruments.push(rustytracker_core::Instrument::empty(instruments.len()));
     }
-    while samples.len() < 128 * 16 {
+    while samples.len() < DEFAULT_SAMPLE_COUNT {
         samples.push(Sample::default());
     }
 
@@ -281,9 +312,9 @@ pub fn parse_mod_module(bytes: &[u8]) -> Result<Module, ModParseError> {
             title: rustytracker_core::ModuleTitle::new(&title),
             channel_count,
             frequency_table: rustytracker_core::FrequencyTable::Amiga,
-            bpm: 125,
-            tick_speed: 6,
-            main_volume: 255,
+            bpm: DEFAULT_BPM,
+            tick_speed: DEFAULT_TICK_SPEED,
+            main_volume: DEFAULT_MAIN_VOLUME,
             restart_position: restart_position as u16,
         },
         orders,
@@ -293,7 +324,7 @@ pub fn parse_mod_module(bytes: &[u8]) -> Result<Module, ModParseError> {
     })
 }
 
-fn get_pt_num_channels(sig: &[u8; 4]) -> Option<u16> {
+fn get_pt_num_channels(sig: &[u8; MOD_SIGNATURE_LEN]) -> Option<u16> {
     if sig == b"M.K." || sig == b"M!K!" || sig == b"FLT4" {
         return Some(4);
     }
@@ -475,7 +506,7 @@ pub fn write_mod_module(module: &Module) -> Result<Vec<u8>, ModWriteError> {
     }
     let num_patterns = max_pattern as usize + 1;
 
-    if num_patterns > 128 {
+    if num_patterns > MOD_MAX_PATTERNS {
         return Err(ModWriteError::TooManyPatterns {
             patterns: num_patterns,
         });
@@ -483,19 +514,19 @@ pub fn write_mod_module(module: &Module) -> Result<Vec<u8>, ModWriteError> {
 
     let mut bytes = Vec::new();
 
-    // 1. Title (20 bytes)
-    bytes.extend_from_slice(&pad_string(module.header.title.as_str(), 20));
+    // 1. Title
+    bytes.extend_from_slice(&pad_string(module.header.title.as_str(), MOD_TITLE_LEN));
 
-    // 2. Instrument/Sample Headers (31 instruments)
+    // 2. Instrument/Sample Headers
     let mut sample_data_to_write = Vec::new();
 
-    for i in 0..31 {
+    for i in 0..MOD_31_INSTRUMENT_COUNT {
         let name = if let Some(ins) = module.instruments.get(i) {
             ins.name.as_str()
         } else {
             ""
         };
-        bytes.extend_from_slice(&pad_string(name, 22));
+        bytes.extend_from_slice(&pad_string(name, MOD_INSTRUMENT_NAME_LEN));
 
         let mut length_words = 0u16;
         let mut finetune_nibble = 0u8;
@@ -540,25 +571,27 @@ pub fn write_mod_module(module: &Module) -> Result<Vec<u8>, ModWriteError> {
                 finetune_nibble = finetune_to_nibble(sample.finetune);
                 volume_64 = vol255_to_64(sample.volume);
 
-                if sample.loop_kind != SampleLoopKind::None && sample.loop_length > 2 {
-                    let start = (sample.loop_start / 2) as u16;
-                    let len = (sample.loop_length / 2) as u16;
+                if sample.loop_kind != SampleLoopKind::None
+                    && sample.loop_length > MOD_LOOP_ENABLED_MIN_BYTES
+                {
+                    let start = (sample.loop_start / MOD_SAMPLE_LENGTH_WORD_BYTES) as u16;
+                    let len = (sample.loop_length / MOD_SAMPLE_LENGTH_WORD_BYTES) as u16;
                     loop_start_words = start;
                     loop_length_words = len;
                 } else {
-                    loop_start_words = 0;
-                    loop_length_words = 1;
+                    loop_start_words = MOD_EMPTY_LOOP_START_WORDS;
+                    loop_length_words = MOD_EMPTY_LOOP_LENGTH_WORDS;
                 }
 
                 sample_data_to_write.push(final_bytes);
             } else {
-                loop_start_words = 0;
-                loop_length_words = 1;
+                loop_start_words = MOD_EMPTY_LOOP_START_WORDS;
+                loop_length_words = MOD_EMPTY_LOOP_LENGTH_WORDS;
                 sample_data_to_write.push(Vec::new());
             }
         } else {
-            loop_start_words = 0;
-            loop_length_words = 1;
+            loop_start_words = MOD_EMPTY_LOOP_START_WORDS;
+            loop_length_words = MOD_EMPTY_LOOP_LENGTH_WORDS;
             sample_data_to_write.push(Vec::new());
         }
 
@@ -571,7 +604,7 @@ pub fn write_mod_module(module: &Module) -> Result<Vec<u8>, ModWriteError> {
 
     // 3. Song length and restart position
     bytes.push(module.orders.len() as u8);
-    bytes.push((module.header.restart_position & 0x7f) as u8);
+    bytes.push((module.header.restart_position & MOD_RESTART_POSITION_MASK) as u8);
 
     // 4. Order List (128 bytes)
     let mut order_table = [0u8; MOD_ORDER_TABLE_LEN];
@@ -591,17 +624,17 @@ pub fn write_mod_module(module: &Module) -> Result<Vec<u8>, ModWriteError> {
             .get(p)
             .ok_or(ModWriteError::MissingPattern { pattern_index: p })?;
 
-        if pattern.rows() != 64 || pattern.channels() < module.header.channel_count {
+        if pattern.rows() != MOD_PATTERN_ROWS || pattern.channels() < module.header.channel_count {
             return Err(ModWriteError::InvalidPatternShape {
                 pattern_index: p,
                 rows: pattern.rows(),
                 channels: pattern.channels(),
-                required_rows: 64,
+                required_rows: MOD_PATTERN_ROWS,
                 required_channels: module.header.channel_count,
             });
         }
 
-        for r in 0..64 {
+        for r in 0..MOD_PATTERN_ROWS {
             for c in 0..module.header.channel_count {
                 let cell = pattern
                     .cell(c, r)
@@ -610,7 +643,7 @@ pub fn write_mod_module(module: &Module) -> Result<Vec<u8>, ModWriteError> {
                 let note_val = cell.note.raw();
                 let note_period = note_to_amiga_period(note_val);
 
-                let ins_num = if cell.instrument <= 31 {
+                let ins_num = if cell.instrument <= MOD_MAX_INSTRUMENT_NUMBER {
                     cell.instrument
                 } else {
                     0

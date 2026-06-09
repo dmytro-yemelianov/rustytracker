@@ -1,5 +1,6 @@
 use rustytracker_core::Module;
 use rustytracker_play::PlaybackState;
+use rustytracker_xm::{XM_HEADER_SIGNATURE, XM_HEADER_SIGNATURE_LENGTH};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -12,16 +13,17 @@ pub struct RustyTrackerWasmEngine {
 impl RustyTrackerWasmEngine {
     #[wasm_bindgen(constructor)]
     pub fn new(module_bytes: &[u8]) -> Result<RustyTrackerWasmEngine, JsValue> {
-        let (module, format) =
-            if module_bytes.len() >= 17 && &module_bytes[0..17] == b"Extended Module: " {
-                let m = rustytracker_xm::parse_xm_module(module_bytes)
-                    .map_err(|e| JsValue::from_str(&format!("XM parse err: {e:?}")))?;
-                (m, "xm")
-            } else {
-                let m = rustytracker_mod::parse_mod_module(module_bytes)
-                    .map_err(|e| JsValue::from_str(&format!("MOD parse err: {e:?}")))?;
-                (m, "mod")
-            };
+        let (module, format) = if module_bytes.len() >= XM_HEADER_SIGNATURE_LENGTH
+            && &module_bytes[..XM_HEADER_SIGNATURE_LENGTH] == XM_HEADER_SIGNATURE
+        {
+            let m = rustytracker_xm::parse_xm_module(module_bytes)
+                .map_err(|e| JsValue::from_str(&format!("XM parse err: {e:?}")))?;
+            (m, "xm")
+        } else {
+            let m = rustytracker_mod::parse_mod_module(module_bytes)
+                .map_err(|e| JsValue::from_str(&format!("MOD parse err: {e:?}")))?;
+            (m, "mod")
+        };
 
         let use_pal_clock = format == "mod";
         let playback = PlaybackState::start_with_config(&module, use_pal_clock)
