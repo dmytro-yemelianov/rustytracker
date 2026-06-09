@@ -90,6 +90,10 @@ impl PlaybackEnvelopeState {
         let p_a = env.points[idx_a];
         let p_b = env.points[idx_b];
 
+        if self.step <= p_a.frame {
+            return p_a.value;
+        }
+
         let mut dx = p_b.frame as i32 - p_a.frame as i32;
         if dx == 0 {
             dx = 1;
