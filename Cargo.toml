@@ -4,7 +4,7 @@ members = [
     "crates/rustytracker-core",
     "crates/rustytracker-edit",
     "crates/rustytracker-mod",
-    "crates/rustytracker-play",
+    "crates/rustytracker-play", "crates/rustytracker-ui",
     "crates/rustytracker-xm",
 ]
 resolver = "2"
