@@ -22,7 +22,9 @@ crates/
   rustytracker-core/   Typed module, pattern, note, instrument, and sample model
   rustytracker-cli/    Structural dump CLI and golden fixture tests
   rustytracker-xm/     Read-only XM header, pattern metadata, and packed cell decoder
+  rustytracker-wasm/   Browser-loadable WASM playback engine bindings
 docs/specs/            Rewrite specs and TDD plan
+web/                   Minimal browser player harness for rustytracker-wasm
 ```
 
 Planned crates:
@@ -34,6 +36,18 @@ rustytracker-edit      Editing commands, undo, transformations
 rustytracker-cli       Golden-test and inspection CLI
 rustytracker-ui        Eventual desktop UI
 ```
+
+## Browser Harness
+
+The WASM engine can be packaged for a local browser player:
+
+```sh
+cargo install --locked wasm-bindgen-cli --version 0.2.123
+./scripts/build_wasm_web.sh
+python3 -m http.server 8080
+```
+
+Open `http://localhost:8080/web/` and load an XM or MOD file.
 
 ## Test Policy
 

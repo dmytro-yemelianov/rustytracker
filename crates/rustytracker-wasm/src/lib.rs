@@ -3,6 +3,10 @@ use rustytracker_play::PlaybackState;
 use rustytracker_xm::{XM_HEADER_SIGNATURE, XM_HEADER_SIGNATURE_LENGTH};
 use wasm_bindgen::prelude::*;
 
+const PCM16_MIN: i32 = -32_768;
+const PCM16_MAX: i32 = 32_767;
+const PCM16_NORMALIZATION: f32 = 32_768.0;
+
 #[wasm_bindgen]
 pub struct RustyTrackerWasmEngine {
     playback: PlaybackState,
@@ -39,9 +43,9 @@ impl RustyTrackerWasmEngine {
                 .render_raw_stereo_frame(&self.module, sample_rate)
             {
                 Ok((left_i32, right_i32)) => {
-                    out_l[i] = (left_i32.clamp(-32768, 32767) as f32) / 32768.0;
+                    out_l[i] = normalize_pcm16_sample(left_i32);
                     if i < out_r.len() {
-                        out_r[i] = (right_i32.clamp(-32768, 32767) as f32) / 32768.0;
+                        out_r[i] = normalize_pcm16_sample(right_i32);
                     }
                 }
                 Err(_) => {
@@ -73,5 +77,24 @@ impl RustyTrackerWasmEngine {
 
     pub fn current_tick(&self) -> u16 {
         self.playback.clock().tick()
+    }
+}
+
+fn normalize_pcm16_sample(sample: i32) -> f32 {
+    sample.clamp(PCM16_MIN, PCM16_MAX) as f32 / PCM16_NORMALIZATION
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_pcm16_sample_clamps_for_web_audio() {
+        assert_eq!(normalize_pcm16_sample(0), 0.0);
+        assert_eq!(normalize_pcm16_sample(PCM16_MIN), -1.0);
+        assert_eq!(
+            normalize_pcm16_sample(PCM16_MAX + 1),
+            PCM16_MAX as f32 / PCM16_NORMALIZATION
+        );
     }
 }

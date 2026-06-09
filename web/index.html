@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RustyTracker Web</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="top-bar">
+        <div>
+          <h1>RustyTracker Web</h1>
+          <p>WASM tracker engine</p>
+        </div>
+        <div class="status-pill" id="wasmStatus">WASM loading</div>
+      </header>
+
+      <section class="transport" aria-label="Tracker transport">
+        <label class="file-button">
+          <input id="moduleFile" type="file" accept=".xm,.mod" />
+          <span>Load XM/MOD</span>
+        </label>
+        <button id="playButton" type="button" disabled>Play</button>
+        <button id="stopButton" type="button" disabled>Stop</button>
+        <button id="resetButton" type="button" disabled>Reload</button>
+      </section>
+
+      <section class="tracker-grid" aria-live="polite">
+        <div class="panel module-panel">
+          <h2>Module</h2>
+          <dl>
+            <div>
+              <dt>File</dt>
+              <dd id="fileName">None loaded</dd>
+            </div>
+            <div>
+              <dt>Sample rate</dt>
+              <dd id="sampleRate">-</dd>
+            </div>
+            <div>
+              <dt>State</dt>
+              <dd id="playState">Idle</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div class="panel cursor-panel">
+          <h2>Cursor</h2>
+          <div class="cursor-readout">
+            <span>
+              <strong id="orderValue">00</strong>
+              <small>Order</small>
+            </span>
+            <span>
+              <strong id="rowValue">00</strong>
+              <small>Row</small>
+            </span>
+            <span>
+              <strong id="tickValue">00</strong>
+              <small>Tick</small>
+            </span>
+          </div>
+        </div>
+
+        <div class="panel log-panel">
+          <h2>Log</h2>
+          <pre id="logOutput">No module loaded.</pre>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

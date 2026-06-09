@@ -1,0 +1,270 @@
+:root {
+  color-scheme: dark;
+  --bg: #161b1d;
+  --panel: #202829;
+  --panel-dark: #111719;
+  --border: #28436b;
+  --border-soft: #394247;
+  --text: #d6d6d6;
+  --muted: #7f878d;
+  --accent: #9393ff;
+  --accent-strong: #ffffff;
+  --warn: #d98a3d;
+  --active: #103060;
+  --danger: #a01830;
+  --cell: 8px;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.app-shell {
+  width: min(1120px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 16px 0;
+}
+
+.top-bar,
+.transport,
+.panel {
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 58px;
+  padding: 10px 12px;
+}
+
+h1,
+h2,
+p,
+dl,
+pre {
+  margin: 0;
+}
+
+h1 {
+  font-size: 18px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.top-bar p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.status-pill {
+  min-width: 128px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-soft);
+  background: var(--panel-dark);
+  color: var(--accent);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.transport {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px;
+}
+
+.file-button input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.file-button span,
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 96px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--panel-dark);
+  color: var(--text);
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.file-button:hover span,
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+button:disabled {
+  color: var(--muted);
+  border-color: var(--border-soft);
+  cursor: default;
+  opacity: 0.65;
+}
+
+.tracker-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr);
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.panel {
+  min-width: 0;
+  padding: 8px;
+}
+
+.panel h2 {
+  min-height: 24px;
+  margin: -8px -8px 8px;
+  padding: 5px 8px;
+  background: var(--panel-dark);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.module-panel dl {
+  display: grid;
+  gap: 6px;
+}
+
+.module-panel dl > div {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 8px;
+  min-height: 24px;
+  align-items: center;
+  border-bottom: 1px solid #223039;
+}
+
+dt {
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.cursor-panel {
+  min-height: 160px;
+}
+
+.cursor-readout {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.cursor-readout span {
+  display: grid;
+  min-height: 96px;
+  place-items: center;
+  border: 1px solid var(--border-soft);
+  background: var(--panel-dark);
+}
+
+.cursor-readout strong {
+  color: var(--accent-strong);
+  font-size: 34px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.cursor-readout small {
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.log-panel {
+  grid-column: 1 / -1;
+}
+
+pre {
+  min-height: 96px;
+  max-height: 220px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--border-soft);
+  background: #0d1113;
+  color: var(--warn);
+  white-space: pre-wrap;
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    width: calc(100vw - 16px);
+    padding: 8px 0;
+  }
+
+  .top-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .status-pill {
+    width: 100%;
+  }
+
+  .transport {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .file-button span,
+  button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .tracker-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .module-panel dl > div {
+    grid-template-columns: 88px minmax(0, 1fr);
+  }
+
+  .log-panel {
+    grid-column: auto;
+  }
+}
