@@ -354,6 +354,16 @@ impl RustyTrackerApp {
                     }
                     ui.close_menu();
                 }
+                if ui.button("Save As (XM/MOD)...").clicked() {
+                    if let Some(path) = rfd::FileDialog::new()
+                        .add_filter("Extended Module (*.xm)", &["xm"])
+                        .add_filter("ProTracker Module (*.mod)", &["mod"])
+                        .save_file()
+                    {
+                        self.save_module_file(&path);
+                    }
+                    ui.close_menu();
+                }
                 if ui.button("Export to WAV...").clicked() {
                     if let Some(path) = rfd::FileDialog::new()
                         .add_filter("WAVE Audio (*.wav)", &["wav"])
@@ -712,6 +722,30 @@ impl RustyTrackerApp {
             }
         } else {
             eprintln!("Failed to start playback for WAV rendering");
+        }
+    }
+
+    fn save_module_file(&self, path: &Path) {
+        let module = self.editor.module();
+        let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("").to_lowercase();
+        
+        let result = if extension == "xm" {
+            rustytracker_xm::write_xm_module(module).map_err(|e| format!("{e:?}"))
+        } else if extension == "mod" {
+            rustytracker_mod::write_mod_module(module).map_err(|e| format!("{e:?}"))
+        } else {
+            Err("Unsupported file format. Please use .xm or .mod extension.".to_string())
+        };
+
+        match result {
+            Ok(bytes) => {
+                if let Err(e) = std::fs::write(path, bytes) {
+                    eprintln!("Failed to write module file: {e:?}");
+                }
+            }
+            Err(err) => {
+                eprintln!("Failed to export module: {err}");
+            }
         }
     }
 
