@@ -119,10 +119,13 @@ async function createEngine(bytes, fileName) {
   } catch (error) {
     engine = null;
     loadedBytes = null;
+    appState.fileName = "";
     appState.loaded = false;
     appState.lastError = errorMessage(error);
     setTransportEnabled(false);
+    elements.fileName.textContent = "None loaded";
     elements.playState.textContent = "Load failed";
+    updateCursorReadout();
     log(`Could not load ${fileName}: ${appState.lastError}`);
   }
 }

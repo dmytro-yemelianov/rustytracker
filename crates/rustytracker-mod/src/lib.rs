@@ -431,6 +431,13 @@ pub enum ModWriteError {
         channel: u16,
         effect_slot: usize,
     },
+    UnsupportedInstrument {
+        pattern_index: usize,
+        row: u16,
+        channel: u16,
+        instrument: u8,
+        maximum: u8,
+    },
 }
 
 impl std::fmt::Display for ModWriteError {
@@ -475,6 +482,16 @@ impl std::fmt::Display for ModWriteError {
             } => write!(
                 f,
                 "Pattern {pattern_index} row {row} channel {channel} has non-empty extra effect slot {effect_slot}, which MOD cannot represent"
+            ),
+            Self::UnsupportedInstrument {
+                pattern_index,
+                row,
+                channel,
+                instrument,
+                maximum,
+            } => write!(
+                f,
+                "Pattern {pattern_index} row {row} channel {channel} references instrument {instrument}, but MOD export supports instruments up to {maximum}"
             ),
         }
     }
@@ -643,11 +660,16 @@ pub fn write_mod_module(module: &Module) -> Result<Vec<u8>, ModWriteError> {
                 let note_val = cell.note.raw();
                 let note_period = note_to_amiga_period(note_val);
 
-                let ins_num = if cell.instrument <= MOD_MAX_INSTRUMENT_NUMBER {
-                    cell.instrument
-                } else {
-                    0
-                };
+                if cell.instrument > MOD_MAX_INSTRUMENT_NUMBER {
+                    return Err(ModWriteError::UnsupportedInstrument {
+                        pattern_index: p,
+                        row: r,
+                        channel: c,
+                        instrument: cell.instrument,
+                        maximum: MOD_MAX_INSTRUMENT_NUMBER,
+                    });
+                }
+                let ins_num = cell.instrument;
 
                 for (effect_slot, effect) in cell.effects.iter().enumerate().skip(1) {
                     if *effect != EffectCommand::default() {

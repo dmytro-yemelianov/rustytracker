@@ -1300,11 +1300,11 @@ fn test_effect_arpeggio() {
     };
     module.patterns[0].set_cell(0, 0, cell_0).unwrap();
 
-    // Row 1: No Note with Arpeggio 0x00 (operand 0) -> uses memory (0x37)
+    // Row 1: No Note with explicit Arpeggio 0x00 -> uses memory (0x37)
     let cell_1 = PatternCell {
         effects: vec![
             EffectCommand {
-                effect: 0x00, // Arpeggio (zero)
+                effect: 0x20, // Explicit arpeggio, displayed/written as 000
                 operand: 0x00,
             },
             EffectCommand::default(),
@@ -1346,6 +1346,38 @@ fn test_effect_arpeggio() {
     playback.advance_tick(&module).unwrap();
     let ch = &playback.channels()[0];
     assert_eq!(ch.period, 4608 - 7 * 64); // Tick 2 -> offset 7 (from memory)
+}
+
+#[test]
+fn default_effect_slots_do_not_reuse_arpeggio_memory() {
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_TWO_ROWS]);
+    module.header.tick_speed = 3;
+
+    let cell_0 = PatternCell {
+        note: Note::Key(49),
+        instrument: 1,
+        effects: vec![
+            EffectCommand {
+                effect: 0x20,
+                operand: 0x37,
+            },
+            EffectCommand::default(),
+        ],
+    };
+    module.patterns[0].set_cell(0, 0, cell_0).unwrap();
+    map_instrument_to_sample(&mut module, 0, 0);
+
+    let mut playback = PlaybackState::start(&module).unwrap();
+    playback.advance_tick(&module).unwrap();
+    assert_eq!(playback.channels()[0].period, 4608 - 3 * 64);
+
+    playback.advance_tick(&module).unwrap();
+    playback.advance_tick(&module).unwrap();
+    assert_eq!(playback.channels()[0].period, 4608);
+
+    playback.advance_tick(&module).unwrap();
+    assert_eq!(playback.channels()[0].period, 4608);
 }
 
 #[test]
