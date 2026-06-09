@@ -466,7 +466,7 @@ impl PlaybackChannelState {
                         self.volume = self.volume.saturating_sub(y.saturating_mul(4));
                     }
                 }
-                EFFECT_ARPEGGIO_NONZERO | EFFECT_ARPEGGIO_ZERO => {
+                EFFECT_ARPEGGIO_NONZERO => {
                     let mut op = effect.operand;
                     if op == 0 {
                         op = self.arpeggio_memory;

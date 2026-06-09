@@ -351,15 +351,7 @@ impl RustyTrackerApp {
             )
             .clicked()
             {
-                if let Ok(mut state) = self.audio_engine.state.lock() {
-                    state.is_playing = true;
-                    state.module = Some(self.editor.module().clone());
-                    if state.playback.is_none() {
-                        state.playback =
-                            PlaybackState::start_with_config(self.editor.module(), self.is_mod)
-                                .ok();
-                    }
-                }
+                self.start_audio_playback();
             }
 
             if tracker_ui::show_toolbar_button(
@@ -640,6 +632,8 @@ impl RustyTrackerApp {
                     self.active_row = 0;
                     self.active_order_index = 0;
                     self.active_channel = 0;
+                    self.active_field = ActiveField::Note;
+                    self.selected_instrument = 1;
                     self.is_mod = is_mod;
                     if let Ok(mut state) = self.audio_engine.state.lock() {
                         state.module = Some(self.editor.module().clone());
@@ -877,7 +871,7 @@ impl RustyTrackerApp {
                         }
                         ActiveField::Effect0 => {
                             let mut cmd = cell.effects.first().copied().unwrap_or_default();
-                            cmd.operand = (cmd.operand << 4) | digit;
+                            cmd = append_effect_digit(cmd, digit);
                             let _ = self.editor.set_effect(
                                 active_pattern_idx,
                                 self.active_channel,
@@ -889,7 +883,7 @@ impl RustyTrackerApp {
                         }
                         ActiveField::Effect1 => {
                             let mut cmd = cell.effects.get(1).copied().unwrap_or_default();
-                            cmd.operand = (cmd.operand << 4) | digit;
+                            cmd = append_effect_digit(cmd, digit);
                             let _ = self.editor.set_effect(
                                 active_pattern_idx,
                                 self.active_channel,
@@ -965,6 +959,96 @@ impl RustyTrackerApp {
     fn advance_row_after_edit(&mut self) {
         let rows = self.get_active_pattern_rows();
         self.active_row = (self.active_row + 1) % rows;
+    }
+
+    fn start_audio_playback(&mut self) {
+        let module = self.editor.module().clone();
+        let needs_playback = self
+            .audio_engine
+            .state
+            .lock()
+            .map(|state| state.playback.is_none())
+            .unwrap_or(true);
+
+        let playback = if needs_playback {
+            match PlaybackState::start_with_config(&module, self.is_mod) {
+                Ok(playback) => Some(playback),
+                Err(err) => {
+                    eprintln!("Failed to start playback: {err:?}");
+                    if let Ok(mut state) = self.audio_engine.state.lock() {
+                        state.module = Some(module);
+                        state.playback = None;
+                        state.is_playing = false;
+                    }
+                    return;
+                }
+            }
+        } else {
+            None
+        };
+
+        if let Ok(mut state) = self.audio_engine.state.lock() {
+            state.module = Some(module);
+            if let Some(playback) = playback {
+                state.playback = Some(playback);
+            }
+            state.is_playing = true;
+        }
+    }
+}
+
+const EFFECT_ENTRY_MASK: u16 = 0x0fff;
+const EFFECT_COMMAND_SHIFT: u16 = 8;
+const EFFECT_EXTENDED_COMMAND: u8 = 0x0e;
+const INTERNAL_EFFECT_NONZERO_ARPEGGIO: u8 = 0x20;
+const INTERNAL_EFFECT_EXTENDED_BASE: u8 = 0x30;
+const INTERNAL_EFFECT_EXTENDED_MAX: u8 = 0x3f;
+const NIBBLE_MASK: u8 = 0x0f;
+
+fn append_effect_digit(effect: EffectCommand, digit: u8) -> EffectCommand {
+    let value =
+        ((effect_to_entry_value(effect) << 4) | u16::from(digit & NIBBLE_MASK)) & EFFECT_ENTRY_MASK;
+    effect_from_entry_value(value)
+}
+
+fn effect_to_entry_value(effect: EffectCommand) -> u16 {
+    let (command, operand) = if (INTERNAL_EFFECT_EXTENDED_BASE..=INTERNAL_EFFECT_EXTENDED_MAX)
+        .contains(&effect.effect)
+    {
+        (
+            EFFECT_EXTENDED_COMMAND,
+            ((effect.effect - INTERNAL_EFFECT_EXTENDED_BASE) << 4) | (effect.operand & NIBBLE_MASK),
+        )
+    } else if effect.effect == INTERNAL_EFFECT_NONZERO_ARPEGGIO {
+        (0, effect.operand)
+    } else {
+        (effect.effect & NIBBLE_MASK, effect.operand)
+    };
+
+    (u16::from(command) << EFFECT_COMMAND_SHIFT) | u16::from(operand)
+}
+
+fn effect_from_entry_value(value: u16) -> EffectCommand {
+    let command = ((value >> EFFECT_COMMAND_SHIFT) as u8) & NIBBLE_MASK;
+    let operand = (value & 0x00ff) as u8;
+
+    if command == 0 && operand == 0 {
+        EffectCommand::default()
+    } else if command == 0 {
+        EffectCommand {
+            effect: INTERNAL_EFFECT_NONZERO_ARPEGGIO,
+            operand,
+        }
+    } else if command == EFFECT_EXTENDED_COMMAND {
+        EffectCommand {
+            effect: INTERNAL_EFFECT_EXTENDED_BASE + (operand >> 4),
+            operand: operand & NIBBLE_MASK,
+        }
+    } else {
+        EffectCommand {
+            effect: command,
+            operand,
+        }
     }
 }
 
@@ -1486,5 +1570,59 @@ impl RustyTrackerApp {
         {
             self.commit_edit_to_audio();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn effect_entry_accepts_command_and_operand_nibbles() {
+        let mut effect = EffectCommand::default();
+        for digit in [0x0f, 0x00, 0x06] {
+            effect = append_effect_digit(effect, digit);
+        }
+
+        assert_eq!(
+            effect,
+            EffectCommand {
+                effect: 0x0f,
+                operand: 0x06,
+            }
+        );
+    }
+
+    #[test]
+    fn effect_entry_normalizes_extended_effects() {
+        let mut effect = EffectCommand::default();
+        for digit in [0x0e, 0x0a, 0x01] {
+            effect = append_effect_digit(effect, digit);
+        }
+
+        assert_eq!(
+            effect,
+            EffectCommand {
+                effect: 0x3a,
+                operand: 0x01,
+            }
+        );
+        assert_eq!(effect_to_entry_value(effect), 0x0ea1);
+    }
+
+    #[test]
+    fn effect_entry_normalizes_nonzero_arpeggio() {
+        let mut effect = EffectCommand::default();
+        for digit in [0x00, 0x03, 0x07] {
+            effect = append_effect_digit(effect, digit);
+        }
+
+        assert_eq!(
+            effect,
+            EffectCommand {
+                effect: INTERNAL_EFFECT_NONZERO_ARPEGGIO,
+                operand: 0x37,
+            }
+        );
     }
 }
