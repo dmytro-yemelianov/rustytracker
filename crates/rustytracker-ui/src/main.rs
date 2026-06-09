@@ -342,6 +342,15 @@ impl RustyTrackerApp {
                     }
                     ui.close_menu();
                 }
+                if ui.button("Export to WAV...").clicked() {
+                    if let Some(path) = rfd::FileDialog::new()
+                        .add_filter("WAVE Audio (*.wav)", &["wav"])
+                        .save_file()
+                    {
+                        self.export_to_wav_file(&path);
+                    }
+                    ui.close_menu();
+                }
                 ui.separator();
                 if ui.button("Exit").clicked() {
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
@@ -659,6 +668,21 @@ impl RustyTrackerApp {
                     eprintln!("Failed to parse module: {err}");
                 }
             }
+        }
+    }
+
+    fn export_to_wav_file(&self, path: &Path) {
+        let module = self.editor.module();
+        if let Ok(mut playback) = PlaybackState::start(module) {
+            if let Ok(wav_bytes) = playback.render_to_wav(module, 44100) {
+                if let Err(e) = std::fs::write(path, wav_bytes) {
+                    eprintln!("Failed to write WAV file: {e:?}");
+                }
+            } else {
+                eprintln!("Failed to render WAV bytes");
+            }
+        } else {
+            eprintln!("Failed to start playback for WAV rendering");
         }
     }
 
