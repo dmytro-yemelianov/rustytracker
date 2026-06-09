@@ -255,3 +255,68 @@ fn test_loop_correction() {
     assert_eq!(sample.loop_length, 6);
     assert_eq!(sample.loop_kind, SampleLoopKind::Forward);
 }
+
+#[test]
+fn test_mod_writer_roundtrip() {
+    // 31 instruments, 4 channels
+    let pattern_size = 4 * 64 * 4;
+    let mut pat_bytes = vec![0u8; pattern_size];
+
+    // C-3 (note 37, period 856), instrument 1, effect 0xC, volume 64
+    pat_bytes[0] = 0x03;
+    pat_bytes[1] = 0x58;
+    pat_bytes[2] = 0x1c;
+    pat_bytes[3] = 0x40;
+
+    let sample_lengths = vec![4; 31];
+    let sample_payloads = vec![vec![1, 2, 3, 4, 252, 253, 254, 255]; 31];
+
+    let original_bytes = create_mock_mod(
+        Some(b"M.K."),
+        1,
+        &[0],
+        &[pat_bytes],
+        &sample_lengths,
+        &[],
+        &[],
+        &sample_payloads,
+    );
+
+    let parsed_original = parse_mod_module(&original_bytes).unwrap();
+
+    // Export using writer
+    let exported_bytes = rustytracker_mod::write_mod_module(&parsed_original).unwrap();
+
+    // Re-parse exported bytes
+    let parsed_roundtrip = parse_mod_module(&exported_bytes).unwrap();
+
+    assert_eq!(parsed_roundtrip.header.title.as_str(), parsed_original.header.title.as_str());
+    assert_eq!(parsed_roundtrip.header.channel_count, parsed_original.header.channel_count);
+    assert_eq!(parsed_roundtrip.orders, parsed_original.orders);
+    assert_eq!(parsed_roundtrip.patterns.len(), parsed_original.patterns.len());
+
+    // Compare first cell
+    let cell_orig = parsed_original.patterns[0].cell(0, 0).unwrap();
+    let cell_round = parsed_roundtrip.patterns[0].cell(0, 0).unwrap();
+    assert_eq!(cell_round.note, cell_orig.note);
+    assert_eq!(cell_round.instrument, cell_orig.instrument);
+    assert_eq!(cell_round.effects[0].effect, cell_orig.effects[0].effect);
+    assert_eq!(cell_round.effects[0].operand, cell_orig.effects[0].operand);
+
+    // Compare instrument and sample values
+    for i in 0..31 {
+        assert_eq!(parsed_roundtrip.instruments[i].name.as_str(), parsed_original.instruments[i].name.as_str());
+        assert_eq!(parsed_roundtrip.samples[i].volume, parsed_original.samples[i].volume);
+        assert_eq!(parsed_roundtrip.samples[i].finetune, parsed_original.samples[i].finetune);
+        assert_eq!(parsed_roundtrip.samples[i].length, parsed_original.samples[i].length);
+
+        match (&parsed_roundtrip.samples[i].data, &parsed_original.samples[i].data) {
+            (SampleData::Pcm8(r_data), SampleData::Pcm8(o_data)) => {
+                assert_eq!(r_data, o_data);
+            }
+            (SampleData::Empty, SampleData::Empty) => {}
+            _ => panic!("Sample data mismatch for index {i}"),
+        }
+    }
+}
+
