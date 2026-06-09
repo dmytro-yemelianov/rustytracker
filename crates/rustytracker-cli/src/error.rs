@@ -1,5 +1,7 @@
 use std::fmt;
 
+use crate::USAGE;
+
 #[derive(Debug)]
 pub enum DumpError {
     Io(std::io::Error),
@@ -21,10 +23,7 @@ impl fmt::Display for DumpError {
             Self::Xm(error) => write!(formatter, "XM parse error: {error:?}"),
             Self::Mod(error) => write!(formatter, "MOD parse error: {error:?}"),
             Self::Playback(error) => write!(formatter, "playback error: {error:?}"),
-            Self::InvalidArguments => write!(
-                formatter,
-                "usage: rustytracker dump <module.xm|module.mod> --format json\n       rustytracker play-state <module.xm|module.mod> --rows <count>\n       rustytracker export-wav <module.xm|module.mod> <output.wav> [--sample-rate <rate>]"
-            ),
+            Self::InvalidArguments => formatter.write_str(USAGE),
             Self::InvalidRowCount(value) => {
                 write!(formatter, "invalid play-state row count: {value}")
             }

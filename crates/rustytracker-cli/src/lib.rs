@@ -24,6 +24,11 @@ const DEFAULT_EXPORT_SAMPLE_RATE: u32 = 44100;
 const FORMAT_FLAG: &str = "--format";
 const JSON_FORMAT: &str = "json";
 const ROWS_FLAG: &str = "--rows";
+pub(crate) const USAGE: &str = concat!(
+    "usage: rustytracker dump <module.xm|module.mod> --format json\n",
+    "       rustytracker play-state <module.xm|module.mod> --rows <count>\n",
+    "       rustytracker export-wav <module.xm|module.mod> <output.wav> [--sample-rate <rate>]"
+);
 const PLAY_STATE_MIN_ROWS: usize = 1;
 const FNV_OFFSET: u64 = 0xcbf29ce484222325;
 const FNV_PRIME: u64 = 0x100000001b3;
