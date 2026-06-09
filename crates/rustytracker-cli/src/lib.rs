@@ -13,6 +13,8 @@ const DUMP_COMMAND: &str = "dump";
 const PLAY_STATE_SCHEMA_VERSION: u16 = 1;
 const PLAY_STATE_FORMAT: &str = "play_state";
 const PLAY_STATE_COMMAND: &str = "play-state";
+const EXPORT_WAV_COMMAND: &str = "export-wav";
+const DEFAULT_EXPORT_SAMPLE_RATE: u32 = 44100;
 const FORMAT_FLAG: &str = "--format";
 const JSON_FORMAT: &str = "json";
 const ROWS_FLAG: &str = "--rows";
@@ -58,7 +60,7 @@ impl fmt::Display for DumpError {
             Self::Playback(error) => write!(formatter, "playback error: {error:?}"),
             Self::InvalidArguments => write!(
                 formatter,
-                "usage: rustytracker dump <module.xm|module.mod> --format json\n       rustytracker play-state <module.xm|module.mod> --rows <count>"
+                "usage: rustytracker dump <module.xm|module.mod> --format json\n       rustytracker play-state <module.xm|module.mod> --rows <count>\n       rustytracker export-wav <module.xm|module.mod> <output.wav> [--sample-rate <rate>]"
             ),
             Self::InvalidRowCount(value) => write!(formatter, "invalid play-state row count: {value}"),
             Self::UnsupportedFormat(format) => {
@@ -299,6 +301,7 @@ where
     match command.as_str() {
         DUMP_COMMAND => run_dump_command(args),
         PLAY_STATE_COMMAND => run_play_state_command(args),
+        EXPORT_WAV_COMMAND => run_export_wav_command(args),
         _ => Err(DumpError::InvalidArguments),
     }
 }
@@ -336,6 +339,49 @@ where
 
     let requested_rows = parse_requested_rows(rows)?;
     play_state_xm_file_to_json(Path::new(&path), requested_rows)
+}
+
+fn run_export_wav_command<I>(mut args: I) -> Result<String, DumpError>
+where
+    I: Iterator<Item = String>,
+{
+    let input_path = args.next().ok_or(DumpError::InvalidArguments)?;
+    let output_path = args.next().ok_or(DumpError::InvalidArguments)?;
+
+    let mut sample_rate = DEFAULT_EXPORT_SAMPLE_RATE;
+
+    if let Some(arg) = args.next() {
+        if arg == "--sample-rate" {
+            let rate_str = args.next().ok_or(DumpError::InvalidArguments)?;
+            sample_rate = rate_str
+                .parse::<u32>()
+                .map_err(|_| DumpError::InvalidArguments)?;
+        } else {
+            return Err(DumpError::InvalidArguments);
+        }
+    }
+
+    if args.next().is_some() {
+        return Err(DumpError::InvalidArguments);
+    }
+
+    export_wav_file(Path::new(&input_path), Path::new(&output_path), sample_rate)?;
+
+    Ok(format!(
+        "Successfully exported WAV to {output_path} (sample rate: {sample_rate} Hz)\n"
+    ))
+}
+
+pub fn export_wav_file(
+    input_path: &Path,
+    output_path: &Path,
+    sample_rate: u32,
+) -> Result<(), DumpError> {
+    let (module, _) = load_module_from_file(input_path)?;
+    let mut playback = PlaybackState::start(&module)?;
+    let wav_bytes = playback.render_to_wav(&module, sample_rate)?;
+    std::fs::write(output_path, wav_bytes)?;
+    Ok(())
 }
 
 fn parse_requested_rows(rows: String) -> Result<usize, DumpError> {
