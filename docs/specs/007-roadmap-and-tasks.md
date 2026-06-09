@@ -200,10 +200,17 @@ Acceptance:
 
 Goal: desktop tracker UI after headless engine is credible.
 
-Candidate stack:
+Status: in progress.
 
-- `winit` + `pixels`/`wgpu` for a faithful tracker surface
-- `egui` only if speed matters more than exact MilkyTracker feel
+Done:
+
+- [x] add `rustytracker-ui` crate
+- [x] implement responsive egui (eframe) desktop layout (menu bar, control bar, side panels, and central grid)
+- [x] implement interactive pattern editor grid supporting visual cursor highlights and channel scrolling
+- [x] implement keyboard navigation (arrow keys, PageUp/PageDown, Space to record)
+- [x] implement keyboard piano note entry and hex digit shifts for instrument/effect values in edit mode
+- [x] implement desktop file loader dialogue using `rfd` and signature-based XM/MOD auto-detection
+- [x] implement tick-accumulator simulated playback playhead tracing linked to `rustytracker-play` engine
 
 Acceptance:
 
@@ -212,6 +219,5 @@ Acceptance:
 
 ## Immediate Backlog
 
-1. Continue Milestone 5: implement loop/ping-pong and envelopes.
-2. Keep adding focused XM writer/parser edge cases when playback or future
-   compatibility work exposes a concrete gap.
+1. Connect the UI to a real-time CPAL sound card output thread using `rustytracker-play`'s PCM frame generation.
+2. Keep adding focused XM/MOD edge cases and writer features when playback or future compatibility work exposes a concrete gap.
