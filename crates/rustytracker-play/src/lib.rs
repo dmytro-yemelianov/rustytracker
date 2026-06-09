@@ -1,7 +1,19 @@
-//! Playback cursor and timing skeleton for RustyTracker.
+//! Playback sequencing, channel state, and raw PCM rendering for RustyTracker.
 //!
-//! Audio mixing and effect execution will build on this crate. The first slice
-//! keeps traversal explicit and testable.
+//! The crate root is the compatibility facade for playback modules:
+//!
+//! ```
+//! use rustytracker_play::{
+//!     PlaybackChannelState, PlaybackEnvelopeState, PlaybackSampleValue, EFFECT_ARPEGGIO_ZERO,
+//!     VIB_TAB,
+//! };
+//!
+//! let _ = core::mem::size_of::<PlaybackChannelState>();
+//! let _ = core::mem::size_of::<PlaybackEnvelopeState>();
+//! let _ = core::mem::size_of::<PlaybackSampleValue>();
+//! let _ = EFFECT_ARPEGGIO_ZERO;
+//! let _ = VIB_TAB.len();
+//! ```
 
 mod channel;
 mod cursor;
