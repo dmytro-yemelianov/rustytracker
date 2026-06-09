@@ -28,6 +28,7 @@ const PLAY_TEST_DEFAULT_BPM: u16 = 125;
 const PLAY_TEST_FAST_BPM: u16 = 250;
 const PLAY_TEST_ZERO_TICK_SPEED: u16 = 0;
 const PLAY_TEST_ZERO_BPM: u16 = 0;
+const PLAY_TEST_ZERO_SAMPLE_RATE: u32 = 0;
 const PLAY_TEST_DEFAULT_TICK_NANOS: u64 = 20_000_000;
 const PLAY_TEST_DEFAULT_ROW_NANOS: u64 =
     PLAY_TEST_DEFAULT_TICK_NANOS * PLAY_TEST_DEFAULT_TICK_SPEED as u64;
@@ -2026,4 +2027,36 @@ fn test_render_to_wav() {
     let file_size = u32::from_le_bytes(wav_bytes[4..8].try_into().unwrap());
     assert_eq!(file_size, data_size + 36);
     assert_eq!(wav_bytes.len(), data_size as usize + 44);
+}
+
+#[test]
+fn render_to_wav_rejects_zero_sample_rate() {
+    let module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_ONE_ROW]);
+    let mut playback = PlaybackState::start(&module).unwrap();
+
+    assert_eq!(
+        playback
+            .render_to_wav(&module, PLAY_TEST_ZERO_SAMPLE_RATE)
+            .unwrap_err(),
+        PlaybackError::InvalidSampleRate {
+            sample_rate: PLAY_TEST_ZERO_SAMPLE_RATE,
+        }
+    );
+}
+
+#[test]
+fn raw_render_rejects_zero_sample_rate() {
+    let module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_ONE_ROW]);
+    let mut playback = PlaybackState::start(&module).unwrap();
+
+    assert_eq!(
+        playback
+            .render_raw_stereo_pcm(&module, PLAY_TEST_ZERO_SAMPLE_RATE, PLAY_TEST_RENDER_FRAMES)
+            .unwrap_err(),
+        PlaybackError::InvalidSampleRate {
+            sample_rate: PLAY_TEST_ZERO_SAMPLE_RATE,
+        }
+    );
 }

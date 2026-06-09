@@ -27,6 +27,7 @@ pub const PLAYBACK_EMPTY_VOLUME: u8 = 0;
 pub const PLAYBACK_PCM8_TO_I16_SHIFT: u32 = 8;
 pub const PLAYBACK_MONO_SILENCE: RawMonoPcmFrame = 0;
 pub const PLAYBACK_STEREO_SILENCE: RawStereoPcmFrame = (0, 0);
+pub const PLAYBACK_MIN_SAMPLE_RATE: u32 = 1;
 pub const EFFECT_SET_SPEED_BPM: u8 = 0x0f;
 pub const SPEED_BPM_THRESHOLD: u8 = 32;
 
@@ -63,6 +64,9 @@ pub enum PlaybackError {
     InvalidBpm {
         bpm: u16,
     },
+    InvalidSampleRate {
+        sample_rate: u32,
+    },
     EmptyOrderList,
     OrderIndexOutOfRange {
         order_index: usize,
@@ -97,6 +101,14 @@ pub enum PlaybackError {
 }
 
 pub type PlaybackResult<T> = Result<T, PlaybackError>;
+
+fn validate_sample_rate(sample_rate: u32) -> PlaybackResult<()> {
+    if sample_rate < PLAYBACK_MIN_SAMPLE_RATE {
+        return Err(PlaybackError::InvalidSampleRate { sample_rate });
+    }
+
+    Ok(())
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PlaybackPosition {
@@ -1253,6 +1265,7 @@ impl PlaybackState {
         sample_rate: u32,
         frame_count: usize,
     ) -> PlaybackResult<Vec<RawMonoPcmFrame>> {
+        validate_sample_rate(sample_rate)?;
         let mut rendered = vec![PLAYBACK_MONO_SILENCE; frame_count];
         self.render_raw_mono_into(module, sample_rate, &mut rendered)?;
         Ok(rendered)
@@ -1264,6 +1277,7 @@ impl PlaybackState {
         sample_rate: u32,
         output: &mut [RawMonoPcmFrame],
     ) -> PlaybackResult<()> {
+        validate_sample_rate(sample_rate)?;
         for frame in output {
             *frame = self.render_raw_mono_frame(module, sample_rate)?;
         }
@@ -1277,6 +1291,7 @@ impl PlaybackState {
         sample_rate: u32,
         frame_count: usize,
     ) -> PlaybackResult<Vec<RawStereoPcmFrame>> {
+        validate_sample_rate(sample_rate)?;
         let mut rendered = vec![PLAYBACK_STEREO_SILENCE; frame_count];
         self.render_raw_stereo_into(module, sample_rate, &mut rendered)?;
         Ok(rendered)
@@ -1288,6 +1303,7 @@ impl PlaybackState {
         sample_rate: u32,
         output: &mut [RawStereoPcmFrame],
     ) -> PlaybackResult<()> {
+        validate_sample_rate(sample_rate)?;
         for frame in output {
             *frame = self.render_raw_stereo_frame(module, sample_rate)?;
         }
@@ -1296,6 +1312,8 @@ impl PlaybackState {
     }
 
     pub fn render_to_wav(&mut self, module: &Module, sample_rate: u32) -> PlaybackResult<Vec<u8>> {
+        validate_sample_rate(sample_rate)?;
+
         use std::io::{Cursor, Seek, SeekFrom, Write};
 
         let mut buffer = Cursor::new(Vec::new());
@@ -1374,6 +1392,7 @@ impl PlaybackState {
         module: &Module,
         sample_rate: u32,
     ) -> PlaybackResult<RawStereoPcmFrame> {
+        validate_sample_rate(sample_rate)?;
         let mut current_bpm = self.clock.timing().bpm() as i64;
 
         if !self.initialized {
@@ -1459,6 +1478,7 @@ impl PlaybackState {
         module: &Module,
         sample_rate: u32,
     ) -> PlaybackResult<RawMonoPcmFrame> {
+        validate_sample_rate(sample_rate)?;
         let mut current_bpm = self.clock.timing().bpm() as i64;
 
         if !self.initialized {
