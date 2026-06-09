@@ -1158,10 +1158,15 @@ pub struct PlaybackState {
     tick_samples_fractional_rem: i64,
     song_ended: bool,
     initialized: bool,
+    use_pal_clock: bool,
 }
 
 impl PlaybackState {
     pub fn start(module: &Module) -> PlaybackResult<Self> {
+        Self::start_with_config(module, false)
+    }
+
+    pub fn start_with_config(module: &Module, use_pal_clock: bool) -> PlaybackResult<Self> {
         let clock = PlaybackClock::start(module)?;
         let row_state = clock.row_state(module)?;
         let channels = row_state
@@ -1175,10 +1180,12 @@ impl PlaybackState {
             tick_samples_fractional_rem: 0,
             song_ended: false,
             initialized: false,
+            use_pal_clock,
         };
         state.apply_row_state(module, &row_state)?;
         Ok(state)
     }
+
 
     pub fn clock(&self) -> PlaybackClock {
         self.clock
@@ -1371,7 +1378,7 @@ impl PlaybackState {
                     if let Some(sample) = module.samples.get(sample_index) {
                         let frame_count = sample.data.frame_count();
                         if frame_count > 0 {
-                            let frequency = period_to_frequency(channel.period, module.header.frequency_table);
+                            let frequency = period_to_frequency(channel.period, module.header.frequency_table, self.use_pal_clock);
                             let step = frequency / sample_rate as f64;
 
                             let interpolated_val = get_sample_value_linear(
@@ -1450,7 +1457,7 @@ impl PlaybackState {
                     if let Some(sample) = module.samples.get(sample_index) {
                         let frame_count = sample.data.frame_count();
                         if frame_count > 0 {
-                            let frequency = period_to_frequency(channel.period, module.header.frequency_table);
+                            let frequency = period_to_frequency(channel.period, module.header.frequency_table, self.use_pal_clock);
                             let step = frequency / sample_rate as f64;
 
                             let interpolated_val = get_sample_value_linear(
@@ -1749,7 +1756,7 @@ fn get_sample_value_cubic(data: &SampleData, frame: usize, fraction: u32, sample
     ((a * t + b) * t + c) * t + d
 }
 
-fn period_to_frequency(period: u32, table: FrequencyTable) -> f64 {
+fn period_to_frequency(period: u32, table: FrequencyTable, use_pal_clock: bool) -> f64 {
     if period == 0 {
         return 0.0;
     }
@@ -1758,7 +1765,12 @@ fn period_to_frequency(period: u32, table: FrequencyTable) -> f64 {
             8363.0 * f64::powf(2.0, (4608.0 - period as f64) / 768.0)
         }
         FrequencyTable::Amiga => {
-            (8363.0 * 428.0) / period as f64
+            let base = if use_pal_clock {
+                3546895.0
+            } else {
+                3579364.0
+            };
+            base / period as f64
         }
     }
 }

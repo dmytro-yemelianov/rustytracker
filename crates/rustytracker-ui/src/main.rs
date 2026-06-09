@@ -231,6 +231,7 @@ struct RustyTrackerApp {
     editor: ModuleEditor,
     audio_engine: AudioPlaybackEngine,
     edit_mode: bool,
+    is_mod: bool,
 
     // Cursor position
     active_order_index: usize,
@@ -257,6 +258,7 @@ impl RustyTrackerApp {
             editor,
             audio_engine,
             edit_mode: false,
+            is_mod: false,
             active_order_index: 0,
             active_row: 0,
             active_channel: 0,
@@ -431,7 +433,7 @@ impl RustyTrackerApp {
                     state.is_playing = true;
                     state.module = Some(self.editor.module().clone());
                     if state.playback.is_none() {
-                        state.playback = PlaybackState::start(self.editor.module()).ok();
+                        state.playback = PlaybackState::start_with_config(self.editor.module(), self.is_mod).ok();
                     }
                 }
             }
@@ -685,10 +687,10 @@ impl RustyTrackerApp {
 
     fn load_module_file(&mut self, path: &Path) {
         if let Ok(bytes) = std::fs::read(path) {
-            let parsed = if bytes.len() >= 17 && &bytes[0..17] == b"Extended Module: " {
-                rustytracker_xm::parse_xm_module(&bytes).map_err(|e| format!("{e:?}"))
+            let (parsed, is_mod) = if bytes.len() >= 17 && &bytes[0..17] == b"Extended Module: " {
+                (rustytracker_xm::parse_xm_module(&bytes).map_err(|e| format!("{e:?}")), false)
             } else {
-                rustytracker_mod::parse_mod_module(&bytes).map_err(|e| format!("{e:?}"))
+                (rustytracker_mod::parse_mod_module(&bytes).map_err(|e| format!("{e:?}")), true)
             };
 
             match parsed {
@@ -697,6 +699,7 @@ impl RustyTrackerApp {
                     self.active_row = 0;
                     self.active_order_index = 0;
                     self.active_channel = 0;
+                    self.is_mod = is_mod;
                     if let Ok(mut state) = self.audio_engine.state.lock() {
                         state.module = Some(self.editor.module().clone());
                         state.playback = None;
@@ -712,7 +715,7 @@ impl RustyTrackerApp {
 
     fn export_to_wav_file(&self, path: &Path) {
         let module = self.editor.module();
-        if let Ok(mut playback) = PlaybackState::start(module) {
+        if let Ok(mut playback) = PlaybackState::start_with_config(module, self.is_mod) {
             if let Ok(wav_bytes) = playback.render_to_wav(module, 44100) {
                 if let Err(e) = std::fs::write(path, wav_bytes) {
                     eprintln!("Failed to write WAV file: {e:?}");

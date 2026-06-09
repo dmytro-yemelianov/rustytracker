@@ -276,17 +276,19 @@ pub fn dump_module_to_json(module: &Module, format: &'static str) -> Result<Stri
 }
 
 pub fn play_state_xm_file_to_json(path: &Path, requested_rows: usize) -> Result<String, DumpError> {
-    let (module, _) = load_module_from_file(path)?;
-    play_state_module_to_json(&module, requested_rows)
+    let (module, format) = load_module_from_file(path)?;
+    play_state_module_to_json(&module, format, requested_rows)
 }
 
 pub fn play_state_module_to_json(
     module: &Module,
+    format: &'static str,
     requested_rows: usize,
 ) -> Result<String, DumpError> {
     validate_requested_rows(requested_rows, requested_rows.to_string())?;
 
-    let mut json = serde_json::to_string_pretty(&play_state_dump(module, requested_rows)?)?;
+    let use_pal_clock = format == "mod";
+    let mut json = serde_json::to_string_pretty(&play_state_dump(module, use_pal_clock, requested_rows)?)?;
     json.push_str(JSON_TRAILING_NEWLINE);
     Ok(json)
 }
@@ -377,8 +379,9 @@ pub fn export_wav_file(
     output_path: &Path,
     sample_rate: u32,
 ) -> Result<(), DumpError> {
-    let (module, _) = load_module_from_file(input_path)?;
-    let mut playback = PlaybackState::start(&module)?;
+    let (module, format) = load_module_from_file(input_path)?;
+    let use_pal_clock = format == "mod";
+    let mut playback = PlaybackState::start_with_config(&module, use_pal_clock)?;
     let wav_bytes = playback.render_to_wav(&module, sample_rate)?;
     std::fs::write(output_path, wav_bytes)?;
     Ok(())
@@ -444,8 +447,12 @@ fn module_dump(module: &Module, format: &'static str) -> ModuleDump {
     }
 }
 
-fn play_state_dump(module: &Module, requested_rows: usize) -> Result<PlayStateDump, DumpError> {
-    let mut playback = PlaybackState::start(module)?;
+fn play_state_dump(
+    module: &Module,
+    use_pal_clock: bool,
+    requested_rows: usize,
+) -> Result<PlayStateDump, DumpError> {
+    let mut playback = PlaybackState::start_with_config(module, use_pal_clock)?;
     let timing = playback.clock().timing();
     let mut rows = Vec::with_capacity(requested_rows);
     let mut completed = false;
