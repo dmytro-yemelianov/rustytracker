@@ -3022,6 +3022,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustytracker-wasm"
+version = "0.1.0"
+dependencies = [
+ "rustytracker-core",
+ "rustytracker-mod",
+ "rustytracker-play",
+ "rustytracker-xm",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "rustytracker-xm"
 version = "0.1.0"
 dependencies = [

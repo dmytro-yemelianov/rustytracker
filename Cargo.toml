@@ -6,6 +6,7 @@ members = [
     "crates/rustytracker-mod",
     "crates/rustytracker-play", "crates/rustytracker-ui",
     "crates/rustytracker-xm",
+    "crates/rustytracker-wasm",
 ]
 resolver = "2"
 

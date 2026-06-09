@@ -985,6 +985,14 @@ pub struct PlaybackCursor {
 }
 
 impl PlaybackCursor {
+    pub fn order_index(&self) -> usize {
+        self.order_index
+    }
+
+    pub fn row(&self) -> u16 {
+        self.row
+    }
+
     pub fn start(module: &Module) -> PlaybackResult<Self> {
         let cursor = Self {
             order_index: PLAYBACK_FIRST_ORDER_INDEX,
