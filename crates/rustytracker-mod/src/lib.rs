@@ -332,3 +332,262 @@ fn clean_string(bytes: &[u8]) -> String {
     }
     s.trim_end().to_owned()
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModWriteError {
+    TooManyChannels { channels: u16 },
+    TooManyOrders { orders: usize },
+    TooManyPatterns { patterns: usize },
+}
+
+impl std::fmt::Display for ModWriteError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::TooManyChannels { channels } => write!(f, "Too many channels for MOD format: {channels}"),
+            Self::TooManyOrders { orders } => write!(f, "Too many orders for MOD format: {orders}"),
+            Self::TooManyPatterns { patterns } => write!(f, "Too many patterns for MOD format: {patterns}"),
+        }
+    }
+}
+
+impl std::error::Error for ModWriteError {}
+
+pub fn write_mod_module(module: &Module) -> Result<Vec<u8>, ModWriteError> {
+    if module.header.channel_count == 0 || module.header.channel_count > 99 {
+        return Err(ModWriteError::TooManyChannels {
+            channels: module.header.channel_count,
+        });
+    }
+
+    if module.orders.is_empty() || module.orders.len() > 128 {
+        return Err(ModWriteError::TooManyOrders {
+            orders: module.orders.len(),
+        });
+    }
+
+    // Determine number of patterns to write
+    let mut max_pattern = 0u8;
+    for &pat in &module.orders {
+        if pat > max_pattern {
+            max_pattern = pat;
+        }
+    }
+    let num_patterns = max_pattern as usize + 1;
+
+    if num_patterns > 128 {
+        return Err(ModWriteError::TooManyPatterns {
+            patterns: num_patterns,
+        });
+    }
+
+    let mut bytes = Vec::new();
+
+    // 1. Title (20 bytes)
+    bytes.extend_from_slice(&pad_string(module.header.title.as_str(), 20));
+
+    // 2. Instrument/Sample Headers (31 instruments)
+    let mut sample_data_to_write = Vec::new();
+
+    for i in 0..31 {
+        let name = if let Some(ins) = module.instruments.get(i) {
+            ins.name.as_str()
+        } else {
+            ""
+        };
+        bytes.extend_from_slice(&pad_string(name, 22));
+
+        let mut length_words = 0u16;
+        let mut finetune_nibble = 0u8;
+        let mut volume_64 = 0u8;
+        let loop_start_words;
+        let loop_length_words;
+
+        if let Some(sample) = module.samples.get(i) {
+            let sample_bytes = match &sample.data {
+                SampleData::Pcm8(data) => {
+                    let mut data = data.clone();
+                    if data.len() % 2 != 0 {
+                        data.push(0);
+                    }
+                    data
+                }
+                SampleData::Pcm16(data) => {
+                    let mut data_8: Vec<i8> = data.iter().map(|&val| (val >> 8) as i8).collect();
+                    if data_8.len() % 2 != 0 {
+                        data_8.push(0);
+                    }
+                    data_8
+                }
+                SampleData::Empty => Vec::new(),
+            };
+
+            let mut final_bytes = vec![0u8; sample_bytes.len()];
+            for (j, &val) in sample_bytes.iter().enumerate() {
+                final_bytes[j] = val as u8;
+            }
+
+            if final_bytes.len() > 131070 {
+                final_bytes.truncate(131070);
+            }
+
+            if !final_bytes.is_empty() {
+                length_words = (final_bytes.len() / 2) as u16;
+                finetune_nibble = finetune_to_nibble(sample.finetune);
+                volume_64 = vol255_to_64(sample.volume);
+
+                if sample.loop_kind != SampleLoopKind::None && sample.loop_length > 2 {
+                    let start = (sample.loop_start / 2) as u16;
+                    let len = (sample.loop_length / 2) as u16;
+                    loop_start_words = start;
+                    loop_length_words = len;
+                } else {
+                    loop_start_words = 0;
+                    loop_length_words = 1;
+                }
+
+                sample_data_to_write.push(final_bytes);
+            } else {
+                loop_start_words = 0;
+                loop_length_words = 1;
+                sample_data_to_write.push(Vec::new());
+            }
+        } else {
+            loop_start_words = 0;
+            loop_length_words = 1;
+            sample_data_to_write.push(Vec::new());
+        }
+
+        bytes.extend_from_slice(&length_words.to_be_bytes());
+        bytes.push(finetune_nibble);
+        bytes.push(volume_64);
+        bytes.extend_from_slice(&loop_start_words.to_be_bytes());
+        bytes.extend_from_slice(&loop_length_words.to_be_bytes());
+    }
+
+    // 3. Song length and restart position
+    bytes.push(module.orders.len() as u8);
+    bytes.push((module.header.restart_position & 0x7f) as u8);
+
+    // 4. Order List (128 bytes)
+    let mut order_table = [0u8; 128];
+    for (j, &pat) in module.orders.iter().enumerate() {
+        order_table[j] = pat;
+    }
+    bytes.extend_from_slice(&order_table);
+
+    // 5. Signature (4 bytes)
+    let sig = get_mod_signature(module.header.channel_count);
+    bytes.extend_from_slice(&sig);
+
+    // 6. Pattern Data
+    for p in 0..num_patterns {
+        let pattern = module.patterns.get(p).ok_or(ModWriteError::TooManyPatterns {
+            patterns: num_patterns,
+        })?;
+
+        for r in 0..64 {
+            for c in 0..module.header.channel_count {
+                let cell = pattern.cell(c, r).cloned().unwrap_or_else(|_| PatternCell::default());
+
+                let note_val = cell.note.raw();
+                let note_period = note_to_amiga_period(note_val);
+
+                let ins_num = if cell.instrument <= 31 { cell.instrument } else { 0 };
+
+                let primary_effect = cell.effects.first().cloned().unwrap_or_default();
+                let (effect, operand) = effect_to_mod(primary_effect.effect, primary_effect.operand);
+
+                let b1 = (ins_num & 0x10) | (((note_period >> 8) & 0x0f) as u8);
+                let b2 = (note_period & 0xff) as u8;
+                let b3 = ((ins_num & 0x0f) << 4) | (effect & 0x0f);
+                let b4 = operand;
+
+                bytes.push(b1);
+                bytes.push(b2);
+                bytes.push(b3);
+                bytes.push(b4);
+            }
+        }
+    }
+
+    // 7. Sample Data (signed 8-bit PCM)
+    for sample_bytes in sample_data_to_write {
+        bytes.extend_from_slice(&sample_bytes);
+    }
+
+    Ok(bytes)
+}
+
+fn pad_string(s: &str, len: usize) -> Vec<u8> {
+    let mut bytes = s.as_bytes().to_vec();
+    if bytes.len() > len {
+        bytes.truncate(len);
+    } else {
+        bytes.resize(len, 0);
+    }
+    bytes
+}
+
+fn finetune_to_nibble(finetune: i8) -> u8 {
+    let modfinetunes = [
+        0, 16, 32, 48, 64, 80, 96, 112, -128, -112, -96, -80, -64, -48, -32, -16,
+    ];
+    let mut best_index = 0;
+    let mut min_diff = i32::MAX;
+    for (i, &val) in modfinetunes.iter().enumerate() {
+        let diff = (finetune as i32 - val).abs();
+        if diff < min_diff {
+            min_diff = diff;
+            best_index = i;
+        }
+    }
+    best_index as u8
+}
+
+fn vol255_to_64(vol: u8) -> u8 {
+    (((vol as u32 * 64 + 128) / 255) as u8).min(64)
+}
+
+fn note_to_amiga_period(note_num: u8) -> u16 {
+    if note_num == 0 || note_num > 120 {
+        return 0;
+    }
+    let periods = [
+        1712, 1616, 1524, 1440, 1356, 1280, 1208, 1140, 1076, 1016, 960, 907,
+    ];
+    let y = (note_num - 1) as usize;
+    let per = ((periods[y % 12] * 16) >> (y / 12)) >> 2;
+    per as u16
+}
+
+fn effect_to_mod(effect: u8, operand: u8) -> (u8, u8) {
+    if (0x30..=0x3f).contains(&effect) {
+        let cmd = effect - 0x30;
+        (0x0e, (cmd << 4) | (operand & 0x0f))
+    } else if effect == 0x20 {
+        (0x00, operand)
+    } else if effect == 0x0c {
+        (0x0c, vol255_to_64(operand))
+    } else {
+        (effect, operand)
+    }
+}
+
+fn get_mod_signature(channel_count: u16) -> [u8; 4] {
+    match channel_count {
+        4 => *b"M.K.",
+        6 => *b"6CHN",
+        8 => *b"8CHN",
+        c if (1..=9).contains(&c) => {
+            let ch_char = b'0' + c as u8;
+            [ch_char, b'C', b'H', b'N']
+        }
+        c if (10..=99).contains(&c) => {
+            let tens = b'0' + (c / 10) as u8;
+            let ones = b'0' + (c % 10) as u8;
+            [tens, ones, b'C', b'H']
+        }
+        _ => *b"M.K.", // fallback
+    }
+}
+
