@@ -1,7 +1,9 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use rustytracker_cli::{dump_module_to_json, dump_xm_file_to_json, play_state_xm_file_to_json};
+use rustytracker_cli::{
+    dump_module_to_json, dump_xm_file_to_json, play_state_xm_file_to_json, run_cli,
+};
 use rustytracker_core::{EffectCommand, Module, Note, Pattern, PatternCell};
 use rustytracker_test_support::{
     milkytracker_fixture_path as fixture_path,
@@ -20,9 +22,11 @@ const FIXTURES: &[(&str, &str)] = &[
 ];
 const DUMP_COMMAND: &str = "dump";
 const PLAY_STATE_COMMAND: &str = "play-state";
+const EXPORT_WAV_COMMAND: &str = "export-wav";
 const FORMAT_FLAG: &str = "--format";
 const JSON_FORMAT: &str = "json";
 const ROWS_FLAG: &str = "--rows";
+const SAMPLE_RATE_FLAG: &str = "--sample-rate";
 const PLAY_STATE_TEST_ROWS: usize = 3;
 const PLAY_STATE_ZERO_ROWS: usize = 0;
 const PLAY_STATE_TEST_ROWS_TEXT: &str = "3";
@@ -31,6 +35,8 @@ const PLAY_STATE_NON_NUMERIC_ROWS_TEXT: &str = "many";
 const PLAY_STATE_ROW_COUNT_ERROR: &str = "invalid play-state row count: 0";
 const PLAY_STATE_NON_NUMERIC_ROW_COUNT_ERROR: &str = "invalid play-state row count: many";
 const PLAY_STATE_MISSING_ROWS_ERROR: &str = "usage: rustytracker";
+const EXPORT_WAV_ZERO_SAMPLE_RATE_TEXT: &str = "0";
+const EXPORT_WAV_INVALID_SAMPLE_RATE_ERROR: &str = "invalid export sample rate: 0";
 const PLAY_STATE_EXPECTED_FORMAT: &str = "play_state";
 const PLAY_STATE_EXPECTED_SCHEMA_VERSION: u64 = 1;
 const PLAY_STATE_EXPECTED_CHANNELS: usize = 10;
@@ -282,6 +288,26 @@ fn binary_rejects_missing_play_state_rows() {
     assert!(String::from_utf8(output.stderr)
         .unwrap()
         .contains(PLAY_STATE_MISSING_ROWS_ERROR));
+}
+
+#[test]
+fn export_wav_rejects_zero_sample_rate_before_loading_input() {
+    let error = run_cli(
+        [
+            EXPORT_WAV_COMMAND,
+            "missing.xm",
+            "out.wav",
+            SAMPLE_RATE_FLAG,
+            EXPORT_WAV_ZERO_SAMPLE_RATE_TEXT,
+        ]
+        .into_iter()
+        .map(String::from),
+    )
+    .unwrap_err();
+
+    assert!(error
+        .to_string()
+        .contains(EXPORT_WAV_INVALID_SAMPLE_RATE_ERROR));
 }
 
 #[test]

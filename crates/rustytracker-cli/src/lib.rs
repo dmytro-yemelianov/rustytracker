@@ -15,6 +15,8 @@ const PLAY_STATE_SCHEMA_VERSION: u16 = 1;
 const PLAY_STATE_FORMAT: &str = "play_state";
 const PLAY_STATE_COMMAND: &str = "play-state";
 const EXPORT_WAV_COMMAND: &str = "export-wav";
+const EXPORT_WAV_SAMPLE_RATE_FLAG: &str = "--sample-rate";
+const EXPORT_WAV_MIN_SAMPLE_RATE: u32 = 1;
 const DEFAULT_EXPORT_SAMPLE_RATE: u32 = 44100;
 const FORMAT_FLAG: &str = "--format";
 const JSON_FORMAT: &str = "json";
@@ -44,6 +46,7 @@ pub enum DumpError {
     Playback(rustytracker_play::PlaybackError),
     InvalidArguments,
     InvalidRowCount(String),
+    InvalidSampleRate(String),
     UnsupportedFormat(String),
 }
 
@@ -60,6 +63,7 @@ impl fmt::Display for DumpError {
                 "usage: rustytracker dump <module.xm|module.mod> --format json\n       rustytracker play-state <module.xm|module.mod> --rows <count>\n       rustytracker export-wav <module.xm|module.mod> <output.wav> [--sample-rate <rate>]"
             ),
             Self::InvalidRowCount(value) => write!(formatter, "invalid play-state row count: {value}"),
+            Self::InvalidSampleRate(value) => write!(formatter, "invalid export sample rate: {value}"),
             Self::UnsupportedFormat(format) => {
                 write!(formatter, "unsupported dump format: {format}")
             }
@@ -353,11 +357,9 @@ where
     let mut sample_rate = DEFAULT_EXPORT_SAMPLE_RATE;
 
     if let Some(arg) = args.next() {
-        if arg == "--sample-rate" {
+        if arg == EXPORT_WAV_SAMPLE_RATE_FLAG {
             let rate_str = args.next().ok_or(DumpError::InvalidArguments)?;
-            sample_rate = rate_str
-                .parse::<u32>()
-                .map_err(|_| DumpError::InvalidArguments)?;
+            sample_rate = parse_export_sample_rate(rate_str)?;
         } else {
             return Err(DumpError::InvalidArguments);
         }
@@ -393,6 +395,18 @@ fn parse_requested_rows(rows: String) -> Result<usize, DumpError> {
         .map_err(|_| DumpError::InvalidRowCount(rows.clone()))?;
 
     validate_requested_rows(requested_rows, rows)
+}
+
+fn parse_export_sample_rate(sample_rate: String) -> Result<u32, DumpError> {
+    let parsed = sample_rate
+        .parse::<u32>()
+        .map_err(|_| DumpError::InvalidSampleRate(sample_rate.clone()))?;
+
+    if parsed < EXPORT_WAV_MIN_SAMPLE_RATE {
+        return Err(DumpError::InvalidSampleRate(sample_rate));
+    }
+
+    Ok(parsed)
 }
 
 fn validate_requested_rows(requested_rows: usize, source: String) -> Result<usize, DumpError> {
