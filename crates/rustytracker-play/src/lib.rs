@@ -265,9 +265,9 @@ pub struct PlaybackChannelState {
     pub portamento_down_speed: u8,
     pub tone_portamento_speed: u8,
     pub arpeggio_memory: u8,
-    pub vibrato_speed: [u8; 2],
-    pub vibrato_depth: [u8; 2],
-    pub vibrato_pos: [u8; 2],
+    pub vibrato_speed: Vec<u8>,
+    pub vibrato_depth: Vec<u8>,
+    pub vibrato_pos: Vec<u8>,
     pub sample_offset_memory: u8,
     pub sample_backward: bool,
     pub keyon: bool,
@@ -302,9 +302,9 @@ impl PlaybackChannelState {
             portamento_down_speed: 0,
             tone_portamento_speed: 0,
             arpeggio_memory: 0,
-            vibrato_speed: [0; 2],
-            vibrato_depth: [0; 2],
-            vibrato_pos: [0; 2],
+            vibrato_speed: vec![0; DEFAULT_EFFECT_SLOTS as usize],
+            vibrato_depth: vec![0; DEFAULT_EFFECT_SLOTS as usize],
+            vibrato_pos: vec![0; DEFAULT_EFFECT_SLOTS as usize],
             sample_offset_memory: 0,
             sample_backward: false,
             keyon: true,
@@ -318,6 +318,7 @@ impl PlaybackChannelState {
 
     fn apply_cell(&mut self, module: &Module, cell: &PatternCell) -> PlaybackResult<()> {
         self.active_effects = cell.effects.clone();
+        self.ensure_effect_memory_slots();
         if cell.instrument != DEFAULT_INSTRUMENT_NUMBER {
             self.set_instrument(module, cell.instrument)?;
         }
@@ -418,58 +419,50 @@ impl PlaybackChannelState {
     }
 
     fn process_tick_effects(&mut self, module: &Module, tick: u16) {
+        self.ensure_effect_memory_slots();
+
         let mut active_arpeggio_op = None;
         let mut active_vibrato_slot = None;
 
         for (slot_idx, effect) in self.active_effects.iter().enumerate() {
             match effect.effect {
-                EFFECT_VOLUME => {
-                    if tick == 0 {
-                        self.volume = effect.operand;
-                    }
+                EFFECT_VOLUME if tick == 0 => {
+                    self.volume = effect.operand;
                 }
-                EFFECT_PANNING => {
-                    if tick == 0 {
-                        self.panning = effect.operand;
-                    }
+                EFFECT_PANNING if tick == 0 => {
+                    self.panning = effect.operand;
                 }
-                EFFECT_FINE_VOLUME_SLIDE_UP => {
-                    if tick == 0 {
-                        let mut op = effect.operand;
-                        if op == 0 {
-                            op = self.fine_volume_slide_memory;
-                        } else {
-                            self.fine_volume_slide_memory = op;
-                        }
-                        self.volume = self.volume.saturating_add(op.saturating_mul(4));
+                EFFECT_FINE_VOLUME_SLIDE_UP if tick == 0 => {
+                    let mut op = effect.operand;
+                    if op == 0 {
+                        op = self.fine_volume_slide_memory;
+                    } else {
+                        self.fine_volume_slide_memory = op;
                     }
+                    self.volume = self.volume.saturating_add(op.saturating_mul(4));
                 }
-                EFFECT_FINE_VOLUME_SLIDE_DOWN => {
-                    if tick == 0 {
-                        let mut op = effect.operand;
-                        if op == 0 {
-                            op = self.fine_volume_slide_memory;
-                        } else {
-                            self.fine_volume_slide_memory = op;
-                        }
-                        self.volume = self.volume.saturating_sub(op.saturating_mul(4));
+                EFFECT_FINE_VOLUME_SLIDE_DOWN if tick == 0 => {
+                    let mut op = effect.operand;
+                    if op == 0 {
+                        op = self.fine_volume_slide_memory;
+                    } else {
+                        self.fine_volume_slide_memory = op;
                     }
+                    self.volume = self.volume.saturating_sub(op.saturating_mul(4));
                 }
-                EFFECT_VOLUME_SLIDE => {
-                    if tick > 0 {
-                        let mut op = effect.operand;
-                        if op == 0 {
-                            op = self.volume_slide_memory;
-                        } else {
-                            self.volume_slide_memory = op;
-                        }
-                        let x = op >> 4;
-                        let y = op & 0x0f;
-                        if x > 0 {
-                            self.volume = self.volume.saturating_add(x.saturating_mul(4));
-                        } else if y > 0 {
-                            self.volume = self.volume.saturating_sub(y.saturating_mul(4));
-                        }
+                EFFECT_VOLUME_SLIDE if tick > 0 => {
+                    let mut op = effect.operand;
+                    if op == 0 {
+                        op = self.volume_slide_memory;
+                    } else {
+                        self.volume_slide_memory = op;
+                    }
+                    let x = op >> 4;
+                    let y = op & 0x0f;
+                    if x > 0 {
+                        self.volume = self.volume.saturating_add(x.saturating_mul(4));
+                    } else if y > 0 {
+                        self.volume = self.volume.saturating_sub(y.saturating_mul(4));
                     }
                 }
                 EFFECT_ARPEGGIO_NONZERO | EFFECT_ARPEGGIO_ZERO => {
@@ -628,6 +621,13 @@ impl PlaybackChannelState {
         self.panning_envelope_val = panning_envelope_val;
     }
 
+    fn ensure_effect_memory_slots(&mut self) {
+        let len = self.active_effects.len();
+        self.vibrato_speed.resize(len, 0);
+        self.vibrato_depth.resize(len, 0);
+        self.vibrato_pos.resize(len, 0);
+    }
+
     fn set_instrument(&mut self, module: &Module, instrument: u8) -> PlaybackResult<()> {
         let Some(instrument_index) = instrument_index_for_number(instrument) else {
             return Err(PlaybackError::MissingInstrument {
@@ -654,7 +654,7 @@ impl PlaybackChannelState {
         start_offset: Option<usize>,
     ) -> PlaybackResult<()> {
         self.note = Note::Key(note);
-        self.vibrato_pos = [0; 2];
+        self.vibrato_pos.fill(0);
         self.sample_backward = false;
         self.keyon = true;
         self.fadeout_volume = 65536;
@@ -774,8 +774,9 @@ impl PlaybackChannelState {
             return;
         }
 
-        let current_pos = self.sample_frame as f64 + (self.sample_frame_fraction as f64 / u32::MAX as f64);
-        
+        let current_pos =
+            self.sample_frame as f64 + (self.sample_frame_fraction as f64 / u32::MAX as f64);
+
         let has_loop = sample.loop_length > 0 && sample.loop_kind != SampleLoopKind::None;
         if has_loop {
             let loop_start = sample.loop_start as f64;
@@ -792,7 +793,8 @@ impl PlaybackChannelState {
                     }
                     next_pos = next_pos.clamp(loop_start, loop_end - 0.000001);
                     self.sample_frame = next_pos as usize;
-                    self.sample_frame_fraction = ((next_pos - next_pos.floor()) * u32::MAX as f64) as u32;
+                    self.sample_frame_fraction =
+                        ((next_pos - next_pos.floor()) * u32::MAX as f64) as u32;
                 }
                 SampleLoopKind::PingPong => {
                     if self.sample_backward {
@@ -811,7 +813,8 @@ impl PlaybackChannelState {
                         }
                         next_pos = next_pos.clamp(loop_start, loop_end - 0.000001);
                         self.sample_frame = next_pos as usize;
-                        self.sample_frame_fraction = ((next_pos - next_pos.floor()) * u32::MAX as f64) as u32;
+                        self.sample_frame_fraction =
+                            ((next_pos - next_pos.floor()) * u32::MAX as f64) as u32;
                     } else {
                         let mut next_pos = current_pos + step;
                         if next_pos >= loop_end {
@@ -828,7 +831,8 @@ impl PlaybackChannelState {
                         }
                         next_pos = next_pos.clamp(loop_start, loop_end - 0.000001);
                         self.sample_frame = next_pos as usize;
-                        self.sample_frame_fraction = ((next_pos - next_pos.floor()) * u32::MAX as f64) as u32;
+                        self.sample_frame_fraction =
+                            ((next_pos - next_pos.floor()) * u32::MAX as f64) as u32;
                     }
                 }
                 SampleLoopKind::None => unreachable!(),
@@ -839,7 +843,8 @@ impl PlaybackChannelState {
                 self.stop_sample();
             } else {
                 self.sample_frame = next_pos as usize;
-                self.sample_frame_fraction = ((next_pos - next_pos.floor()) * u32::MAX as f64) as u32;
+                self.sample_frame_fraction =
+                    ((next_pos - next_pos.floor()) * u32::MAX as f64) as u32;
             }
         }
     }
@@ -1194,7 +1199,6 @@ impl PlaybackState {
         Ok(state)
     }
 
-
     pub fn clock(&self) -> PlaybackClock {
         self.clock
     }
@@ -1270,18 +1274,16 @@ impl PlaybackState {
         Ok(rendered)
     }
 
-    pub fn render_to_wav(
-        &mut self,
-        module: &Module,
-        sample_rate: u32,
-    ) -> PlaybackResult<Vec<u8>> {
-        use std::io::{Write, Seek, SeekFrom, Cursor};
+    pub fn render_to_wav(&mut self, module: &Module, sample_rate: u32) -> PlaybackResult<Vec<u8>> {
+        use std::io::{Cursor, Seek, SeekFrom, Write};
 
         let mut buffer = Cursor::new(Vec::new());
 
         // Write a dummy header first
         let header_bytes = [0u8; 44];
-        buffer.write_all(&header_bytes).expect("writing to memory buffer should not fail");
+        buffer
+            .write_all(&header_bytes)
+            .expect("writing to memory buffer should not fail");
 
         let mut total_samples_written: u32 = 0;
         let buffer_frames = 1024;
@@ -1300,7 +1302,9 @@ impl PlaybackState {
                 bytes.extend_from_slice(&right_i16.to_le_bytes());
                 total_samples_written += 1;
             }
-            buffer.write_all(&bytes).expect("writing to memory buffer should not fail");
+            buffer
+                .write_all(&bytes)
+                .expect("writing to memory buffer should not fail");
 
             if self.song_ended() {
                 break;
@@ -1312,7 +1316,9 @@ impl PlaybackState {
             }
         }
 
-        buffer.seek(SeekFrom::Start(0)).expect("seeking in memory buffer should not fail");
+        buffer
+            .seek(SeekFrom::Start(0))
+            .expect("seeking in memory buffer should not fail");
 
         let num_channels = 2u16;
         let bits_per_sample = 16u16;
@@ -1327,7 +1333,7 @@ impl PlaybackState {
         header[8..12].copy_from_slice(b"WAVE");
         header[12..16].copy_from_slice(b"fmt ");
         header[16..20].copy_from_slice(&16u32.to_le_bytes()); // Chunk size
-        header[20..22].copy_from_slice(&1u16.to_le_bytes());  // Audio format (1 = PCM)
+        header[20..22].copy_from_slice(&1u16.to_le_bytes()); // Audio format (1 = PCM)
         header[22..24].copy_from_slice(&num_channels.to_le_bytes());
         header[24..28].copy_from_slice(&sample_rate.to_le_bytes());
         header[28..32].copy_from_slice(&byte_rate.to_le_bytes());
@@ -1336,11 +1342,12 @@ impl PlaybackState {
         header[36..40].copy_from_slice(b"data");
         header[40..44].copy_from_slice(&data_size.to_le_bytes());
 
-        buffer.write_all(&header).expect("writing to memory buffer should not fail");
+        buffer
+            .write_all(&header)
+            .expect("writing to memory buffer should not fail");
 
         Ok(buffer.into_inner())
     }
-
 
     fn render_raw_stereo_frame(
         &mut self,
@@ -1386,7 +1393,11 @@ impl PlaybackState {
                     if let Some(sample) = module.samples.get(sample_index) {
                         let frame_count = sample.data.frame_count();
                         if frame_count > 0 {
-                            let frequency = period_to_frequency(channel.period, module.header.frequency_table, self.use_pal_clock);
+                            let frequency = period_to_frequency(
+                                channel.period,
+                                module.header.frequency_table,
+                                self.use_pal_clock,
+                            );
                             let step = frequency / sample_rate as f64;
 
                             let interpolated_val = get_sample_value_linear(
@@ -1402,7 +1413,8 @@ impl PlaybackState {
 
                             let channel_mono_pcm = interpolated_val * vol_factor;
 
-                            let mut pan = channel.panning as i32 + channel.panning_envelope_val as i32 - 128;
+                            let mut pan =
+                                channel.panning as i32 + channel.panning_envelope_val as i32 - 128;
                             pan = pan.clamp(0, 255);
 
                             let right_gain = pan as f64 / 255.0;
@@ -1465,7 +1477,11 @@ impl PlaybackState {
                     if let Some(sample) = module.samples.get(sample_index) {
                         let frame_count = sample.data.frame_count();
                         if frame_count > 0 {
-                            let frequency = period_to_frequency(channel.period, module.header.frequency_table, self.use_pal_clock);
+                            let frequency = period_to_frequency(
+                                channel.period,
+                                module.header.frequency_table,
+                                self.use_pal_clock,
+                            );
                             let step = frequency / sample_rate as f64;
 
                             let interpolated_val = get_sample_value_linear(
@@ -1677,7 +1693,7 @@ fn next_frame_index(frame: usize, sample: &Sample) -> Option<usize> {
         let loop_start = sample.loop_start as usize;
         let loop_length = sample.loop_length as usize;
         let loop_end = loop_start + loop_length;
-        
+
         let next = frame + 1;
         if next >= loop_end {
             Some(loop_start + (next - loop_end) % loop_length)
@@ -1704,7 +1720,7 @@ fn relative_frame_index(frame: usize, offset: i32, sample: &Sample) -> Option<us
         let loop_start = sample.loop_start as i32;
         let loop_length = sample.loop_length as i32;
         let loop_end = loop_start + loop_length;
-        
+
         let mut target = frame as i32 + offset;
         if target < loop_start {
             let diff = loop_start - target;
@@ -1738,7 +1754,7 @@ fn get_sample_value_linear(data: &SampleData, frame: usize, fraction: u32, sampl
 #[allow(dead_code)]
 fn get_sample_value_cubic(data: &SampleData, frame: usize, fraction: u32, sample: &Sample) -> f64 {
     let t = fraction as f64 / u32::MAX as f64;
-    
+
     let y0 = if let Some(idx) = relative_frame_index(frame, -1, sample) {
         sample_value_as_f64(data, idx)
     } else {
@@ -1755,12 +1771,12 @@ fn get_sample_value_cubic(data: &SampleData, frame: usize, fraction: u32, sample
     } else {
         0.0
     };
-    
+
     let a = -0.5 * y0 + 1.5 * y1 - 1.5 * y2 + 0.5 * y3;
     let b = y0 - 2.5 * y1 + 2.0 * y2 - 0.5 * y3;
     let c = -0.5 * y0 + 0.5 * y2;
     let d = y1;
-    
+
     ((a * t + b) * t + c) * t + d
 }
 
@@ -1769,15 +1785,9 @@ fn period_to_frequency(period: u32, table: FrequencyTable, use_pal_clock: bool) 
         return 0.0;
     }
     match table {
-        FrequencyTable::Linear => {
-            8363.0 * f64::powf(2.0, (4608.0 - period as f64) / 768.0)
-        }
+        FrequencyTable::Linear => 8363.0 * f64::powf(2.0, (4608.0 - period as f64) / 768.0),
         FrequencyTable::Amiga => {
-            let base = if use_pal_clock {
-                3546895.0
-            } else {
-                3579364.0
-            };
+            let base = if use_pal_clock { 3546895.0 } else { 3579364.0 };
             base / period as f64
         }
     }

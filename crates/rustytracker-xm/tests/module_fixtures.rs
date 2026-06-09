@@ -241,6 +241,10 @@ const FIXTURES: &[ExpectedModule] = &[
 
 #[test]
 fn parses_bundled_xm_files_into_core_modules() {
+    if !fixtures_available() {
+        return;
+    }
+
     for fixture in FIXTURES {
         let bytes = fs::read(fixture_path(fixture.file_name)).unwrap();
         let module = parse_xm_module(&bytes).unwrap();
@@ -396,10 +400,28 @@ fn adds_empty_patterns_for_orders_past_declared_pattern_count() {
     assert_eq!(appended.effect_slots(), XM_TEST_EFFECT_SLOTS);
 }
 
+fn fixtures_available() -> bool {
+    fixture_root().is_some()
+}
+
 fn fixture_path(file_name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../MilkyTracker/resources/music")
+    fixture_root()
+        .expect("MilkyTracker fixtures not found; set MILKYTRACKER_ROOT or clone MilkyTracker next to rustytracker")
         .join(file_name)
+}
+
+fn fixture_root() -> Option<PathBuf> {
+    if let Some(root) = std::env::var_os("MILKYTRACKER_ROOT") {
+        let root = PathBuf::from(root);
+        let candidates = [root.join("resources/music"), root];
+        if let Some(path) = candidates.into_iter().find(|path| path.is_dir()) {
+            return Some(path);
+        }
+    }
+
+    let sibling =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../MilkyTracker/resources/music");
+    sibling.is_dir().then_some(sibling)
 }
 
 fn synthetic_xm_with_sparse_order_reference() -> Vec<u8> {

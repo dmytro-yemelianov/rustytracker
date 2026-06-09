@@ -4,7 +4,9 @@ use std::sync::{Arc, Mutex};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use eframe::egui;
 use egui::{Color32, Key, RichText, Ui};
-use rustytracker_core::{EffectCommand, Module, Note, NoteName, PatternCell, SampleData, SampleLoopKind};
+use rustytracker_core::{
+    EffectCommand, Module, Note, NoteName, PatternCell, SampleData, SampleLoopKind,
+};
 use rustytracker_edit::ModuleEditor;
 use rustytracker_play::PlaybackState;
 
@@ -128,7 +130,10 @@ impl AudioPlaybackEngine {
             }
         };
 
-        Self { state, _stream: stream }
+        Self {
+            state,
+            _stream: stream,
+        }
     }
 }
 
@@ -269,7 +274,6 @@ impl RustyTrackerApp {
         }
     }
 
-
     fn commit_edit_to_audio(&mut self) {
         if let Ok(mut state) = self.audio_engine.state.lock() {
             state.module = Some(self.editor.module().clone());
@@ -318,11 +322,9 @@ impl eframe::App for RustyTrackerApp {
                 self.render_instrument_list(ui);
             });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            match self.view_mode {
-                ViewMode::PatternEditor => self.render_pattern_editor(ui),
-                ViewMode::InstrumentEditor => self.render_instrument_editor(ui),
-            }
+        egui::CentralPanel::default().show(ctx, |ui| match self.view_mode {
+            ViewMode::PatternEditor => self.render_pattern_editor(ui),
+            ViewMode::InstrumentEditor => self.render_instrument_editor(ui),
         });
 
         // 3. Process keyboard input
@@ -433,7 +435,9 @@ impl RustyTrackerApp {
                     state.is_playing = true;
                     state.module = Some(self.editor.module().clone());
                     if state.playback.is_none() {
-                        state.playback = PlaybackState::start_with_config(self.editor.module(), self.is_mod).ok();
+                        state.playback =
+                            PlaybackState::start_with_config(self.editor.module(), self.is_mod)
+                                .ok();
                     }
                 }
             }
@@ -476,7 +480,10 @@ impl RustyTrackerApp {
                 self.view_mode = ViewMode::PatternEditor;
             }
             if ui
-                .selectable_label(self.view_mode == ViewMode::InstrumentEditor, "Instrument/Sample")
+                .selectable_label(
+                    self.view_mode == ViewMode::InstrumentEditor,
+                    "Instrument/Sample",
+                )
                 .clicked()
             {
                 self.view_mode = ViewMode::InstrumentEditor;
@@ -519,8 +526,7 @@ impl RustyTrackerApp {
                 let _ = self.editor.delete_order(self.active_order_index);
                 self.commit_edit_to_audio();
                 if self.active_order_index >= self.editor.module().orders.len() {
-                    self.active_order_index =
-                        self.editor.module().orders.len().saturating_sub(1);
+                    self.active_order_index = self.editor.module().orders.len().saturating_sub(1);
                 }
             }
         });
@@ -637,7 +643,7 @@ impl RustyTrackerApp {
                             // Display channel cells
                             for c in 0..channels {
                                 let cell = pattern.cell(c, r).unwrap_or(&default_cell);
-                                
+
                                 let note_str = format_note(cell.note);
                                 let ins_str = format_instrument(cell.instrument);
 
@@ -647,11 +653,13 @@ impl RustyTrackerApp {
                                 let eff0_str = format_effect(eff0_cmd);
                                 let eff1_str = format_effect(eff1_cmd);
 
-                                let cell_text = format!("{note_str} {ins_str} {eff0_str} {eff1_str}");
+                                let cell_text =
+                                    format!("{note_str} {ins_str} {eff0_str} {eff1_str}");
                                 let mut rich_text = RichText::new(cell_text).monospace();
 
                                 // Highlight cells or cursors
-                                let is_cursor_here = c == self.active_channel && r == self.active_row;
+                                let is_cursor_here =
+                                    c == self.active_channel && r == self.active_row;
 
                                 let response = if is_cursor_here {
                                     rich_text = rich_text.color(Color32::BLACK);
@@ -688,9 +696,15 @@ impl RustyTrackerApp {
     fn load_module_file(&mut self, path: &Path) {
         if let Ok(bytes) = std::fs::read(path) {
             let (parsed, is_mod) = if bytes.len() >= 17 && &bytes[0..17] == b"Extended Module: " {
-                (rustytracker_xm::parse_xm_module(&bytes).map_err(|e| format!("{e:?}")), false)
+                (
+                    rustytracker_xm::parse_xm_module(&bytes).map_err(|e| format!("{e:?}")),
+                    false,
+                )
             } else {
-                (rustytracker_mod::parse_mod_module(&bytes).map_err(|e| format!("{e:?}")), true)
+                (
+                    rustytracker_mod::parse_mod_module(&bytes).map_err(|e| format!("{e:?}")),
+                    true,
+                )
             };
 
             match parsed {
@@ -730,8 +744,12 @@ impl RustyTrackerApp {
 
     fn save_module_file(&self, path: &Path) {
         let module = self.editor.module();
-        let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("").to_lowercase();
-        
+        let extension = path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+
         let result = if extension == "xm" {
             rustytracker_xm::write_xm_module(module).map_err(|e| format!("{e:?}"))
         } else if extension == "mod" {
@@ -1186,8 +1204,8 @@ fn get_hex_key_value(input: &egui::InputState) -> Option<u8> {
 impl RustyTrackerApp {
     fn render_instrument_editor(&mut self, ui: &mut Ui) {
         let ins_idx = (self.selected_instrument as usize).saturating_sub(1);
-        let module = self.editor.module_mut();
-        
+        let mut module = self.editor.module().clone();
+
         if ins_idx >= module.instruments.len() {
             ui.label("Selected instrument is out of range.");
             return;
@@ -1197,11 +1215,11 @@ impl RustyTrackerApp {
 
         let mut ins_changed = false;
         let mut name_str = module.instruments[ins_idx].name.as_str().to_string();
-        
+
         ui.vertical(|ui| {
             ui.heading("Instrument & Sample Editor");
             ui.separator();
-            
+
             ui.columns(2, |columns| {
                 // Column 0: Instrument & Envelopes
                 columns[0].vertical(|ui| {
@@ -1213,28 +1231,31 @@ impl RustyTrackerApp {
                                 ins_changed = true;
                             }
                         });
-                        
+
                         let ins = &mut module.instruments[ins_idx];
                         ui.horizontal(|ui| {
                             ui.label("Volume Fadeout:");
                             ui.add(egui::Slider::new(&mut ins.volume_fadeout, 0..=65535));
                         });
                     });
-                    
+
                     // Volume Envelope Settings
                     ui.group(|ui| {
                         let ins = &mut module.instruments[ins_idx];
                         let env = &mut ins.volume_envelope;
-                        
+
                         let mut env_active = (env.flags & 1) != 0;
-                        if ui.checkbox(&mut env_active, "Volume Envelope Active").changed() {
+                        if ui
+                            .checkbox(&mut env_active, "Volume Envelope Active")
+                            .changed()
+                        {
                             if env_active {
                                 env.flags |= 1;
                             } else {
                                 env.flags &= !1;
                             }
                         }
-                        
+
                         let mut env_sustain = (env.flags & 2) != 0;
                         if ui.checkbox(&mut env_sustain, "Sustain Enabled").changed() {
                             if env_sustain {
@@ -1246,10 +1267,13 @@ impl RustyTrackerApp {
                         if env_sustain {
                             ui.horizontal(|ui| {
                                 ui.label("Sustain Point:");
-                                ui.add(egui::DragValue::new(&mut env.sustain_point).clamp_range(0..=env.point_count.saturating_sub(1)));
+                                ui.add(
+                                    egui::DragValue::new(&mut env.sustain_point)
+                                        .clamp_range(0..=env.point_count.saturating_sub(1)),
+                                );
                             });
                         }
-                        
+
                         let mut env_loop = (env.flags & 4) != 0;
                         if ui.checkbox(&mut env_loop, "Loop Enabled").changed() {
                             if env_loop {
@@ -1261,37 +1285,45 @@ impl RustyTrackerApp {
                         if env_loop {
                             ui.horizontal(|ui| {
                                 ui.label("Loop Start:");
-                                ui.add(egui::DragValue::new(&mut env.loop_start_point).clamp_range(0..=env.point_count.saturating_sub(1)));
+                                ui.add(
+                                    egui::DragValue::new(&mut env.loop_start_point)
+                                        .clamp_range(0..=env.point_count.saturating_sub(1)),
+                                );
                                 ui.label("Loop End:");
-                                ui.add(egui::DragValue::new(&mut env.loop_end_point).clamp_range(0..=env.point_count.saturating_sub(1)));
+                                ui.add(
+                                    egui::DragValue::new(&mut env.loop_end_point)
+                                        .clamp_range(0..=env.point_count.saturating_sub(1)),
+                                );
                             });
                         }
-                        
+
                         ui.separator();
                         ui.label("Envelope Points:");
-                        
+
                         let mut to_remove = None;
                         for idx in 0..env.point_count as usize {
                             if let Some(pt) = env.points.get_mut(idx) {
                                 ui.horizontal(|ui| {
                                     ui.label(format!("Pt {idx}:"));
                                     ui.label("Frame:");
-                                    ui.add(egui::DragValue::new(&mut pt.frame).clamp_range(0..=32767));
+                                    ui.add(
+                                        egui::DragValue::new(&mut pt.frame).clamp_range(0..=32767),
+                                    );
                                     ui.label("Val:");
                                     ui.add(egui::DragValue::new(&mut pt.value).clamp_range(0..=64));
-                                    
+
                                     if ui.button("🗑").clicked() {
                                         to_remove = Some(idx);
                                     }
                                 });
                             }
                         }
-                        
+
                         if let Some(idx) = to_remove {
                             env.points.remove(idx);
                             env.point_count = env.points.len() as u8;
                         }
-                        
+
                         if env.point_count < 12 && ui.button("+ Add Point").clicked() {
                             let last_frame = env.points.last().map(|p| p.frame + 10).unwrap_or(0);
                             env.points.push(rustytracker_core::EnvelopePoint {
@@ -1302,19 +1334,19 @@ impl RustyTrackerApp {
                         }
                     });
                 });
-                
+
                 // Column 1: Sample Settings & Waveform
                 columns[1].vertical(|ui| {
                     if sample_idx >= module.samples.len() {
                         ui.label("No sample mapped.");
                         return;
                     }
-                    
+
                     let sample = &mut module.samples[sample_idx];
-                    
+
                     ui.group(|ui| {
                         ui.label("Sample Settings");
-                        
+
                         let mut s_name = sample.name.as_str().to_string();
                         ui.horizontal(|ui| {
                             ui.label("Name:");
@@ -1322,24 +1354,29 @@ impl RustyTrackerApp {
                                 sample.name = rustytracker_core::SampleName::new(&s_name);
                             }
                         });
-                        
+
                         ui.horizontal(|ui| {
                             ui.label("Volume:");
                             ui.add(egui::Slider::new(&mut sample.volume, 0..=255));
                         });
-                        
+
                         ui.horizontal(|ui| {
                             ui.label("Panning:");
                             ui.add(egui::Slider::new(&mut sample.panning, 0..=255));
                         });
-                        
+
                         ui.horizontal(|ui| {
                             ui.label("Finetune:");
-                            ui.add(egui::DragValue::new(&mut sample.finetune).clamp_range(-128..=127));
+                            ui.add(
+                                egui::DragValue::new(&mut sample.finetune).clamp_range(-128..=127),
+                            );
                             ui.label("Relative Note:");
-                            ui.add(egui::DragValue::new(&mut sample.relative_note).clamp_range(-96..=95));
+                            ui.add(
+                                egui::DragValue::new(&mut sample.relative_note)
+                                    .clamp_range(-96..=95),
+                            );
                         });
-                        
+
                         // Loop settings
                         ui.horizontal(|ui| {
                             egui::ComboBox::from_label("Loop Mode")
@@ -1349,82 +1386,113 @@ impl RustyTrackerApp {
                                     SampleLoopKind::PingPong => "Ping-pong",
                                 })
                                 .show_ui(ui, |ui| {
-                                    ui.selectable_value(&mut sample.loop_kind, SampleLoopKind::None, "None");
-                                    ui.selectable_value(&mut sample.loop_kind, SampleLoopKind::Forward, "Forward");
-                                    ui.selectable_value(&mut sample.loop_kind, SampleLoopKind::PingPong, "Ping-pong");
+                                    ui.selectable_value(
+                                        &mut sample.loop_kind,
+                                        SampleLoopKind::None,
+                                        "None",
+                                    );
+                                    ui.selectable_value(
+                                        &mut sample.loop_kind,
+                                        SampleLoopKind::Forward,
+                                        "Forward",
+                                    );
+                                    ui.selectable_value(
+                                        &mut sample.loop_kind,
+                                        SampleLoopKind::PingPong,
+                                        "Ping-pong",
+                                    );
                                 });
                         });
-                        
+
                         if sample.loop_kind != SampleLoopKind::None {
                             ui.horizontal(|ui| {
                                 ui.label("Loop Start:");
-                                ui.add(egui::DragValue::new(&mut sample.loop_start).clamp_range(0..=sample.length));
+                                ui.add(
+                                    egui::DragValue::new(&mut sample.loop_start)
+                                        .clamp_range(0..=sample.length),
+                                );
                                 ui.label("Loop Length:");
-                                ui.add(egui::DragValue::new(&mut sample.loop_length).clamp_range(0..=sample.length));
+                                ui.add(
+                                    egui::DragValue::new(&mut sample.loop_length)
+                                        .clamp_range(0..=sample.length),
+                                );
                             });
                         }
                     });
-                    
+
                     // Waveform visualization
                     ui.group(|ui| {
                         ui.label("Sample Waveform");
-                        
+
                         let width = 320.0;
                         let height = 120.0;
-                        
-                        let (rect, _response) = ui.allocate_exact_size(
-                            egui::vec2(width, height),
-                            egui::Sense::hover(),
-                        );
-                        
+
+                        let (rect, _response) =
+                            ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::hover());
+
                         let painter = ui.painter_at(rect);
-                        
+
                         // Background
                         painter.rect_filled(rect, 4.0, Color32::from_black_alpha(150));
-                        
+
                         // Grid lines
                         let mid_y = rect.min.y + height / 2.0;
                         painter.line_segment(
                             [egui::pos2(rect.min.x, mid_y), egui::pos2(rect.max.x, mid_y)],
                             egui::Stroke::new(1.0, Color32::DARK_GRAY),
                         );
-                        
+
                         // Draw loop overlay if looping
                         if sample.loop_kind != SampleLoopKind::None && sample.length > 0 {
                             let start_ratio = sample.loop_start as f32 / sample.length as f32;
-                            let end_ratio = (sample.loop_start + sample.loop_length) as f32 / sample.length as f32;
-                            
+                            let end_ratio = (sample.loop_start + sample.loop_length) as f32
+                                / sample.length as f32;
+
                             let start_x = rect.min.x + start_ratio * width;
                             let end_x = rect.min.x + end_ratio * width;
-                            
+
                             let loop_rect = egui::Rect::from_min_max(
                                 egui::pos2(start_x, rect.min.y),
                                 egui::pos2(end_x, rect.max.y),
                             );
-                            painter.rect_filled(loop_rect, 0.0, Color32::from_rgba_unmultiplied(0, 100, 255, 30));
-                            
+                            painter.rect_filled(
+                                loop_rect,
+                                0.0,
+                                Color32::from_rgba_unmultiplied(0, 100, 255, 30),
+                            );
+
                             // Loop boundary vertical lines
                             painter.line_segment(
-                                [egui::pos2(start_x, rect.min.y), egui::pos2(start_x, rect.max.y)],
-                                egui::Stroke::new(1.0, Color32::from_rgba_unmultiplied(0, 100, 255, 120)),
+                                [
+                                    egui::pos2(start_x, rect.min.y),
+                                    egui::pos2(start_x, rect.max.y),
+                                ],
+                                egui::Stroke::new(
+                                    1.0,
+                                    Color32::from_rgba_unmultiplied(0, 100, 255, 120),
+                                ),
                             );
                             painter.line_segment(
                                 [egui::pos2(end_x, rect.min.y), egui::pos2(end_x, rect.max.y)],
-                                egui::Stroke::new(1.0, Color32::from_rgba_unmultiplied(0, 100, 255, 120)),
+                                egui::Stroke::new(
+                                    1.0,
+                                    Color32::from_rgba_unmultiplied(0, 100, 255, 120),
+                                ),
                             );
                         }
-                        
+
                         // Render waveform path
                         let sample_len = match &sample.data {
                             SampleData::Pcm8(d) => d.len(),
                             SampleData::Pcm16(d) => d.len(),
                             SampleData::Empty => 0,
                         };
-                        
+
                         if sample_len > 0 {
                             let points: Vec<egui::Pos2> = (0..width as usize)
                                 .map(|x| {
-                                    let sample_idx = ((x as f32 / width) * sample_len as f32) as usize;
+                                    let sample_idx =
+                                        ((x as f32 / width) * sample_len as f32) as usize;
                                     let val = match &sample.data {
                                         SampleData::Pcm8(d) => {
                                             if let Some(&v) = d.get(sample_idx) {
@@ -1442,13 +1510,13 @@ impl RustyTrackerApp {
                                         }
                                         SampleData::Empty => 0.0,
                                     };
-                                    
+
                                     let px_x = rect.min.x + x as f32;
                                     let px_y = mid_y - val * (height / 2.0 - 5.0);
                                     egui::pos2(px_x, px_y)
                                 })
                                 .collect();
-                                
+
                             for window in points.windows(2) {
                                 painter.line_segment(
                                     [window[0], window[1]],
@@ -1473,6 +1541,9 @@ impl RustyTrackerApp {
             module.instruments[ins_idx].name = rustytracker_core::InstrumentName::new(&name_str);
         }
 
-        self.commit_edit_to_audio();
+        if self.editor.module() != &module {
+            self.editor.replace_module_with_undo(module);
+            self.commit_edit_to_audio();
+        }
     }
 }

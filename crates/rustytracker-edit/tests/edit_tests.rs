@@ -65,6 +65,28 @@ fn test_undo_redo_snapshots() {
 }
 
 #[test]
+fn test_replace_module_with_undo() {
+    let module = Module::empty();
+    let mut editor = ModuleEditor::new(module.clone());
+
+    editor.replace_module_with_undo(module.clone());
+    assert!(!editor.can_undo());
+
+    let mut edited = module;
+    edited.orders = vec![0, 0];
+    editor.replace_module_with_undo(edited.clone());
+
+    assert_eq!(editor.module().orders, vec![0, 0]);
+    assert!(editor.can_undo());
+
+    assert!(editor.undo());
+    assert_eq!(editor.module().orders, vec![0]);
+
+    assert!(editor.redo());
+    assert_eq!(editor.module(), &edited);
+}
+
+#[test]
 fn test_note_and_cell_edits() {
     let module = Module::empty();
     let mut editor = ModuleEditor::new(module);

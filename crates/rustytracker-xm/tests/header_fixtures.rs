@@ -7,6 +7,26 @@ use rustytracker_xm::{
     XmModuleHeader, XmParseError, XmPatternHeader,
 };
 
+const XM_TEST_SIGNATURE: &[u8; 17] = b"Extended Module: ";
+const XM_TEST_MARKER: u8 = 0x1a;
+const XM_TEST_MARKER_OFFSET: usize = 37;
+const XM_TEST_VERSION_OFFSET: usize = 58;
+const XM_TEST_HEADER_SIZE_OFFSET: usize = 60;
+const XM_TEST_HEADER_FIELDS_OFFSET: usize = 64;
+const XM_TEST_CHANNELS_FIELD_OFFSET: usize = 68;
+const XM_TEST_PATTERNS_FIELD_OFFSET: usize = 70;
+const XM_TEST_INSTRUMENTS_FIELD_OFFSET: usize = 72;
+const XM_TEST_TICK_SPEED_FIELD_OFFSET: usize = 76;
+const XM_TEST_BPM_FIELD_OFFSET: usize = 78;
+const XM_TEST_HEADER_SIZE: u32 = 276;
+const XM_TEST_HEADER_BYTES: usize = 336;
+const XM_TEST_VERSION: u16 = 0x0104;
+const XM_TEST_DEFAULT_ORDERS: u16 = 1;
+const XM_TEST_DEFAULT_CHANNELS: u16 = 4;
+const XM_TEST_DEFAULT_PATTERNS: u16 = 0;
+const XM_TEST_DEFAULT_INSTRUMENTS: u16 = 0;
+const XM_TEST_DEFAULT_SPEED: u16 = 6;
+const XM_TEST_DEFAULT_BPM: u16 = 125;
 const FNV_OFFSET: u64 = 0xcbf29ce484222325;
 const FNV_PRIME: u64 = 0x100000001b3;
 const XM_TEST_SINGLE_ROW: u16 = 1;
@@ -157,6 +177,10 @@ const FIXTURES: &[ExpectedHeader] = &[
 
 #[test]
 fn parses_milkytracker_bundled_xm_headers() {
+    if !fixtures_available() {
+        return;
+    }
+
     for fixture in FIXTURES {
         let bytes = fs::read(fixture_path(fixture.file_name)).unwrap();
         let header = parse_xm_header(&bytes).unwrap();
@@ -219,6 +243,10 @@ fn parses_milkytracker_bundled_xm_headers() {
 
 #[test]
 fn decodes_milkytracker_bundled_xm_patterns_to_expanded_cells() {
+    if !fixtures_available() {
+        return;
+    }
+
     for fixture in FIXTURES {
         let bytes = fs::read(fixture_path(fixture.file_name)).unwrap();
         let header = parse_xm_header(&bytes).unwrap();
@@ -358,6 +386,10 @@ fn rejects_packed_cells_that_end_mid_field() {
 
 #[test]
 fn parses_milkytracker_bundled_xm_pattern_headers() {
+    if !fixtures_available() {
+        return;
+    }
+
     for fixture in FIXTURES {
         let bytes = fs::read(fixture_path(fixture.file_name)).unwrap();
         let header = parse_xm_header(&bytes).unwrap();
@@ -432,6 +464,10 @@ fn parses_milkytracker_bundled_xm_pattern_headers() {
 
 #[test]
 fn rejects_truncated_pattern_header() {
+    if !fixtures_available() {
+        return;
+    }
+
     let mut bytes = fs::read(fixture_path("milky.xm")).unwrap();
     let header = parse_xm_header(&bytes).unwrap();
     bytes.truncate(336 + 5);
@@ -447,6 +483,10 @@ fn rejects_truncated_pattern_header() {
 
 #[test]
 fn rejects_truncated_pattern_data() {
+    if !fixtures_available() {
+        return;
+    }
+
     let mut bytes = fs::read(fixture_path("milky.xm")).unwrap();
     let header = parse_xm_header(&bytes).unwrap();
     bytes.truncate(336 + 9 + 10);
@@ -462,6 +502,10 @@ fn rejects_truncated_pattern_data() {
 
 #[test]
 fn rejects_non_xm_signature() {
+    if !fixtures_available() {
+        return;
+    }
+
     let mut bytes = fs::read(fixture_path("milky.xm")).unwrap();
     bytes[0] = b'X';
 
@@ -473,6 +517,10 @@ fn rejects_non_xm_signature() {
 
 #[test]
 fn rejects_xm_versions_milkytracker_does_not_accept() {
+    if !fixtures_available() {
+        return;
+    }
+
     let mut bytes = fs::read(fixture_path("milky.xm")).unwrap();
     bytes[58..60].copy_from_slice(&0x0105_u16.to_le_bytes());
 
@@ -480,6 +528,38 @@ fn rejects_xm_versions_milkytracker_does_not_accept() {
         parse_xm_header(&bytes).unwrap_err(),
         XmParseError::UnsupportedVersion(0x0105)
     );
+}
+
+#[test]
+fn rejects_xm_order_counts_outside_core_range() {
+    let mut bytes = synthetic_xm_header_bytes();
+    bytes[XM_TEST_HEADER_FIELDS_OFFSET..XM_TEST_HEADER_FIELDS_OFFSET + 2]
+        .copy_from_slice(&256_u16.to_le_bytes());
+
+    assert!(matches!(
+        parse_xm_header(&bytes),
+        Err(XmParseError::InvalidOrderCount {
+            order_count: 256,
+            maximum: rustytracker_core::MAX_ACTIVE_ORDERS,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn rejects_xm_channel_counts_outside_core_range() {
+    let mut bytes = synthetic_xm_header_bytes();
+    bytes[XM_TEST_CHANNELS_FIELD_OFFSET..XM_TEST_CHANNELS_FIELD_OFFSET + 2]
+        .copy_from_slice(&(rustytracker_core::EDITOR_PATTERN_CHANNELS + 1).to_le_bytes());
+
+    assert!(matches!(
+        parse_xm_header(&bytes),
+        Err(XmParseError::InvalidChannelCount {
+            channel_count,
+            maximum: rustytracker_core::EDITOR_PATTERN_CHANNELS,
+            ..
+        }) if channel_count == rustytracker_core::EDITOR_PATTERN_CHANNELS + 1
+    ));
 }
 
 #[test]
@@ -492,10 +572,51 @@ fn rejects_truncated_headers() {
     ));
 }
 
+fn synthetic_xm_header_bytes() -> Vec<u8> {
+    let mut bytes = vec![0; XM_TEST_HEADER_BYTES];
+    bytes[..XM_TEST_SIGNATURE.len()].copy_from_slice(XM_TEST_SIGNATURE);
+    bytes[XM_TEST_MARKER_OFFSET] = XM_TEST_MARKER;
+    bytes[XM_TEST_VERSION_OFFSET..XM_TEST_VERSION_OFFSET + 2]
+        .copy_from_slice(&XM_TEST_VERSION.to_le_bytes());
+    bytes[XM_TEST_HEADER_SIZE_OFFSET..XM_TEST_HEADER_SIZE_OFFSET + 4]
+        .copy_from_slice(&XM_TEST_HEADER_SIZE.to_le_bytes());
+    bytes[XM_TEST_HEADER_FIELDS_OFFSET..XM_TEST_HEADER_FIELDS_OFFSET + 2]
+        .copy_from_slice(&XM_TEST_DEFAULT_ORDERS.to_le_bytes());
+    bytes[XM_TEST_CHANNELS_FIELD_OFFSET..XM_TEST_CHANNELS_FIELD_OFFSET + 2]
+        .copy_from_slice(&XM_TEST_DEFAULT_CHANNELS.to_le_bytes());
+    bytes[XM_TEST_PATTERNS_FIELD_OFFSET..XM_TEST_PATTERNS_FIELD_OFFSET + 2]
+        .copy_from_slice(&XM_TEST_DEFAULT_PATTERNS.to_le_bytes());
+    bytes[XM_TEST_INSTRUMENTS_FIELD_OFFSET..XM_TEST_INSTRUMENTS_FIELD_OFFSET + 2]
+        .copy_from_slice(&XM_TEST_DEFAULT_INSTRUMENTS.to_le_bytes());
+    bytes[XM_TEST_TICK_SPEED_FIELD_OFFSET..XM_TEST_TICK_SPEED_FIELD_OFFSET + 2]
+        .copy_from_slice(&XM_TEST_DEFAULT_SPEED.to_le_bytes());
+    bytes[XM_TEST_BPM_FIELD_OFFSET..XM_TEST_BPM_FIELD_OFFSET + 2]
+        .copy_from_slice(&XM_TEST_DEFAULT_BPM.to_le_bytes());
+    bytes
+}
+
+fn fixtures_available() -> bool {
+    fixture_root().is_some()
+}
+
 fn fixture_path(file_name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../MilkyTracker/resources/music")
+    fixture_root()
+        .expect("MilkyTracker fixtures not found; set MILKYTRACKER_ROOT or clone MilkyTracker next to rustytracker")
         .join(file_name)
+}
+
+fn fixture_root() -> Option<PathBuf> {
+    if let Some(root) = std::env::var_os("MILKYTRACKER_ROOT") {
+        let root = PathBuf::from(root);
+        let candidates = [root.join("resources/music"), root];
+        if let Some(path) = candidates.into_iter().find(|path| path.is_dir()) {
+            return Some(path);
+        }
+    }
+
+    let sibling =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../MilkyTracker/resources/music");
+    sibling.is_dir().then_some(sibling)
 }
 
 #[derive(Debug, PartialEq, Eq)]

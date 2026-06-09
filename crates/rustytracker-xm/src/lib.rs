@@ -7,6 +7,7 @@ use rustytracker_core::{
     EffectCommand, Envelope as CoreEnvelope, EnvelopePoint as CoreEnvelopePoint, FrequencyTable,
     Instrument, InstrumentName, Module, ModuleHeader, ModuleTitle, Note, Pattern, PatternCell,
     Sample, SampleData as CoreSampleData, SampleLoopKind, SampleName, Vibrato as CoreVibrato,
+    EDITOR_PATTERN_CHANNELS, MAX_ACTIVE_ORDERS, MAX_INSTRUMENTS, MAX_PATTERNS, MIN_CHANNEL_COUNT,
     SAMPLES_PER_INSTRUMENT, SAMPLE_DEFAULT_FLAGS, SAMPLE_DEFAULT_VOLUME_FADEOUT,
 };
 
@@ -23,6 +24,7 @@ const HEADER_FIELDS_OFFSET: usize = 64;
 const ORDER_TABLE_OFFSET: usize = 80;
 const XM_ORDER_TABLE_LEN: usize = 256;
 const XM_MIN_HEADER_BYTES: usize = ORDER_TABLE_OFFSET + XM_ORDER_TABLE_LEN;
+const XM_MIN_ACTIVE_ORDERS: usize = rustytracker_core::MIN_ACTIVE_ORDERS;
 const XM_EXPANDED_EFFECT_SLOTS: u8 = 2;
 const XM_VERSION_1_02: u16 = 0x0102;
 const XM_VERSION_1_03: u16 = 0x0103;
@@ -201,6 +203,24 @@ pub enum XmParseError {
         song_length: usize,
         available: usize,
     },
+    InvalidOrderCount {
+        order_count: usize,
+        minimum: usize,
+        maximum: usize,
+    },
+    InvalidChannelCount {
+        channel_count: u16,
+        minimum: u16,
+        maximum: u16,
+    },
+    TooManyPatterns {
+        pattern_count: u16,
+        maximum: usize,
+    },
+    TooManyInstruments {
+        instrument_count: u16,
+        maximum: usize,
+    },
     PatternHeaderTooShort {
         pattern_index: usize,
         expected: usize,
@@ -272,6 +292,12 @@ pub enum XmWriteError {
     TooManyOrders {
         requested: usize,
         maximum: usize,
+    },
+    EmptyOrderList,
+    InvalidChannelCount {
+        channel_count: u16,
+        minimum: u16,
+        maximum: u16,
     },
     TooManyPatterns {
         requested: usize,
@@ -463,6 +489,36 @@ pub fn parse_xm_header(bytes: &[u8]) -> XmResult<XmModuleHeader> {
     let default_tick_speed = read_u16(bytes, XM_TICK_SPEED_FIELD_OFFSET);
     let default_bpm = read_u16(bytes, XM_BPM_FIELD_OFFSET);
 
+    if !(XM_MIN_ACTIVE_ORDERS..=MAX_ACTIVE_ORDERS).contains(&(song_length as usize)) {
+        return Err(XmParseError::InvalidOrderCount {
+            order_count: song_length as usize,
+            minimum: XM_MIN_ACTIVE_ORDERS,
+            maximum: MAX_ACTIVE_ORDERS,
+        });
+    }
+
+    if !(MIN_CHANNEL_COUNT..=EDITOR_PATTERN_CHANNELS).contains(&channel_count) {
+        return Err(XmParseError::InvalidChannelCount {
+            channel_count,
+            minimum: MIN_CHANNEL_COUNT,
+            maximum: EDITOR_PATTERN_CHANNELS,
+        });
+    }
+
+    if pattern_count as usize > MAX_PATTERNS {
+        return Err(XmParseError::TooManyPatterns {
+            pattern_count,
+            maximum: MAX_PATTERNS,
+        });
+    }
+
+    if instrument_count as usize > MAX_INSTRUMENTS {
+        return Err(XmParseError::TooManyInstruments {
+            instrument_count,
+            maximum: MAX_INSTRUMENTS,
+        });
+    }
+
     let order_end = ORDER_TABLE_OFFSET + song_length as usize;
     if order_end > bytes.len() {
         return Err(XmParseError::OrderTableTooShort {
@@ -494,24 +550,36 @@ pub fn parse_xm_header(bytes: &[u8]) -> XmResult<XmModuleHeader> {
 }
 
 pub fn write_xm_header(module: &Module) -> XmWriteResult<Vec<u8>> {
-    if module.orders.len() > XM_ORDER_TABLE_LEN {
+    if module.orders.is_empty() {
+        return Err(XmWriteError::EmptyOrderList);
+    }
+
+    if module.orders.len() > MAX_ACTIVE_ORDERS {
         return Err(XmWriteError::TooManyOrders {
             requested: module.orders.len(),
-            maximum: XM_ORDER_TABLE_LEN,
+            maximum: MAX_ACTIVE_ORDERS,
         });
     }
 
-    if module.patterns.len() > U16_MAX_AS_USIZE {
+    if !(MIN_CHANNEL_COUNT..=EDITOR_PATTERN_CHANNELS).contains(&module.header.channel_count) {
+        return Err(XmWriteError::InvalidChannelCount {
+            channel_count: module.header.channel_count,
+            minimum: MIN_CHANNEL_COUNT,
+            maximum: EDITOR_PATTERN_CHANNELS,
+        });
+    }
+
+    if module.patterns.len() > MAX_PATTERNS {
         return Err(XmWriteError::TooManyPatterns {
             requested: module.patterns.len(),
-            maximum: U16_MAX_AS_USIZE,
+            maximum: MAX_PATTERNS,
         });
     }
 
-    if module.instruments.len() > U16_MAX_AS_USIZE {
+    if module.instruments.len() > MAX_INSTRUMENTS {
         return Err(XmWriteError::TooManyInstruments {
             requested: module.instruments.len(),
-            maximum: U16_MAX_AS_USIZE,
+            maximum: MAX_INSTRUMENTS,
         });
     }
 

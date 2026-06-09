@@ -1,5 +1,5 @@
-use rustytracker_core::{Note, SampleData, SampleLoopKind};
-use rustytracker_mod::{parse_mod_module, ModParseError};
+use rustytracker_core::{Module, Note, Sample, SampleData, SampleLoopKind};
+use rustytracker_mod::{parse_mod_module, write_mod_module, ModParseError, ModWriteError};
 
 /// Helper to generate a valid, minimal MOD buffer.
 /// If `sig` is provided, we write it to bytes 1080..1084 and make a 31-instrument header.
@@ -97,6 +97,53 @@ fn test_truncated_mod() {
     let bytes = vec![0u8; 100];
     let result = parse_mod_module(&bytes);
     assert!(matches!(result, Err(ModParseError::Truncated { .. })));
+}
+
+#[test]
+fn rejects_mod_order_counts_larger_than_order_table() {
+    let bytes = create_mock_mod(None, 129, &[0], &[], &[], &[], &[], &[]);
+
+    assert_eq!(
+        parse_mod_module(&bytes).unwrap_err(),
+        ModParseError::InvalidOrderCount {
+            orders: 129,
+            maximum: 128,
+        }
+    );
+}
+
+#[test]
+fn rejects_mod_channel_counts_outside_core_range() {
+    let bytes = create_mock_mod(Some(b"33CH"), 1, &[0], &[], &[], &[], &[], &[]);
+
+    assert_eq!(
+        parse_mod_module(&bytes).unwrap_err(),
+        ModParseError::InvalidChannelCount {
+            channel_count: 33,
+            minimum: rustytracker_core::MIN_CHANNEL_COUNT,
+            maximum: rustytracker_core::EDITOR_PATTERN_CHANNELS,
+        }
+    );
+}
+
+#[test]
+fn rejects_mod_samples_that_exceed_header_length_field() {
+    let mut module = Module::empty();
+    let sample_len = 131_072;
+    module.samples[0] = Sample {
+        length: sample_len as u32,
+        data: SampleData::Pcm8(vec![0; sample_len]),
+        ..Sample::default()
+    };
+
+    assert_eq!(
+        write_mod_module(&module).unwrap_err(),
+        ModWriteError::SampleTooLong {
+            sample_index: 0,
+            byte_len: sample_len,
+            maximum: 131_070,
+        }
+    );
 }
 
 #[test]
@@ -290,10 +337,19 @@ fn test_mod_writer_roundtrip() {
     // Re-parse exported bytes
     let parsed_roundtrip = parse_mod_module(&exported_bytes).unwrap();
 
-    assert_eq!(parsed_roundtrip.header.title.as_str(), parsed_original.header.title.as_str());
-    assert_eq!(parsed_roundtrip.header.channel_count, parsed_original.header.channel_count);
+    assert_eq!(
+        parsed_roundtrip.header.title.as_str(),
+        parsed_original.header.title.as_str()
+    );
+    assert_eq!(
+        parsed_roundtrip.header.channel_count,
+        parsed_original.header.channel_count
+    );
     assert_eq!(parsed_roundtrip.orders, parsed_original.orders);
-    assert_eq!(parsed_roundtrip.patterns.len(), parsed_original.patterns.len());
+    assert_eq!(
+        parsed_roundtrip.patterns.len(),
+        parsed_original.patterns.len()
+    );
 
     // Compare first cell
     let cell_orig = parsed_original.patterns[0].cell(0, 0).unwrap();
@@ -305,12 +361,27 @@ fn test_mod_writer_roundtrip() {
 
     // Compare instrument and sample values
     for i in 0..31 {
-        assert_eq!(parsed_roundtrip.instruments[i].name.as_str(), parsed_original.instruments[i].name.as_str());
-        assert_eq!(parsed_roundtrip.samples[i].volume, parsed_original.samples[i].volume);
-        assert_eq!(parsed_roundtrip.samples[i].finetune, parsed_original.samples[i].finetune);
-        assert_eq!(parsed_roundtrip.samples[i].length, parsed_original.samples[i].length);
+        assert_eq!(
+            parsed_roundtrip.instruments[i].name.as_str(),
+            parsed_original.instruments[i].name.as_str()
+        );
+        assert_eq!(
+            parsed_roundtrip.samples[i].volume,
+            parsed_original.samples[i].volume
+        );
+        assert_eq!(
+            parsed_roundtrip.samples[i].finetune,
+            parsed_original.samples[i].finetune
+        );
+        assert_eq!(
+            parsed_roundtrip.samples[i].length,
+            parsed_original.samples[i].length
+        );
 
-        match (&parsed_roundtrip.samples[i].data, &parsed_original.samples[i].data) {
+        match (
+            &parsed_roundtrip.samples[i].data,
+            &parsed_original.samples[i].data,
+        ) {
             (SampleData::Pcm8(r_data), SampleData::Pcm8(o_data)) => {
                 assert_eq!(r_data, o_data);
             }
@@ -319,4 +390,3 @@ fn test_mod_writer_roundtrip() {
         }
     }
 }
-

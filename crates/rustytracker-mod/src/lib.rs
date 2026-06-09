@@ -5,13 +5,29 @@
 
 use rustytracker_core::{
     EffectCommand, Envelope, Instrument, Module, Note, Pattern, PatternCell, Sample, SampleData,
-    SampleLoopKind, DEFAULT_EFFECT_SLOTS,
+    SampleLoopKind, DEFAULT_EFFECT_SLOTS, EDITOR_PATTERN_CHANNELS, MIN_CHANNEL_COUNT,
 };
+
+const MOD_ORDER_TABLE_LEN: usize = 128;
+const MOD_MAX_SAMPLE_BYTES: usize = 131_070;
+const MOD_MAX_CHANNELS: u16 = EDITOR_PATTERN_CHANNELS;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ModParseError {
-    Truncated { expected: usize, actual: usize },
+    Truncated {
+        expected: usize,
+        actual: usize,
+    },
     InvalidSignature,
+    InvalidOrderCount {
+        orders: usize,
+        maximum: usize,
+    },
+    InvalidChannelCount {
+        channel_count: u16,
+        minimum: u16,
+        maximum: u16,
+    },
 }
 
 /// Parses a MOD file byte buffer into a core `Module`.
@@ -44,6 +60,14 @@ pub fn parse_mod_module(bytes: &[u8]) -> Result<Module, ModParseError> {
         return Err(ModParseError::Truncated {
             expected: expected_header_len,
             actual: bytes.len(),
+        });
+    }
+
+    if !(MIN_CHANNEL_COUNT..=MOD_MAX_CHANNELS).contains(&channel_count) {
+        return Err(ModParseError::InvalidChannelCount {
+            channel_count,
+            minimum: MIN_CHANNEL_COUNT,
+            maximum: MOD_MAX_CHANNELS,
         });
     }
 
@@ -129,9 +153,16 @@ pub fn parse_mod_module(bytes: &[u8]) -> Result<Module, ModParseError> {
     let restart_position = bytes[cursor + 1];
     cursor += 2;
 
-    let order_list_bytes = &bytes[cursor..cursor + 128];
+    if song_length > MOD_ORDER_TABLE_LEN {
+        return Err(ModParseError::InvalidOrderCount {
+            orders: song_length,
+            maximum: MOD_ORDER_TABLE_LEN,
+        });
+    }
+
+    let order_list_bytes = &bytes[cursor..cursor + MOD_ORDER_TABLE_LEN];
     let orders = order_list_bytes[0..song_length].to_vec();
-    cursor += 128;
+    cursor += MOD_ORDER_TABLE_LEN;
 
     if is_31_ins {
         cursor += 4; // Skip signature
@@ -335,9 +366,20 @@ fn clean_string(bytes: &[u8]) -> String {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModWriteError {
-    TooManyChannels { channels: u16 },
-    TooManyOrders { orders: usize },
-    TooManyPatterns { patterns: usize },
+    TooManyChannels {
+        channels: u16,
+    },
+    TooManyOrders {
+        orders: usize,
+    },
+    TooManyPatterns {
+        patterns: usize,
+    },
+    SampleTooLong {
+        sample_index: usize,
+        byte_len: usize,
+        maximum: usize,
+    },
 }
 
 impl std::fmt::Display for ModWriteError {
@@ -346,6 +388,14 @@ impl std::fmt::Display for ModWriteError {
             Self::TooManyChannels { channels } => write!(f, "Too many channels for MOD format: {channels}"),
             Self::TooManyOrders { orders } => write!(f, "Too many orders for MOD format: {orders}"),
             Self::TooManyPatterns { patterns } => write!(f, "Too many patterns for MOD format: {patterns}"),
+            Self::SampleTooLong {
+                sample_index,
+                byte_len,
+                maximum,
+            } => write!(
+                f,
+                "Sample {sample_index} is too long for MOD format: {byte_len} bytes, maximum {maximum}"
+            ),
         }
     }
 }
@@ -353,13 +403,15 @@ impl std::fmt::Display for ModWriteError {
 impl std::error::Error for ModWriteError {}
 
 pub fn write_mod_module(module: &Module) -> Result<Vec<u8>, ModWriteError> {
-    if module.header.channel_count == 0 || module.header.channel_count > 99 {
+    if module.header.channel_count < MIN_CHANNEL_COUNT
+        || module.header.channel_count > MOD_MAX_CHANNELS
+    {
         return Err(ModWriteError::TooManyChannels {
             channels: module.header.channel_count,
         });
     }
 
-    if module.orders.is_empty() || module.orders.len() > 128 {
+    if module.orders.is_empty() || module.orders.len() > MOD_ORDER_TABLE_LEN {
         return Err(ModWriteError::TooManyOrders {
             orders: module.orders.len(),
         });
@@ -406,14 +458,14 @@ pub fn write_mod_module(module: &Module) -> Result<Vec<u8>, ModWriteError> {
             let sample_bytes = match &sample.data {
                 SampleData::Pcm8(data) => {
                     let mut data = data.clone();
-                    if data.len() % 2 != 0 {
+                    if !data.len().is_multiple_of(2) {
                         data.push(0);
                     }
                     data
                 }
                 SampleData::Pcm16(data) => {
                     let mut data_8: Vec<i8> = data.iter().map(|&val| (val >> 8) as i8).collect();
-                    if data_8.len() % 2 != 0 {
+                    if !data_8.len().is_multiple_of(2) {
                         data_8.push(0);
                     }
                     data_8
@@ -426,8 +478,12 @@ pub fn write_mod_module(module: &Module) -> Result<Vec<u8>, ModWriteError> {
                 final_bytes[j] = val as u8;
             }
 
-            if final_bytes.len() > 131070 {
-                final_bytes.truncate(131070);
+            if final_bytes.len() > MOD_MAX_SAMPLE_BYTES {
+                return Err(ModWriteError::SampleTooLong {
+                    sample_index: i,
+                    byte_len: final_bytes.len(),
+                    maximum: MOD_MAX_SAMPLE_BYTES,
+                });
             }
 
             if !final_bytes.is_empty() {
@@ -469,7 +525,7 @@ pub fn write_mod_module(module: &Module) -> Result<Vec<u8>, ModWriteError> {
     bytes.push((module.header.restart_position & 0x7f) as u8);
 
     // 4. Order List (128 bytes)
-    let mut order_table = [0u8; 128];
+    let mut order_table = [0u8; MOD_ORDER_TABLE_LEN];
     for (j, &pat) in module.orders.iter().enumerate() {
         order_table[j] = pat;
     }
@@ -481,21 +537,32 @@ pub fn write_mod_module(module: &Module) -> Result<Vec<u8>, ModWriteError> {
 
     // 6. Pattern Data
     for p in 0..num_patterns {
-        let pattern = module.patterns.get(p).ok_or(ModWriteError::TooManyPatterns {
-            patterns: num_patterns,
-        })?;
+        let pattern = module
+            .patterns
+            .get(p)
+            .ok_or(ModWriteError::TooManyPatterns {
+                patterns: num_patterns,
+            })?;
 
         for r in 0..64 {
             for c in 0..module.header.channel_count {
-                let cell = pattern.cell(c, r).cloned().unwrap_or_else(|_| PatternCell::default());
+                let cell = pattern
+                    .cell(c, r)
+                    .cloned()
+                    .unwrap_or_else(|_| PatternCell::default());
 
                 let note_val = cell.note.raw();
                 let note_period = note_to_amiga_period(note_val);
 
-                let ins_num = if cell.instrument <= 31 { cell.instrument } else { 0 };
+                let ins_num = if cell.instrument <= 31 {
+                    cell.instrument
+                } else {
+                    0
+                };
 
                 let primary_effect = cell.effects.first().cloned().unwrap_or_default();
-                let (effect, operand) = effect_to_mod(primary_effect.effect, primary_effect.operand);
+                let (effect, operand) =
+                    effect_to_mod(primary_effect.effect, primary_effect.operand);
 
                 let b1 = (ins_num & 0x10) | (((note_period >> 8) & 0x0f) as u8);
                 let b2 = (note_period & 0xff) as u8;
@@ -590,4 +657,3 @@ fn get_mod_signature(channel_count: u16) -> [u8; 4] {
         _ => *b"M.K.", // fallback
     }
 }
-

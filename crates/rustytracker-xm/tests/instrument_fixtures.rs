@@ -266,6 +266,10 @@ const FIXTURES: &[ExpectedInstrumentSection] = &[
 
 #[test]
 fn parses_milkytracker_bundled_xm_instrument_sections() {
+    if !fixtures_available() {
+        return;
+    }
+
     for fixture in FIXTURES {
         let bytes = fs::read(fixture_path(fixture.file_name)).unwrap();
         let header = parse_xm_header(&bytes).unwrap();
@@ -501,6 +505,10 @@ fn rejects_adpcm_packed_xm_samples_explicitly() {
 
 #[test]
 fn rejects_truncated_instrument_header() {
+    if !fixtures_available() {
+        return;
+    }
+
     let bytes = fs::read(fixture_path("milky.xm")).unwrap();
     let header = parse_xm_header(&bytes).unwrap();
     let pattern_headers = parse_xm_pattern_headers(&bytes, &header).unwrap();
@@ -518,6 +526,10 @@ fn rejects_truncated_instrument_header() {
 
 #[test]
 fn rejects_truncated_sample_data() {
+    if !fixtures_available() {
+        return;
+    }
+
     let mut bytes = fs::read(fixture_path("milky.xm")).unwrap();
     let header = parse_xm_header(&bytes).unwrap();
     let pattern_headers = parse_xm_pattern_headers(&bytes, &header).unwrap();
@@ -534,10 +546,28 @@ fn rejects_truncated_sample_data() {
     ));
 }
 
+fn fixtures_available() -> bool {
+    fixture_root().is_some()
+}
+
 fn fixture_path(file_name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../MilkyTracker/resources/music")
+    fixture_root()
+        .expect("MilkyTracker fixtures not found; set MILKYTRACKER_ROOT or clone MilkyTracker next to rustytracker")
         .join(file_name)
+}
+
+fn fixture_root() -> Option<PathBuf> {
+    if let Some(root) = std::env::var_os("MILKYTRACKER_ROOT") {
+        let root = PathBuf::from(root);
+        let candidates = [root.join("resources/music"), root];
+        if let Some(path) = candidates.into_iter().find(|path| path.is_dir()) {
+            return Some(path);
+        }
+    }
+
+    let sibling =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../MilkyTracker/resources/music");
+    sibling.is_dir().then_some(sibling)
 }
 
 #[derive(Debug)]

@@ -21,10 +21,6 @@ const ROWS_FLAG: &str = "--rows";
 const PLAY_STATE_MIN_ROWS: usize = 1;
 const FNV_OFFSET: u64 = 0xcbf29ce484222325;
 const FNV_PRIME: u64 = 0x100000001b3;
-const EXPANDED_PATTERN_CELL_BYTES: usize = 6;
-const EXPANDED_PATTERN_EMPTY_BYTE: u8 = 0;
-const DUMP_PRIMARY_EFFECT_SLOT: usize = 0;
-const DUMP_SECONDARY_EFFECT_SLOT: usize = 1;
 const OPTION_USIZE_CHECKSUM_NONE_TAG: u8 = 0;
 const OPTION_USIZE_CHECKSUM_SOME_TAG: u8 = 1;
 const SAMPLE_PREFIX_FRAMES: usize = 16;
@@ -288,7 +284,8 @@ pub fn play_state_module_to_json(
     validate_requested_rows(requested_rows, requested_rows.to_string())?;
 
     let use_pal_clock = format == "mod";
-    let mut json = serde_json::to_string_pretty(&play_state_dump(module, use_pal_clock, requested_rows)?)?;
+    let mut json =
+        serde_json::to_string_pretty(&play_state_dump(module, use_pal_clock, requested_rows)?)?;
     json.push_str(JSON_TRAILING_NEWLINE);
     Ok(json)
 }
@@ -565,21 +562,16 @@ fn pattern_dump((index, pattern): (usize, &Pattern)) -> PatternDump {
             let cell = pattern
                 .cell(channel, row)
                 .expect("dump walks cells inside pattern bounds");
-            let expanded = [
-                cell.note.raw(),
-                cell.instrument,
-                cell.effects[DUMP_PRIMARY_EFFECT_SLOT].effect,
-                cell.effects[DUMP_PRIMARY_EFFECT_SLOT].operand,
-                cell.effects[DUMP_SECONDARY_EFFECT_SLOT].effect,
-                cell.effects[DUMP_SECONDARY_EFFECT_SLOT].operand,
-            ];
 
-            if expanded != [EXPANDED_PATTERN_EMPTY_BYTE; EXPANDED_PATTERN_CELL_BYTES] {
+            if !cell_is_empty(cell) {
                 non_empty_cells += 1;
             }
 
-            for byte in expanded {
-                checksum = fnv_byte(checksum, byte);
+            checksum = fnv_byte(checksum, cell.note.raw());
+            checksum = fnv_byte(checksum, cell.instrument);
+            for effect in &cell.effects {
+                checksum = fnv_byte(checksum, effect.effect);
+                checksum = fnv_byte(checksum, effect.operand);
             }
         }
     }

@@ -445,17 +445,12 @@ impl Instrument {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum SampleData {
+    #[default]
     Empty,
     Pcm8(Vec<i8>),
     Pcm16(Vec<i16>),
-}
-
-impl Default for SampleData {
-    fn default() -> Self {
-        Self::Empty
-    }
 }
 
 impl SampleData {

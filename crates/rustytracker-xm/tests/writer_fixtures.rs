@@ -27,8 +27,8 @@ const XM_WRITER_FNV_PRIME: u64 = 0x100000001b3;
 const XM_WRITER_OPTION_NONE_TAG: u8 = 0;
 const XM_WRITER_OPTION_SOME_TAG: u8 = 1;
 const XM_WRITER_SAMPLE_PREFIX_FRAMES: usize = 16;
-const XM_WRITER_ORDER_TABLE_LEN: usize = 256;
-const XM_WRITER_OVERLONG_ORDER_LEN: usize = XM_WRITER_ORDER_TABLE_LEN + 1;
+const XM_WRITER_MAX_ACTIVE_ORDERS: usize = rustytracker_core::MAX_ACTIVE_ORDERS;
+const XM_WRITER_OVERLONG_ORDER_LEN: usize = XM_WRITER_MAX_ACTIVE_ORDERS + 1;
 const XM_WRITER_TEST_ROWS: u16 = 1;
 const XM_WRITER_TEST_CHANNELS: u16 = 2;
 const XM_WRITER_TEST_EFFECT_SLOTS: u8 = 2;
@@ -210,6 +210,10 @@ fn writes_empty_module_header_and_order_table() {
 
 #[test]
 fn roundtrips_bundled_fixture_headers_and_orders() {
+    if !fixtures_available() {
+        return;
+    }
+
     for fixture in FIXTURES {
         let bytes = fs::read(fixture_path(fixture)).unwrap();
         let module = parse_xm_module(&bytes).unwrap();
@@ -251,6 +255,10 @@ fn roundtrips_bundled_fixture_headers_and_orders() {
 
 #[test]
 fn roundtrips_bundled_fixtures_to_equivalent_core_modules() {
+    if !fixtures_available() {
+        return;
+    }
+
     for fixture in FIXTURES {
         let bytes = fs::read(fixture_path(fixture)).unwrap();
         let module = parse_xm_module(&bytes).unwrap();
@@ -447,8 +455,19 @@ fn rejects_order_tables_that_do_not_fit_in_xm_header() {
         write_xm_header(&module).unwrap_err(),
         XmWriteError::TooManyOrders {
             requested: XM_WRITER_OVERLONG_ORDER_LEN,
-            maximum: XM_WRITER_ORDER_TABLE_LEN,
+            maximum: XM_WRITER_MAX_ACTIVE_ORDERS,
         }
+    );
+}
+
+#[test]
+fn rejects_empty_order_tables() {
+    let mut module = Module::empty();
+    module.orders.clear();
+
+    assert_eq!(
+        write_xm_header(&module).unwrap_err(),
+        XmWriteError::EmptyOrderList
     );
 }
 
@@ -1191,10 +1210,28 @@ fn does_not_relocate_lossy_effects_to_volume_column_when_effect_column_is_occupi
     }
 }
 
+fn fixtures_available() -> bool {
+    fixture_root().is_some()
+}
+
 fn fixture_path(file_name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../MilkyTracker/resources/music")
+    fixture_root()
+        .expect("MilkyTracker fixtures not found; set MILKYTRACKER_ROOT or clone MilkyTracker next to rustytracker")
         .join(file_name)
+}
+
+fn fixture_root() -> Option<PathBuf> {
+    if let Some(root) = std::env::var_os("MILKYTRACKER_ROOT") {
+        let root = PathBuf::from(root);
+        let candidates = [root.join("resources/music"), root];
+        if let Some(path) = candidates.into_iter().find(|path| path.is_dir()) {
+            return Some(path);
+        }
+    }
+
+    let sibling =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../MilkyTracker/resources/music");
+    sibling.is_dir().then_some(sibling)
 }
 
 fn write_header_and_patterns(module: &Module) -> Vec<u8> {

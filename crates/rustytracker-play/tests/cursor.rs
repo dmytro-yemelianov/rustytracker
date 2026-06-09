@@ -707,11 +707,7 @@ fn raw_mono_render_sums_pcm8_and_pcm16_steps_by_channel() {
         playback
             .render_raw_mono_pcm(&module, 8363, PLAY_TEST_RENDER_FRAMES)
             .unwrap(),
-        vec![
-            PLAY_TEST_FIRST_MIXED_MONO,
-            287,
-            PLAY_TEST_SILENCE_MONO,
-        ]
+        vec![PLAY_TEST_FIRST_MIXED_MONO, 287, PLAY_TEST_SILENCE_MONO,]
     );
     assert!(!playback.channels()[PLAY_TEST_CHANNEL_ZERO as usize].active);
     assert!(!playback.channels()[PLAY_TEST_CHANNEL_ONE as usize].active);
@@ -917,6 +913,38 @@ fn test_effect_set_panning() {
 
     let playback = PlaybackState::start(&module).unwrap();
     assert_eq!(playback.channels()[0].panning, 200);
+}
+
+#[test]
+fn vibrato_effect_memory_tracks_effect_slot_count() {
+    let mut module = Module::empty_with_channels(PLAY_TEST_CHANNELS).unwrap();
+    module.orders = vec![PLAY_TEST_PATTERN_ZERO];
+    module.patterns = vec![Pattern::new(PLAY_TEST_ONE_ROW, PLAY_TEST_CHANNELS, 3)];
+    let cell = PatternCell {
+        effects: vec![
+            EffectCommand::default(),
+            EffectCommand::default(),
+            EffectCommand {
+                effect: 0x04,
+                operand: 0x44,
+            },
+        ],
+        ..PatternCell::default()
+    };
+    module.patterns[0].set_cell(0, 0, cell).unwrap();
+
+    let mut playback = PlaybackState::start(&module).unwrap();
+    let channel = &playback.channels()[0];
+    assert_eq!(channel.vibrato_speed.len(), 3);
+    assert_eq!(channel.vibrato_depth.len(), 3);
+    assert_eq!(channel.vibrato_pos.len(), 3);
+    assert_eq!(channel.vibrato_speed[2], 4);
+    assert_eq!(channel.vibrato_depth[2], 4);
+
+    assert_eq!(
+        playback.advance_tick(&module).unwrap(),
+        TickAdvance::SameRow
+    );
 }
 
 #[test]
@@ -1882,7 +1910,10 @@ fn test_raw_stereo_render_with_panning() {
             (
                 PLAY_TEST_CHANNEL_ZERO,
                 PLAYBACK_FIRST_ROW,
-                test_cell(PLAY_TEST_CHANNEL_ZERO_NOTE, PLAY_TEST_CHANNEL_ZERO_INSTRUMENT),
+                test_cell(
+                    PLAY_TEST_CHANNEL_ZERO_NOTE,
+                    PLAY_TEST_CHANNEL_ZERO_INSTRUMENT,
+                ),
             ),
             (
                 PLAY_TEST_CHANNEL_ONE,
@@ -1922,13 +1953,14 @@ fn test_raw_stereo_render_with_panning() {
 fn test_render_to_wav() {
     let mut module = module_with_two_channel_cells(
         PLAY_TEST_ONE_ROW,
-        &[
-            (
-                PLAY_TEST_CHANNEL_ZERO,
-                PLAYBACK_FIRST_ROW,
-                test_cell(PLAY_TEST_CHANNEL_ZERO_NOTE, PLAY_TEST_CHANNEL_ZERO_INSTRUMENT),
+        &[(
+            PLAY_TEST_CHANNEL_ZERO,
+            PLAYBACK_FIRST_ROW,
+            test_cell(
+                PLAY_TEST_CHANNEL_ZERO_NOTE,
+                PLAY_TEST_CHANNEL_ZERO_INSTRUMENT,
             ),
-        ],
+        )],
     );
     map_instrument_to_sample(
         &mut module,
@@ -1951,7 +1983,10 @@ fn test_render_to_wav() {
     // Num channels = 2
     assert_eq!(u16::from_le_bytes([wav_bytes[22], wav_bytes[23]]), 2);
     // Sample rate = 44100
-    assert_eq!(u32::from_le_bytes([wav_bytes[24], wav_bytes[25], wav_bytes[26], wav_bytes[27]]), 44100);
+    assert_eq!(
+        u32::from_le_bytes([wav_bytes[24], wav_bytes[25], wav_bytes[26], wav_bytes[27]]),
+        44100
+    );
     // Bits per sample = 16
     assert_eq!(u16::from_le_bytes([wav_bytes[34], wav_bytes[35]]), 16);
 
@@ -1960,5 +1995,3 @@ fn test_render_to_wav() {
     assert_eq!(file_size, data_size + 36);
     assert_eq!(wav_bytes.len(), data_size as usize + 44);
 }
-
-

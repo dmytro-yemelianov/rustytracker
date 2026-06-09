@@ -117,6 +117,13 @@ impl ModuleEditor {
         &mut self.module
     }
 
+    /// Replace the module as a single undoable transaction when a caller edits a full snapshot.
+    pub fn replace_module_with_undo(&mut self, module: Module) {
+        if self.module != module {
+            self.begin_transaction();
+            self.module = module;
+        }
+    }
 
     pub fn into_module(self) -> Module {
         self.module
