@@ -5,8 +5,10 @@ use rustytracker_core::{
 use rustytracker_play::{
     ChannelSampleFrame, PlaybackChannelState, PlaybackClock, PlaybackCursor, PlaybackEnvelopeState,
     PlaybackError, PlaybackSampleValue, PlaybackState, PlaybackTiming, RowAdvance, TickAdvance,
-    EFFECT_ARPEGGIO_ZERO, PLAYBACK_FIRST_ORDER_INDEX, PLAYBACK_FIRST_ROW, PLAYBACK_FIRST_TICK,
-    PLAYBACK_ORDER_STEP, PLAYBACK_ROW_STEP, PLAYBACK_TICK_STEP, VIB_TAB,
+    EFFECT_ARPEGGIO_ZERO, EFFECT_PATTERN_BREAK, EFFECT_POSITION_JUMP, EFFECT_SET_SPEED_BPM,
+    EFFECT_TONE_PORTAMENTO, EFFECT_VOLUME_SLIDE, PLAYBACK_FIRST_ORDER_INDEX, PLAYBACK_FIRST_ROW,
+    PLAYBACK_FIRST_TICK, PLAYBACK_ORDER_STEP, PLAYBACK_ROW_STEP, PLAYBACK_TICK_STEP,
+    SPEED_BPM_THRESHOLD, VIB_TAB,
 };
 
 const PLAY_TEST_CHANNELS: u16 = 1;
@@ -68,6 +70,12 @@ fn crate_root_re_exports_channel_api() {
     let _ = core::mem::size_of::<PlaybackSampleValue>();
 
     assert_eq!(EFFECT_ARPEGGIO_ZERO, 0x00);
+    assert_eq!(EFFECT_TONE_PORTAMENTO, 0x03);
+    assert_eq!(EFFECT_VOLUME_SLIDE, 0x0a);
+    assert_eq!(EFFECT_POSITION_JUMP, 0x0b);
+    assert_eq!(EFFECT_PATTERN_BREAK, 0x0d);
+    assert_eq!(EFFECT_SET_SPEED_BPM, 0x0f);
+    assert_eq!(SPEED_BPM_THRESHOLD, 32);
     assert_eq!(VIB_TAB.len(), 32);
 }
 
@@ -1264,6 +1272,68 @@ fn test_effect_position_jump() {
     );
     assert_eq!(playback.clock().position(&module).unwrap().order_index, 2);
     assert_eq!(playback.clock().position(&module).unwrap().row, 0);
+}
+
+#[test]
+fn position_jump_target_uses_order_pattern_index() {
+    let mut module = Module::empty_with_channels(PLAY_TEST_CHANNELS).unwrap();
+    module.orders = vec![0, 2, 1];
+    module.patterns = vec![
+        Pattern::new(2, PLAY_TEST_CHANNELS, DEFAULT_EFFECT_SLOTS),
+        Pattern::new(2, PLAY_TEST_CHANNELS, DEFAULT_EFFECT_SLOTS),
+        Pattern::new(2, PLAY_TEST_CHANNELS, DEFAULT_EFFECT_SLOTS),
+    ];
+    module.header.tick_speed = 1;
+
+    let cell = PatternCell {
+        effects: vec![
+            EffectCommand {
+                effect: EFFECT_POSITION_JUMP,
+                operand: 1,
+            },
+            EffectCommand::default(),
+        ],
+        ..PatternCell::default()
+    };
+    module.patterns[0].set_cell(0, 0, cell).unwrap();
+
+    let playback = PlaybackState::start(&module).unwrap();
+    let target = playback.clock().jump_target().unwrap();
+
+    assert_eq!(target.order_index, 1);
+    assert_eq!(target.pattern_index, 2);
+    assert_eq!(target.row, 0);
+}
+
+#[test]
+fn pattern_break_target_uses_next_order_pattern_index() {
+    let mut module = Module::empty_with_channels(PLAY_TEST_CHANNELS).unwrap();
+    module.orders = vec![0, 2, 1];
+    module.patterns = vec![
+        Pattern::new(2, PLAY_TEST_CHANNELS, DEFAULT_EFFECT_SLOTS),
+        Pattern::new(2, PLAY_TEST_CHANNELS, DEFAULT_EFFECT_SLOTS),
+        Pattern::new(4, PLAY_TEST_CHANNELS, DEFAULT_EFFECT_SLOTS),
+    ];
+    module.header.tick_speed = 1;
+
+    let cell = PatternCell {
+        effects: vec![
+            EffectCommand::default(),
+            EffectCommand {
+                effect: EFFECT_PATTERN_BREAK,
+                operand: 0x01,
+            },
+        ],
+        ..PatternCell::default()
+    };
+    module.patterns[0].set_cell(0, 0, cell).unwrap();
+
+    let playback = PlaybackState::start(&module).unwrap();
+    let target = playback.clock().jump_target().unwrap();
+
+    assert_eq!(target.order_index, 1);
+    assert_eq!(target.pattern_index, 2);
+    assert_eq!(target.row, 1);
 }
 
 #[test]
