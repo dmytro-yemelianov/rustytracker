@@ -1917,3 +1917,48 @@ fn test_raw_stereo_render_with_panning() {
     assert_eq!(left, 996);
     assert_eq!(right, 1003);
 }
+
+#[test]
+fn test_render_to_wav() {
+    let mut module = module_with_two_channel_cells(
+        PLAY_TEST_ONE_ROW,
+        &[
+            (
+                PLAY_TEST_CHANNEL_ZERO,
+                PLAYBACK_FIRST_ROW,
+                test_cell(PLAY_TEST_CHANNEL_ZERO_NOTE, PLAY_TEST_CHANNEL_ZERO_INSTRUMENT),
+            ),
+        ],
+    );
+    map_instrument_to_sample(
+        &mut module,
+        PLAY_TEST_FIRST_INSTRUMENT_INDEX,
+        PLAY_TEST_FIRST_SAMPLE_INDEX,
+    );
+    module.samples[PLAY_TEST_FIRST_SAMPLE_INDEX].data = SampleData::Pcm16(vec![100; 100]);
+
+    let mut playback = PlaybackState::start(&module).unwrap();
+    let wav_bytes = playback.render_to_wav(&module, 44100).unwrap();
+
+    assert!(wav_bytes.len() >= 44);
+    assert_eq!(&wav_bytes[0..4], b"RIFF");
+    assert_eq!(&wav_bytes[8..12], b"WAVE");
+    assert_eq!(&wav_bytes[12..16], b"fmt ");
+    assert_eq!(&wav_bytes[36..40], b"data");
+
+    // Audio format = 1
+    assert_eq!(u16::from_le_bytes([wav_bytes[20], wav_bytes[21]]), 1);
+    // Num channels = 2
+    assert_eq!(u16::from_le_bytes([wav_bytes[22], wav_bytes[23]]), 2);
+    // Sample rate = 44100
+    assert_eq!(u32::from_le_bytes([wav_bytes[24], wav_bytes[25], wav_bytes[26], wav_bytes[27]]), 44100);
+    // Bits per sample = 16
+    assert_eq!(u16::from_le_bytes([wav_bytes[34], wav_bytes[35]]), 16);
+
+    let data_size = u32::from_le_bytes(wav_bytes[40..44].try_into().unwrap());
+    let file_size = u32::from_le_bytes(wav_bytes[4..8].try_into().unwrap());
+    assert_eq!(file_size, data_size + 36);
+    assert_eq!(wav_bytes.len(), data_size as usize + 44);
+}
+
+

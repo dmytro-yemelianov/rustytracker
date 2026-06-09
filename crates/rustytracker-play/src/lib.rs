@@ -1255,6 +1255,78 @@ impl PlaybackState {
         Ok(rendered)
     }
 
+    pub fn render_to_wav(
+        &mut self,
+        module: &Module,
+        sample_rate: u32,
+    ) -> PlaybackResult<Vec<u8>> {
+        use std::io::{Write, Seek, SeekFrom, Cursor};
+
+        let mut buffer = Cursor::new(Vec::new());
+
+        // Write a dummy header first
+        let header_bytes = [0u8; 44];
+        buffer.write_all(&header_bytes).expect("writing to memory buffer should not fail");
+
+        let mut total_samples_written: u32 = 0;
+        let buffer_frames = 1024;
+
+        while !self.song_ended() {
+            let frames = self.render_raw_stereo_pcm(module, sample_rate, buffer_frames)?;
+            if frames.is_empty() {
+                break;
+            }
+
+            let mut bytes = Vec::with_capacity(frames.len() * 4);
+            for (left_i32, right_i32) in frames {
+                let left_i16 = left_i32.clamp(-32768, 32767) as i16;
+                let right_i16 = right_i32.clamp(-32768, 32767) as i16;
+                bytes.extend_from_slice(&left_i16.to_le_bytes());
+                bytes.extend_from_slice(&right_i16.to_le_bytes());
+                total_samples_written += 1;
+            }
+            buffer.write_all(&bytes).expect("writing to memory buffer should not fail");
+
+            if self.song_ended() {
+                break;
+            }
+
+            // Safety limit (1 hour of audio max)
+            if total_samples_written > sample_rate * 3600 {
+                break;
+            }
+        }
+
+        buffer.seek(SeekFrom::Start(0)).expect("seeking in memory buffer should not fail");
+
+        let num_channels = 2u16;
+        let bits_per_sample = 16u16;
+        let block_align = num_channels * (bits_per_sample / 8);
+        let byte_rate = sample_rate * block_align as u32;
+        let data_size = total_samples_written * block_align as u32;
+        let file_size = 36 + data_size;
+
+        let mut header = [0u8; 44];
+        header[0..4].copy_from_slice(b"RIFF");
+        header[4..8].copy_from_slice(&file_size.to_le_bytes());
+        header[8..12].copy_from_slice(b"WAVE");
+        header[12..16].copy_from_slice(b"fmt ");
+        header[16..20].copy_from_slice(&16u32.to_le_bytes()); // Chunk size
+        header[20..22].copy_from_slice(&1u16.to_le_bytes());  // Audio format (1 = PCM)
+        header[22..24].copy_from_slice(&num_channels.to_le_bytes());
+        header[24..28].copy_from_slice(&sample_rate.to_le_bytes());
+        header[28..32].copy_from_slice(&byte_rate.to_le_bytes());
+        header[32..34].copy_from_slice(&block_align.to_le_bytes());
+        header[34..36].copy_from_slice(&bits_per_sample.to_le_bytes());
+        header[36..40].copy_from_slice(b"data");
+        header[40..44].copy_from_slice(&data_size.to_le_bytes());
+
+        buffer.write_all(&header).expect("writing to memory buffer should not fail");
+
+        Ok(buffer.into_inner())
+    }
+
+
     fn render_raw_stereo_frame(
         &mut self,
         module: &Module,
