@@ -1275,6 +1275,37 @@ fn test_effect_position_jump() {
 }
 
 #[test]
+fn position_jump_target_uses_order_pattern_index() {
+    let mut module = Module::empty_with_channels(PLAY_TEST_CHANNELS).unwrap();
+    module.orders = vec![0, 2, 1];
+    module.patterns = vec![
+        Pattern::new(2, PLAY_TEST_CHANNELS, DEFAULT_EFFECT_SLOTS),
+        Pattern::new(2, PLAY_TEST_CHANNELS, DEFAULT_EFFECT_SLOTS),
+        Pattern::new(2, PLAY_TEST_CHANNELS, DEFAULT_EFFECT_SLOTS),
+    ];
+    module.header.tick_speed = 1;
+
+    let cell = PatternCell {
+        effects: vec![
+            EffectCommand {
+                effect: EFFECT_POSITION_JUMP,
+                operand: 1,
+            },
+            EffectCommand::default(),
+        ],
+        ..PatternCell::default()
+    };
+    module.patterns[0].set_cell(0, 0, cell).unwrap();
+
+    let playback = PlaybackState::start(&module).unwrap();
+    let target = playback.clock().jump_target().unwrap();
+
+    assert_eq!(target.order_index, 1);
+    assert_eq!(target.pattern_index, 2);
+    assert_eq!(target.row, 0);
+}
+
+#[test]
 fn test_effect_pattern_break() {
     let mut module = Module::empty_with_channels(PLAY_TEST_CHANNELS).unwrap();
     module.orders = vec![0, 1];

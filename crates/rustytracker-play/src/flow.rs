@@ -52,10 +52,16 @@ pub(crate) fn apply_row_flow(
         };
 
         let target_row = requested_row.unwrap_or_default();
+        let target_pattern_index = module
+            .orders
+            .get(target_order)
+            .copied()
+            .map(usize::from)
+            .unwrap_or_default();
 
         clock.set_jump_target(PlaybackPosition {
             order_index: target_order,
-            pattern_index: 0,
+            pattern_index: target_pattern_index,
             row: target_row,
         });
     }
