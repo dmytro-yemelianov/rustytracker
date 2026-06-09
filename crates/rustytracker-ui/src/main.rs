@@ -1,16 +1,19 @@
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use eframe::egui;
-use egui::{Color32, Key, RichText, Ui};
+use egui::{Key, Ui};
 use rustytracker_core::{
-    EffectCommand, Envelope, Instrument, InstrumentName, Module, Note, NoteName, PatternCell,
-    Sample, SampleData, SampleLoopKind, SampleName,
+    EffectCommand, Envelope, Instrument, InstrumentName, Module, Note, NoteName, Sample,
+    SampleLoopKind, SampleName,
 };
 use rustytracker_edit::ModuleEditor;
 use rustytracker_play::PlaybackState;
 use rustytracker_xm::{XM_HEADER_SIGNATURE, XM_HEADER_SIGNATURE_LENGTH};
+
+mod audio;
+mod tracker_ui;
+
+use audio::AudioPlaybackEngine;
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
@@ -23,214 +26,27 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "RustyTracker",
         options,
-        Box::new(|_cc| Box::new(RustyTrackerApp::new()) as Box<dyn eframe::App>),
+        Box::new(|cc| Box::new(RustyTrackerApp::new(&cc.egui_ctx)) as Box<dyn eframe::App>),
     )
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ActiveField {
+pub(crate) enum ActiveField {
     Note,
     Instrument,
     Effect0,
     Effect1,
 }
 
-struct AudioEngineState {
-    playback: Option<PlaybackState>,
-    module: Option<Module>,
-    is_playing: bool,
-    sample_rate: u32,
-}
-
-struct AudioPlaybackEngine {
-    state: Arc<Mutex<AudioEngineState>>,
-    _stream: Option<cpal::Stream>,
-}
-
-impl AudioPlaybackEngine {
-    pub fn new() -> Self {
-        let host = cpal::default_host();
-        let device = match host.default_output_device() {
-            Some(d) => d,
-            None => {
-                eprintln!("No default audio output device found!");
-                return Self {
-                    state: Arc::new(Mutex::new(AudioEngineState {
-                        playback: None,
-                        module: None,
-                        is_playing: false,
-                        sample_rate: 44100,
-                    })),
-                    _stream: None,
-                };
-            }
-        };
-
-        let config = match device.default_output_config() {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!("Failed to get default output config: {e}");
-                return Self {
-                    state: Arc::new(Mutex::new(AudioEngineState {
-                        playback: None,
-                        module: None,
-                        is_playing: false,
-                        sample_rate: 44100,
-                    })),
-                    _stream: None,
-                };
-            }
-        };
-
-        let sample_rate = config.sample_rate().0;
-        let state = Arc::new(Mutex::new(AudioEngineState {
-            playback: None,
-            module: None,
-            is_playing: false,
-            sample_rate,
-        }));
-
-        let state_clone = Arc::clone(&state);
-        let err_fn = |err| eprintln!("an error occurred on stream: {err}");
-
-        let stream = match config.sample_format() {
-            cpal::SampleFormat::F32 => device.build_output_stream(
-                &config.into(),
-                move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                    write_audio(data, &state_clone);
-                },
-                err_fn,
-                None,
-            ),
-            cpal::SampleFormat::I16 => device.build_output_stream(
-                &config.into(),
-                move |data: &mut [i16], _: &cpal::OutputCallbackInfo| {
-                    write_audio(data, &state_clone);
-                },
-                err_fn,
-                None,
-            ),
-            cpal::SampleFormat::U16 => device.build_output_stream(
-                &config.into(),
-                move |data: &mut [u16], _: &cpal::OutputCallbackInfo| {
-                    write_audio(data, &state_clone);
-                },
-                err_fn,
-                None,
-            ),
-            _ => Err(cpal::BuildStreamError::DeviceNotAvailable),
-        };
-
-        let stream = match stream {
-            Ok(s) => {
-                let _ = s.play();
-                Some(s)
-            }
-            Err(e) => {
-                eprintln!("Failed to build audio output stream: {e}");
-                None
-            }
-        };
-
-        Self {
-            state,
-            _stream: stream,
-        }
-    }
-}
-
-fn write_audio<T>(output: &mut [T], state_lock: &Arc<Mutex<AudioEngineState>>)
-where
-    T: cpal::Sample + cpal::FromSample<f32>,
-{
-    let mut state_guard = match state_lock.lock() {
-        Ok(s) => s,
-        Err(_) => {
-            for sample in output.iter_mut() {
-                *sample = T::from_sample(0.0);
-            }
-            return;
-        }
-    };
-
-    let state = &mut *state_guard;
-    if !state.is_playing {
-        for sample in output.iter_mut() {
-            *sample = T::from_sample(0.0);
-        }
-        return;
-    }
-
-    let AudioEngineState {
-        playback,
-        module,
-        sample_rate,
-        ..
-    } = state;
-
-    let playback = match playback {
-        Some(pb) => pb,
-        None => {
-            for sample in output.iter_mut() {
-                *sample = T::from_sample(0.0);
-            }
-            return;
-        }
-    };
-
-    let module = match module {
-        Some(m) => m,
-        None => {
-            for sample in output.iter_mut() {
-                *sample = T::from_sample(0.0);
-            }
-            return;
-        }
-    };
-
-    let sample_rate = *sample_rate;
-    let mut song_ended = false;
-
-    for frame in output.chunks_mut(2) {
-        let (left_sample, right_sample) = if !song_ended {
-            match playback.render_raw_stereo_frame(module, sample_rate) {
-                Ok((raw_l, raw_r)) => {
-                    if playback.song_ended() {
-                        song_ended = true;
-                        (0.0, 0.0)
-                    } else {
-                        let l = (raw_l.clamp(-32768, 32767) as f32) / 32768.0;
-                        let r = (raw_r.clamp(-32768, 32767) as f32) / 32768.0;
-                        (l, r)
-                    }
-                }
-                Err(_) => {
-                    song_ended = true;
-                    (0.0, 0.0)
-                }
-            }
-        } else {
-            (0.0, 0.0)
-        };
-
-        if frame.len() >= 2 {
-            frame[0] = T::from_sample(left_sample);
-            frame[1] = T::from_sample(right_sample);
-        } else if !frame.is_empty() {
-            frame[0] = T::from_sample(left_sample);
-        }
-    }
-
-    if song_ended {
-        state.is_playing = false;
-        state.playback = None;
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ViewMode {
     PatternEditor,
     InstrumentEditor,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct TrackerUiSettings {
+    palette: tracker_ui::TrackerPalette,
 }
 
 #[derive(Default)]
@@ -306,6 +122,8 @@ impl InstrumentEditorEdits {
 struct RustyTrackerApp {
     editor: ModuleEditor,
     audio_engine: AudioPlaybackEngine,
+    tracker_resources: tracker_ui::TrackerUiResources,
+    ui_settings: TrackerUiSettings,
     edit_mode: bool,
     is_mod: bool,
 
@@ -322,9 +140,13 @@ struct RustyTrackerApp {
 }
 
 impl RustyTrackerApp {
-    pub fn new() -> Self {
+    pub fn new(ctx: &egui::Context) -> Self {
         let editor = ModuleEditor::new(Module::empty());
         let audio_engine = AudioPlaybackEngine::new();
+        let tracker_resources = tracker_ui::TrackerUiResources::new(ctx);
+        let ui_settings = TrackerUiSettings {
+            palette: tracker_resources.palette(),
+        };
         {
             if let Ok(mut state) = audio_engine.state.lock() {
                 state.module = Some(editor.module().clone());
@@ -333,6 +155,8 @@ impl RustyTrackerApp {
         Self {
             editor,
             audio_engine,
+            tracker_resources,
+            ui_settings,
             edit_mode: false,
             is_mod: false,
             active_order_index: 0,
@@ -475,12 +299,27 @@ impl RustyTrackerApp {
                     ui.close_menu();
                 }
             });
+
+            ui.menu_button("View", |ui| {
+                ui.label("Palette");
+                for palette in tracker_ui::TrackerPalette::ALL {
+                    if ui
+                        .selectable_label(self.ui_settings.palette == palette, palette.label())
+                        .clicked()
+                    {
+                        self.ui_settings.palette = palette;
+                        self.tracker_resources.set_palette(palette);
+                        ui.close_menu();
+                    }
+                }
+            });
         });
     }
 
     fn render_controls_bar(&mut self, ui: &mut Ui) {
+        let theme = self.tracker_resources.theme();
+
         ui.horizontal(|ui| {
-            // Playback controls
             let is_playing = {
                 if let Ok(state) = self.audio_engine.state.lock() {
                     state.is_playing
@@ -490,17 +329,27 @@ impl RustyTrackerApp {
             };
 
             if is_playing {
-                if ui
-                    .button(RichText::new("⏸ Pause").color(Color32::LIGHT_BLUE))
-                    .clicked()
+                if tracker_ui::show_toolbar_button(
+                    ui,
+                    &self.tracker_resources,
+                    "PAUSE",
+                    true,
+                    theme.pattern_instrument,
+                )
+                .clicked()
                 {
                     if let Ok(mut state) = self.audio_engine.state.lock() {
                         state.is_playing = false;
                     }
                 }
-            } else if ui
-                .button(RichText::new("▶ Play").color(Color32::LIGHT_GREEN))
-                .clicked()
+            } else if tracker_ui::show_toolbar_button(
+                ui,
+                &self.tracker_resources,
+                "PLAY",
+                false,
+                theme.pattern_note,
+            )
+            .clicked()
             {
                 if let Ok(mut state) = self.audio_engine.state.lock() {
                     state.is_playing = true;
@@ -513,7 +362,15 @@ impl RustyTrackerApp {
                 }
             }
 
-            if ui.button("⏹ Stop").clicked() {
+            if tracker_ui::show_toolbar_button(
+                ui,
+                &self.tracker_resources,
+                "STOP",
+                false,
+                theme.pattern_effect,
+            )
+            .clicked()
+            {
                 if let Ok(mut state) = self.audio_engine.state.lock() {
                     state.is_playing = false;
                     state.playback = None;
@@ -522,78 +379,144 @@ impl RustyTrackerApp {
                 self.active_order_index = 0;
             }
 
-            ui.separator();
+            tracker_ui::show_toolbar_separator(ui, &self.tracker_resources);
 
-            // Edit Mode Indicator
             let edit_text = if self.edit_mode {
-                RichText::new("● EDIT MODE").color(Color32::LIGHT_RED)
+                "EDIT ON"
             } else {
-                RichText::new("○ RECORD").color(Color32::GRAY)
+                "EDIT OFF"
             };
-            if ui.button(edit_text).clicked() {
+            if tracker_ui::show_toolbar_button(
+                ui,
+                &self.tracker_resources,
+                edit_text,
+                self.edit_mode,
+                theme.cursor_line_highlight,
+            )
+            .clicked()
+            {
                 self.edit_mode = !self.edit_mode;
             }
 
-            ui.separator();
+            tracker_ui::show_toolbar_separator(ui, &self.tracker_resources);
 
-            // Octave Selector
-            ui.label("Octave:");
-            ui.add(egui::DragValue::new(&mut self.octave).clamp_range(0..=8));
+            if tracker_ui::show_toolbar_button(
+                ui,
+                &self.tracker_resources,
+                "OCT -",
+                false,
+                theme.foreground,
+            )
+            .clicked()
+            {
+                self.octave = self.octave.saturating_sub(1);
+            }
+            tracker_ui::show_status_label(
+                ui,
+                &self.tracker_resources,
+                &format!("OCT {}", self.octave),
+                theme.pattern_instrument,
+            );
+            if tracker_ui::show_toolbar_button(
+                ui,
+                &self.tracker_resources,
+                "OCT +",
+                false,
+                theme.foreground,
+            )
+            .clicked()
+            {
+                self.octave = (self.octave + 1).min(8);
+            }
 
-            ui.separator();
+            tracker_ui::show_toolbar_separator(ui, &self.tracker_resources);
 
-            // View Selector
-            ui.label("View:");
-            if ui
-                .selectable_label(self.view_mode == ViewMode::PatternEditor, "Pattern")
-                .clicked()
+            if tracker_ui::show_toolbar_button(
+                ui,
+                &self.tracker_resources,
+                "PATTERN",
+                self.view_mode == ViewMode::PatternEditor,
+                theme.pattern_note,
+            )
+            .clicked()
             {
                 self.view_mode = ViewMode::PatternEditor;
             }
-            if ui
-                .selectable_label(
-                    self.view_mode == ViewMode::InstrumentEditor,
-                    "Instrument/Sample",
-                )
-                .clicked()
+            if tracker_ui::show_toolbar_button(
+                ui,
+                &self.tracker_resources,
+                "INSTR",
+                self.view_mode == ViewMode::InstrumentEditor,
+                theme.pattern_instrument,
+            )
+            .clicked()
             {
                 self.view_mode = ViewMode::InstrumentEditor;
             }
 
-            ui.separator();
+            tracker_ui::show_toolbar_separator(ui, &self.tracker_resources);
 
-            // BPM / Speed display
             let module = self.editor.module();
-            ui.label(format!("BPM: {}", module.header.bpm));
-            ui.label(format!("Speed: {}", module.header.tick_speed));
-            ui.label(format!("Channels: {}", module.header.channel_count));
-
-            ui.separator();
-
-            // Display title of the loaded module
-            ui.label(format!(
-                "Song: {}",
-                if module.header.title.as_str().is_empty() {
-                    "Untitled"
-                } else {
-                    module.header.title.as_str()
-                }
-            ));
+            let song_title = if module.header.title.as_str().is_empty() {
+                "UNTITLED"
+            } else {
+                module.header.title.as_str()
+            };
+            tracker_ui::show_status_label(
+                ui,
+                &self.tracker_resources,
+                &format!("BPM {}", module.header.bpm),
+                theme.foreground,
+            );
+            tracker_ui::show_status_label(
+                ui,
+                &self.tracker_resources,
+                &format!("SPD {}", module.header.tick_speed),
+                theme.foreground,
+            );
+            tracker_ui::show_status_label(
+                ui,
+                &self.tracker_resources,
+                &format!("CHN {}", module.header.channel_count),
+                theme.foreground,
+            );
+            tracker_ui::show_status_label(
+                ui,
+                &self.tracker_resources,
+                &format!("SONG {song_title}"),
+                theme.foreground,
+            );
         });
     }
 
     fn render_order_list(&mut self, ui: &mut Ui) {
-        ui.heading("Order List");
+        let theme = self.tracker_resources.theme();
+
+        tracker_ui::show_list_heading(ui, &self.tracker_resources, "ORDER LIST");
         ui.separator();
 
-        let orders_len = self.editor.module().orders.len();
-
         ui.horizontal(|ui| {
-            if ui.button("+ Add").clicked() {
+            if tracker_ui::show_toolbar_button(
+                ui,
+                &self.tracker_resources,
+                "ADD",
+                false,
+                theme.pattern_note,
+            )
+            .clicked()
+            {
                 let _ = self.editor.insert_duplicate_order(self.active_order_index);
                 self.commit_edit_to_audio();
             }
-            if ui.button("- Del").clicked() {
+            if tracker_ui::show_toolbar_button(
+                ui,
+                &self.tracker_resources,
+                "DEL",
+                false,
+                theme.cursor_line_highlight,
+            )
+            .clicked()
+            {
                 let _ = self.editor.delete_order(self.active_order_index);
                 self.commit_edit_to_audio();
                 if self.active_order_index >= self.editor.module().orders.len() {
@@ -604,19 +527,21 @@ impl RustyTrackerApp {
 
         ui.separator();
 
+        let orders_len = self.editor.module().orders.len();
+
         egui::ScrollArea::vertical().show(ui, |ui| {
             for i in 0..orders_len {
                 let pattern_val = self.editor.module().orders[i];
                 let is_selected = i == self.active_order_index;
 
-                let text = format!("Order {i:02X} : Pattern {pattern_val:02X}");
-
-                let mut label = RichText::new(text).monospace();
-                if is_selected {
-                    label = label.color(Color32::YELLOW).strong();
-                }
-
-                let response = ui.selectable_label(is_selected, label);
+                let text = format!("ORD {i:02X}  PAT {pattern_val:02X}");
+                let response = tracker_ui::show_list_row(
+                    ui,
+                    &self.tracker_resources,
+                    &text,
+                    is_selected,
+                    theme.pattern_note,
+                );
                 if response.clicked() {
                     self.active_order_index = i;
                     if let Ok(mut state) = self.audio_engine.state.lock() {
@@ -628,7 +553,9 @@ impl RustyTrackerApp {
     }
 
     fn render_instrument_list(&mut self, ui: &mut Ui) {
-        ui.heading("Instruments");
+        let theme = self.tracker_resources.theme();
+
+        tracker_ui::show_list_heading(ui, &self.tracker_resources, "INSTRUMENTS");
         ui.separator();
 
         let instruments = &self.editor.module().instruments;
@@ -643,14 +570,15 @@ impl RustyTrackerApp {
                 } else {
                     ins.name.as_str()
                 };
-                let text = format!("{ins_num:02X} : {name}");
 
-                let mut label = RichText::new(text).monospace();
-                if is_selected {
-                    label = label.color(Color32::LIGHT_BLUE).strong();
-                }
-
-                let response = ui.selectable_label(is_selected, label);
+                let text = format!("{ins_num:02X}  {name}");
+                let response = tracker_ui::show_list_row(
+                    ui,
+                    &self.tracker_resources,
+                    &text,
+                    is_selected,
+                    theme.pattern_instrument,
+                );
                 if response.clicked() {
                     self.selected_instrument = ins_num;
                 }
@@ -659,108 +587,34 @@ impl RustyTrackerApp {
     }
 
     fn render_pattern_editor(&mut self, ui: &mut Ui) {
-        let module = self.editor.module();
-        let active_pattern_idx = match module.orders.get(self.active_order_index) {
-            Some(&idx) => idx as usize,
-            None => 0,
+        let clicked_cell = {
+            let module = self.editor.module();
+            let active_pattern_idx = match module.orders.get(self.active_order_index) {
+                Some(&idx) => idx as usize,
+                None => 0,
+            };
+
+            let Some(pattern) = module.patterns.get(active_pattern_idx) else {
+                return;
+            };
+
+            tracker_ui::show_pattern_editor(
+                ui,
+                &self.tracker_resources,
+                pattern,
+                tracker_ui::PatternView {
+                    active_pattern_index: active_pattern_idx,
+                    active_row: self.active_row,
+                    active_channel: self.active_channel,
+                    active_field: self.active_field,
+                    edit_mode: self.edit_mode,
+                },
+            )
         };
 
-        let pattern = match module.patterns.get(active_pattern_idx) {
-            Some(p) => p,
-            None => return,
-        };
-
-        let rows = pattern.rows();
-        let channels = pattern.channels();
-
-        ui.heading(format!("Pattern Editor : Pattern {active_pattern_idx:02X}"));
-        ui.separator();
-
-        let default_cell = PatternCell::default();
-        let mut clicked_cell = None;
-
-        // Editor table
-        egui::ScrollArea::both()
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                egui::Grid::new("pattern_grid")
-                    .striped(true)
-                    .spacing([8.0, 4.0])
-                    .show(ui, |ui| {
-                        // Render Column Headers
-                        ui.label(RichText::new("Row").color(Color32::GRAY));
-                        for c in 0..channels {
-                            ui.label(
-                                RichText::new(format!("Channel {:02}", c + 1))
-                                    .color(Color32::LIGHT_BLUE)
-                                    .strong(),
-                            );
-                        }
-                        ui.end_row();
-
-                        // Render Rows
-                        for r in 0..rows {
-                            let is_row_active = r == self.active_row;
-
-                            // Display row index (e.g. "00")
-                            let mut row_num_text = RichText::new(format!("{r:02X}")).monospace();
-                            if is_row_active {
-                                row_num_text = row_num_text.color(Color32::YELLOW).strong();
-                            } else {
-                                row_num_text = row_num_text.color(Color32::GRAY);
-                            }
-                            ui.label(row_num_text);
-
-                            // Display channel cells
-                            for c in 0..channels {
-                                let cell = pattern.cell(c, r).unwrap_or(&default_cell);
-
-                                let note_str = format_note(cell.note);
-                                let ins_str = format_instrument(cell.instrument);
-
-                                let eff0_cmd = cell.effects.first().copied().unwrap_or_default();
-                                let eff1_cmd = cell.effects.get(1).copied().unwrap_or_default();
-
-                                let eff0_str = format_effect(eff0_cmd);
-                                let eff1_str = format_effect(eff1_cmd);
-
-                                let cell_text =
-                                    format!("{note_str} {ins_str} {eff0_str} {eff1_str}");
-                                let mut rich_text = RichText::new(cell_text).monospace();
-
-                                // Highlight cells or cursors
-                                let is_cursor_here =
-                                    c == self.active_channel && r == self.active_row;
-
-                                let response = if is_cursor_here {
-                                    rich_text = rich_text.color(Color32::BLACK);
-                                    let bg_color = if self.edit_mode {
-                                        Color32::LIGHT_RED
-                                    } else {
-                                        Color32::YELLOW
-                                    };
-                                    ui.colored_label(bg_color, rich_text)
-                                } else {
-                                    if is_row_active {
-                                        rich_text = rich_text.color(Color32::WHITE).strong();
-                                    } else {
-                                        rich_text = rich_text.color(Color32::GRAY);
-                                    }
-                                    ui.selectable_label(false, rich_text)
-                                };
-
-                                if response.clicked() {
-                                    clicked_cell = Some((c, r));
-                                }
-                            }
-                            ui.end_row();
-                        }
-                    });
-            });
-
-        if let Some((c, r)) = clicked_cell {
-            self.active_channel = c;
-            self.active_row = r;
+        if let Some((channel, row)) = clicked_cell {
+            self.active_channel = channel;
+            self.active_row = row;
         }
     }
 
@@ -1114,76 +968,6 @@ impl RustyTrackerApp {
     }
 }
 
-fn format_note(note: Note) -> String {
-    match note {
-        Note::Empty => "...".to_string(),
-        Note::Off => "====".to_string(),
-        Note::Key(val) => {
-            let val = val.saturating_sub(1);
-            let octave = val / 12;
-            let name_idx = val % 12;
-            let name_str = match name_idx {
-                0 => "C-",
-                1 => "C#",
-                2 => "D-",
-                3 => "D#",
-                4 => "E-",
-                5 => "F-",
-                6 => "F#",
-                7 => "G-",
-                8 => "G#",
-                9 => "A-",
-                10 => "A#",
-                11 => "B-",
-                _ => "??",
-            };
-            format!("{name_str}{octave}")
-        }
-    }
-}
-
-fn format_instrument(ins: u8) -> String {
-    if ins == 0 {
-        "..".to_string()
-    } else {
-        format!("{ins:02X}")
-    }
-}
-
-fn format_effect(cmd: EffectCommand) -> String {
-    if cmd.effect == 0 && cmd.operand == 0 {
-        "...".to_string()
-    } else if cmd.effect >= 0x30 && cmd.effect <= 0x3f {
-        let ext_type = cmd.effect - 0x30;
-        format!("E{:X}{:X}", ext_type, cmd.operand & 0x0f)
-    } else {
-        let effect_char = match cmd.effect {
-            0x00 => '0',
-            0x01 => '1',
-            0x02 => '2',
-            0x03 => '3',
-            0x04 => '4',
-            0x05 => '5',
-            0x06 => '6',
-            0x07 => '7',
-            0x08 => '8',
-            0x09 => '9',
-            0x0a => 'A',
-            0x0b => 'B',
-            0x0c => 'C',
-            0x0d => 'D',
-            0x0f => 'F',
-            0x20 => '0',
-            _ => '?',
-        };
-        if effect_char == '?' {
-            format!("{:02X}{:02X}", cmd.effect, cmd.operand)
-        } else {
-            format!("{}{:02X}", effect_char, cmd.operand)
-        }
-    }
-}
-
 fn key_to_note_and_octave_offset(key: Key) -> Option<(NoteName, i8)> {
     match key {
         // Lower octave (Z keyboard row)
@@ -1276,12 +1060,18 @@ fn get_hex_key_value(input: &egui::InputState) -> Option<u8> {
 
 impl RustyTrackerApp {
     fn render_instrument_editor(&mut self, ui: &mut Ui) {
+        let theme = self.tracker_resources.theme();
         let ins_idx = (self.selected_instrument as usize).saturating_sub(1);
 
         let (edits, sample_idx) = {
             let module = self.editor.module();
             let Some(instrument) = module.instruments.get(ins_idx) else {
-                ui.label("Selected instrument is out of range.");
+                tracker_ui::show_status_label(
+                    ui,
+                    &self.tracker_resources,
+                    "SELECTED INSTRUMENT OUT OF RANGE",
+                    theme.cursor_line_highlight,
+                );
                 return;
             };
 
@@ -1297,419 +1087,383 @@ impl RustyTrackerApp {
             let mut volume_envelope_changed = false;
 
             ui.vertical(|ui| {
-                ui.heading("Instrument & Sample Editor");
+                tracker_ui::show_list_heading(
+                    ui,
+                    &self.tracker_resources,
+                    "INSTRUMENT & SAMPLE EDITOR",
+                );
                 ui.separator();
 
                 ui.columns(2, |columns| {
                     // Column 0: Instrument & Envelopes
                     columns[0].vertical(|ui| {
-                        ui.group(|ui| {
-                            ui.label("Instrument Settings");
-                            ui.horizontal(|ui| {
-                                ui.label("Name:");
-                                if ui.text_edit_singleline(&mut name_str).changed() {
-                                    let name = InstrumentName::new(&name_str);
-                                    if name != instrument.name {
-                                        edits.instrument_name = Some(name);
+                        tracker_ui::show_panel(
+                            ui,
+                            &self.tracker_resources,
+                            "INSTRUMENT SETTINGS",
+                            |ui| {
+                                ui.horizontal(|ui| {
+                                    ui.label("Name:");
+                                    if ui.text_edit_singleline(&mut name_str).changed() {
+                                        let name = InstrumentName::new(&name_str);
+                                        if name != instrument.name {
+                                            edits.instrument_name = Some(name);
+                                        }
                                     }
-                                }
-                            });
+                                });
 
-                            ui.horizontal(|ui| {
-                                ui.label("Volume Fadeout:");
-                                if ui
-                                    .add(egui::Slider::new(&mut volume_fadeout, 0..=65535))
-                                    .changed()
-                                    && volume_fadeout != instrument.volume_fadeout
-                                {
-                                    edits.instrument_volume_fadeout = Some(volume_fadeout);
-                                }
-                            });
-                        });
+                                ui.horizontal(|ui| {
+                                    ui.label("Volume Fadeout:");
+                                    if ui
+                                        .add(egui::Slider::new(&mut volume_fadeout, 0..=65535))
+                                        .changed()
+                                        && volume_fadeout != instrument.volume_fadeout
+                                    {
+                                        edits.instrument_volume_fadeout = Some(volume_fadeout);
+                                    }
+                                });
+                            },
+                        );
 
                         // Volume Envelope Settings
-                        ui.group(|ui| {
-                            let env = &mut volume_envelope;
+                        tracker_ui::show_panel(
+                            ui,
+                            &self.tracker_resources,
+                            "VOLUME ENVELOPE",
+                            |ui| {
+                                let env = &mut volume_envelope;
 
-                            let mut env_active = (env.flags & 1) != 0;
-                            if ui
-                                .checkbox(&mut env_active, "Volume Envelope Active")
-                                .changed()
-                            {
-                                if env_active {
-                                    env.flags |= 1;
-                                } else {
-                                    env.flags &= !1;
+                                let env_active = (env.flags & 1) != 0;
+                                if tracker_ui::show_toolbar_button(
+                                    ui,
+                                    &self.tracker_resources,
+                                    "VOLUME ENV",
+                                    env_active,
+                                    theme.pattern_note,
+                                )
+                                .clicked()
+                                {
+                                    if env_active {
+                                        env.flags &= !1;
+                                    } else {
+                                        env.flags |= 1;
+                                    }
+                                    volume_envelope_changed = true;
                                 }
-                                volume_envelope_changed = true;
-                            }
 
-                            let mut env_sustain = (env.flags & 2) != 0;
-                            if ui.checkbox(&mut env_sustain, "Sustain Enabled").changed() {
+                                let env_sustain = (env.flags & 2) != 0;
+                                if tracker_ui::show_toolbar_button(
+                                    ui,
+                                    &self.tracker_resources,
+                                    "SUSTAIN",
+                                    env_sustain,
+                                    theme.pattern_instrument,
+                                )
+                                .clicked()
+                                {
+                                    if env_sustain {
+                                        env.flags &= !2;
+                                    } else {
+                                        env.flags |= 2;
+                                    }
+                                    volume_envelope_changed = true;
+                                }
                                 if env_sustain {
-                                    env.flags |= 2;
-                                } else {
-                                    env.flags &= !2;
-                                }
-                                volume_envelope_changed = true;
-                            }
-                            if env_sustain {
-                                ui.horizontal(|ui| {
-                                    ui.label("Sustain Point:");
-                                    if ui
-                                        .add(
-                                            egui::DragValue::new(&mut env.sustain_point)
-                                                .clamp_range(0..=env.point_count.saturating_sub(1)),
-                                        )
-                                        .changed()
-                                    {
-                                        volume_envelope_changed = true;
-                                    }
-                                });
-                            }
-
-                            let mut env_loop = (env.flags & 4) != 0;
-                            if ui.checkbox(&mut env_loop, "Loop Enabled").changed() {
-                                if env_loop {
-                                    env.flags |= 4;
-                                } else {
-                                    env.flags &= !4;
-                                }
-                                volume_envelope_changed = true;
-                            }
-                            if env_loop {
-                                ui.horizontal(|ui| {
-                                    ui.label("Loop Start:");
-                                    if ui
-                                        .add(
-                                            egui::DragValue::new(&mut env.loop_start_point)
-                                                .clamp_range(0..=env.point_count.saturating_sub(1)),
-                                        )
-                                        .changed()
-                                    {
-                                        volume_envelope_changed = true;
-                                    }
-                                    ui.label("Loop End:");
-                                    if ui
-                                        .add(
-                                            egui::DragValue::new(&mut env.loop_end_point)
-                                                .clamp_range(0..=env.point_count.saturating_sub(1)),
-                                        )
-                                        .changed()
-                                    {
-                                        volume_envelope_changed = true;
-                                    }
-                                });
-                            }
-
-                            ui.separator();
-                            ui.label("Envelope Points:");
-
-                            let mut to_remove = None;
-                            for idx in 0..env.point_count as usize {
-                                if let Some(pt) = env.points.get_mut(idx) {
                                     ui.horizontal(|ui| {
-                                        ui.label(format!("Pt {idx}:"));
-                                        ui.label("Frame:");
+                                        ui.label("Sustain Point:");
                                         if ui
                                             .add(
-                                                egui::DragValue::new(&mut pt.frame)
-                                                    .clamp_range(0..=32767),
+                                                egui::DragValue::new(&mut env.sustain_point)
+                                                    .clamp_range(
+                                                        0..=env.point_count.saturating_sub(1),
+                                                    ),
                                             )
                                             .changed()
                                         {
                                             volume_envelope_changed = true;
-                                        }
-                                        ui.label("Val:");
-                                        if ui
-                                            .add(
-                                                egui::DragValue::new(&mut pt.value)
-                                                    .clamp_range(0..=64),
-                                            )
-                                            .changed()
-                                        {
-                                            volume_envelope_changed = true;
-                                        }
-
-                                        if ui.button("🗑").clicked() {
-                                            to_remove = Some(idx);
                                         }
                                     });
                                 }
-                            }
 
-                            if let Some(idx) = to_remove {
-                                env.points.remove(idx);
-                                env.point_count = env.points.len() as u8;
-                                volume_envelope_changed = true;
-                            }
+                                let env_loop = (env.flags & 4) != 0;
+                                if tracker_ui::show_toolbar_button(
+                                    ui,
+                                    &self.tracker_resources,
+                                    "ENV LOOP",
+                                    env_loop,
+                                    theme.pattern_instrument,
+                                )
+                                .clicked()
+                                {
+                                    if env_loop {
+                                        env.flags &= !4;
+                                    } else {
+                                        env.flags |= 4;
+                                    }
+                                    volume_envelope_changed = true;
+                                }
+                                if env_loop {
+                                    ui.horizontal(|ui| {
+                                        ui.label("Loop Start:");
+                                        if ui
+                                            .add(
+                                                egui::DragValue::new(&mut env.loop_start_point)
+                                                    .clamp_range(
+                                                        0..=env.point_count.saturating_sub(1),
+                                                    ),
+                                            )
+                                            .changed()
+                                        {
+                                            volume_envelope_changed = true;
+                                        }
+                                        ui.label("Loop End:");
+                                        if ui
+                                            .add(
+                                                egui::DragValue::new(&mut env.loop_end_point)
+                                                    .clamp_range(
+                                                        0..=env.point_count.saturating_sub(1),
+                                                    ),
+                                            )
+                                            .changed()
+                                        {
+                                            volume_envelope_changed = true;
+                                        }
+                                    });
+                                }
 
-                            if env.point_count < 12 && ui.button("+ Add Point").clicked() {
-                                let last_frame =
-                                    env.points.last().map(|p| p.frame + 10).unwrap_or(0);
-                                env.points.push(rustytracker_core::EnvelopePoint {
-                                    frame: last_frame,
-                                    value: 64,
-                                });
-                                env.point_count = env.points.len() as u8;
-                                volume_envelope_changed = true;
-                            }
-                        });
+                                ui.separator();
+                                ui.label("Envelope Points:");
+
+                                let mut to_remove = None;
+                                for idx in 0..env.point_count as usize {
+                                    if let Some(pt) = env.points.get_mut(idx) {
+                                        ui.horizontal(|ui| {
+                                            ui.label(format!("Pt {idx}:"));
+                                            ui.label("Frame:");
+                                            if ui
+                                                .add(
+                                                    egui::DragValue::new(&mut pt.frame)
+                                                        .clamp_range(0..=32767),
+                                                )
+                                                .changed()
+                                            {
+                                                volume_envelope_changed = true;
+                                            }
+                                            ui.label("Val:");
+                                            if ui
+                                                .add(
+                                                    egui::DragValue::new(&mut pt.value)
+                                                        .clamp_range(0..=64),
+                                                )
+                                                .changed()
+                                            {
+                                                volume_envelope_changed = true;
+                                            }
+
+                                            if tracker_ui::show_toolbar_button(
+                                                ui,
+                                                &self.tracker_resources,
+                                                "DEL",
+                                                false,
+                                                theme.cursor_line_highlight,
+                                            )
+                                            .clicked()
+                                            {
+                                                to_remove = Some(idx);
+                                            }
+                                        });
+                                    }
+                                }
+
+                                if let Some(idx) = to_remove {
+                                    env.points.remove(idx);
+                                    env.point_count = env.points.len() as u8;
+                                    volume_envelope_changed = true;
+                                }
+
+                                if env.point_count < 12
+                                    && tracker_ui::show_toolbar_button(
+                                        ui,
+                                        &self.tracker_resources,
+                                        "ADD POINT",
+                                        false,
+                                        theme.pattern_note,
+                                    )
+                                    .clicked()
+                                {
+                                    let last_frame =
+                                        env.points.last().map(|p| p.frame + 10).unwrap_or(0);
+                                    env.points.push(rustytracker_core::EnvelopePoint {
+                                        frame: last_frame,
+                                        value: 64,
+                                    });
+                                    env.point_count = env.points.len() as u8;
+                                    volume_envelope_changed = true;
+                                }
+                            },
+                        );
                     });
 
                     // Column 1: Sample Settings & Waveform
                     columns[1].vertical(|ui| {
                         if let Some(sample) = sample {
-                            ui.group(|ui| {
-                                ui.label("Sample Settings");
-
-                                let mut s_name = sample.name.as_str().to_string();
-                                ui.horizontal(|ui| {
-                                    ui.label("Name:");
-                                    if ui.text_edit_singleline(&mut s_name).changed() {
-                                        let name = SampleName::new(&s_name);
-                                        if name != sample.name {
-                                            edits.sample_name = Some(name);
-                                        }
-                                    }
-                                });
-
-                                let mut volume = sample.volume;
-                                ui.horizontal(|ui| {
-                                    ui.label("Volume:");
-                                    if ui.add(egui::Slider::new(&mut volume, 0..=255)).changed()
-                                        && volume != sample.volume
-                                    {
-                                        edits.sample_volume = Some(volume);
-                                    }
-                                });
-
-                                let mut panning = sample.panning;
-                                ui.horizontal(|ui| {
-                                    ui.label("Panning:");
-                                    if ui.add(egui::Slider::new(&mut panning, 0..=255)).changed()
-                                        && panning != sample.panning
-                                    {
-                                        edits.sample_panning = Some(panning);
-                                    }
-                                });
-
-                                let mut finetune = sample.finetune;
-                                let mut relative_note = sample.relative_note;
-                                ui.horizontal(|ui| {
-                                    ui.label("Finetune:");
-                                    if ui
-                                        .add(
-                                            egui::DragValue::new(&mut finetune)
-                                                .clamp_range(-128..=127),
-                                        )
-                                        .changed()
-                                        && finetune != sample.finetune
-                                    {
-                                        edits.sample_finetune = Some(finetune);
-                                    }
-                                    ui.label("Relative Note:");
-                                    if ui
-                                        .add(
-                                            egui::DragValue::new(&mut relative_note)
-                                                .clamp_range(-96..=95),
-                                        )
-                                        .changed()
-                                        && relative_note != sample.relative_note
-                                    {
-                                        edits.sample_relative_note = Some(relative_note);
-                                    }
-                                });
-
-                                // Loop settings
-                                let mut loop_kind = sample.loop_kind;
-                                ui.horizontal(|ui| {
-                                    egui::ComboBox::from_label("Loop Mode")
-                                        .selected_text(match loop_kind {
-                                            SampleLoopKind::None => "None",
-                                            SampleLoopKind::Forward => "Forward",
-                                            SampleLoopKind::PingPong => "Ping-pong",
-                                        })
-                                        .show_ui(ui, |ui| {
-                                            ui.selectable_value(
-                                                &mut loop_kind,
-                                                SampleLoopKind::None,
-                                                "None",
-                                            );
-                                            ui.selectable_value(
-                                                &mut loop_kind,
-                                                SampleLoopKind::Forward,
-                                                "Forward",
-                                            );
-                                            ui.selectable_value(
-                                                &mut loop_kind,
-                                                SampleLoopKind::PingPong,
-                                                "Ping-pong",
-                                            );
-                                        });
-                                });
-                                if loop_kind != sample.loop_kind {
-                                    edits.sample_loop_kind = Some(loop_kind);
-                                }
-
-                                if loop_kind != SampleLoopKind::None {
-                                    let mut loop_start = sample.loop_start;
-                                    let mut loop_length = sample.loop_length;
+                            tracker_ui::show_panel(
+                                ui,
+                                &self.tracker_resources,
+                                "SAMPLE SETTINGS",
+                                |ui| {
+                                    let mut s_name = sample.name.as_str().to_string();
                                     ui.horizontal(|ui| {
-                                        ui.label("Loop Start:");
-                                        if ui
-                                            .add(
-                                                egui::DragValue::new(&mut loop_start)
-                                                    .clamp_range(0..=sample.length),
-                                            )
-                                            .changed()
-                                            && loop_start != sample.loop_start
-                                        {
-                                            edits.sample_loop_start = Some(loop_start);
-                                        }
-                                        ui.label("Loop Length:");
-                                        if ui
-                                            .add(
-                                                egui::DragValue::new(&mut loop_length)
-                                                    .clamp_range(0..=sample.length),
-                                            )
-                                            .changed()
-                                            && loop_length != sample.loop_length
-                                        {
-                                            edits.sample_loop_length = Some(loop_length);
+                                        ui.label("Name:");
+                                        if ui.text_edit_singleline(&mut s_name).changed() {
+                                            let name = SampleName::new(&s_name);
+                                            if name != sample.name {
+                                                edits.sample_name = Some(name);
+                                            }
                                         }
                                     });
-                                }
-                            });
+
+                                    let mut volume = sample.volume;
+                                    ui.horizontal(|ui| {
+                                        ui.label("Volume:");
+                                        if ui.add(egui::Slider::new(&mut volume, 0..=255)).changed()
+                                            && volume != sample.volume
+                                        {
+                                            edits.sample_volume = Some(volume);
+                                        }
+                                    });
+
+                                    let mut panning = sample.panning;
+                                    ui.horizontal(|ui| {
+                                        ui.label("Panning:");
+                                        if ui
+                                            .add(egui::Slider::new(&mut panning, 0..=255))
+                                            .changed()
+                                            && panning != sample.panning
+                                        {
+                                            edits.sample_panning = Some(panning);
+                                        }
+                                    });
+
+                                    let mut finetune = sample.finetune;
+                                    let mut relative_note = sample.relative_note;
+                                    ui.horizontal(|ui| {
+                                        ui.label("Finetune:");
+                                        if ui
+                                            .add(
+                                                egui::DragValue::new(&mut finetune)
+                                                    .clamp_range(-128..=127),
+                                            )
+                                            .changed()
+                                            && finetune != sample.finetune
+                                        {
+                                            edits.sample_finetune = Some(finetune);
+                                        }
+                                        ui.label("Relative Note:");
+                                        if ui
+                                            .add(
+                                                egui::DragValue::new(&mut relative_note)
+                                                    .clamp_range(-96..=95),
+                                            )
+                                            .changed()
+                                            && relative_note != sample.relative_note
+                                        {
+                                            edits.sample_relative_note = Some(relative_note);
+                                        }
+                                    });
+
+                                    // Loop settings
+                                    let mut loop_kind = sample.loop_kind;
+                                    ui.horizontal(|ui| {
+                                        ui.label("Loop Mode:");
+                                        for (kind, label) in [
+                                            (SampleLoopKind::None, "NONE"),
+                                            (SampleLoopKind::Forward, "FORWARD"),
+                                            (SampleLoopKind::PingPong, "PINGPONG"),
+                                        ] {
+                                            if tracker_ui::show_toolbar_button(
+                                                ui,
+                                                &self.tracker_resources,
+                                                label,
+                                                loop_kind == kind,
+                                                theme.pattern_instrument,
+                                            )
+                                            .clicked()
+                                            {
+                                                loop_kind = kind;
+                                            }
+                                        }
+                                    });
+                                    if loop_kind != sample.loop_kind {
+                                        edits.sample_loop_kind = Some(loop_kind);
+                                    }
+
+                                    if loop_kind != SampleLoopKind::None {
+                                        let mut loop_start = sample.loop_start;
+                                        let mut loop_length = sample.loop_length;
+                                        ui.horizontal(|ui| {
+                                            ui.label("Loop Start:");
+                                            if ui
+                                                .add(
+                                                    egui::DragValue::new(&mut loop_start)
+                                                        .clamp_range(0..=sample.length),
+                                                )
+                                                .changed()
+                                                && loop_start != sample.loop_start
+                                            {
+                                                edits.sample_loop_start = Some(loop_start);
+                                            }
+                                            ui.label("Loop Length:");
+                                            if ui
+                                                .add(
+                                                    egui::DragValue::new(&mut loop_length)
+                                                        .clamp_range(0..=sample.length),
+                                                )
+                                                .changed()
+                                                && loop_length != sample.loop_length
+                                            {
+                                                edits.sample_loop_length = Some(loop_length);
+                                            }
+                                        });
+                                    }
+                                },
+                            );
 
                             // Waveform visualization
-                            ui.group(|ui| {
-                                ui.label("Sample Waveform");
+                            tracker_ui::show_panel(
+                                ui,
+                                &self.tracker_resources,
+                                "SAMPLE WAVEFORM",
+                                |ui| {
+                                    let visible_loop_kind =
+                                        edits.sample_loop_kind.unwrap_or(sample.loop_kind);
+                                    let visible_loop_start =
+                                        edits.sample_loop_start.unwrap_or(sample.loop_start);
+                                    let visible_loop_length =
+                                        edits.sample_loop_length.unwrap_or(sample.loop_length);
 
-                                let width = 320.0;
-                                let height = 120.0;
-
-                                let (rect, _response) = ui.allocate_exact_size(
-                                    egui::vec2(width, height),
-                                    egui::Sense::hover(),
-                                );
-
-                                let painter = ui.painter_at(rect);
-
-                                // Background
-                                painter.rect_filled(rect, 4.0, Color32::from_black_alpha(150));
-
-                                // Grid lines
-                                let mid_y = rect.min.y + height / 2.0;
-                                painter.line_segment(
-                                    [egui::pos2(rect.min.x, mid_y), egui::pos2(rect.max.x, mid_y)],
-                                    egui::Stroke::new(1.0, Color32::DARK_GRAY),
-                                );
-
-                                // Draw loop overlay if looping
-                                let visible_loop_kind =
-                                    edits.sample_loop_kind.unwrap_or(sample.loop_kind);
-                                let visible_loop_start =
-                                    edits.sample_loop_start.unwrap_or(sample.loop_start);
-                                let visible_loop_length =
-                                    edits.sample_loop_length.unwrap_or(sample.loop_length);
-                                if visible_loop_kind != SampleLoopKind::None && sample.length > 0 {
-                                    let start_ratio =
-                                        visible_loop_start as f32 / sample.length as f32;
-                                    let end_ratio = (visible_loop_start + visible_loop_length)
-                                        as f32
-                                        / sample.length as f32;
-
-                                    let start_x = rect.min.x + start_ratio * width;
-                                    let end_x = rect.min.x + end_ratio * width;
-
-                                    let loop_rect = egui::Rect::from_min_max(
-                                        egui::pos2(start_x, rect.min.y),
-                                        egui::pos2(end_x, rect.max.y),
+                                    tracker_ui::show_waveform(
+                                        ui,
+                                        &self.tracker_resources,
+                                        tracker_ui::WaveformView {
+                                            data: &sample.data,
+                                            sample_length: sample.length,
+                                            loop_kind: visible_loop_kind,
+                                            loop_start: visible_loop_start,
+                                            loop_length: visible_loop_length,
+                                        },
                                     );
-                                    painter.rect_filled(
-                                        loop_rect,
-                                        0.0,
-                                        Color32::from_rgba_unmultiplied(0, 100, 255, 30),
-                                    );
-
-                                    // Loop boundary vertical lines
-                                    painter.line_segment(
-                                        [
-                                            egui::pos2(start_x, rect.min.y),
-                                            egui::pos2(start_x, rect.max.y),
-                                        ],
-                                        egui::Stroke::new(
-                                            1.0,
-                                            Color32::from_rgba_unmultiplied(0, 100, 255, 120),
-                                        ),
-                                    );
-                                    painter.line_segment(
-                                        [
-                                            egui::pos2(end_x, rect.min.y),
-                                            egui::pos2(end_x, rect.max.y),
-                                        ],
-                                        egui::Stroke::new(
-                                            1.0,
-                                            Color32::from_rgba_unmultiplied(0, 100, 255, 120),
-                                        ),
-                                    );
-                                }
-
-                                // Render waveform path
-                                let sample_len = match &sample.data {
-                                    SampleData::Pcm8(d) => d.len(),
-                                    SampleData::Pcm16(d) => d.len(),
-                                    SampleData::Empty => 0,
-                                };
-
-                                if sample_len > 0 {
-                                    let points: Vec<egui::Pos2> = (0..width as usize)
-                                        .map(|x| {
-                                            let sample_idx =
-                                                ((x as f32 / width) * sample_len as f32) as usize;
-                                            let val = match &sample.data {
-                                                SampleData::Pcm8(d) => {
-                                                    if let Some(&v) = d.get(sample_idx) {
-                                                        v as f32 / 128.0
-                                                    } else {
-                                                        0.0
-                                                    }
-                                                }
-                                                SampleData::Pcm16(d) => {
-                                                    if let Some(&v) = d.get(sample_idx) {
-                                                        v as f32 / 32768.0
-                                                    } else {
-                                                        0.0
-                                                    }
-                                                }
-                                                SampleData::Empty => 0.0,
-                                            };
-
-                                            let px_x = rect.min.x + x as f32;
-                                            let px_y = mid_y - val * (height / 2.0 - 5.0);
-                                            egui::pos2(px_x, px_y)
-                                        })
-                                        .collect();
-
-                                    for window in points.windows(2) {
-                                        painter.line_segment(
-                                            [window[0], window[1]],
-                                            egui::Stroke::new(1.5, Color32::LIGHT_BLUE),
-                                        );
-                                    }
-                                } else {
-                                    painter.text(
-                                        egui::pos2(rect.min.x + width / 2.0, mid_y),
-                                        egui::Align2::CENTER_CENTER,
-                                        "No Audio Waveform Data",
-                                        egui::FontId::proportional(14.0),
-                                        Color32::GRAY,
-                                    );
-                                }
-                            });
+                                },
+                            );
                         } else {
-                            ui.label("No sample mapped.");
+                            tracker_ui::show_panel(ui, &self.tracker_resources, "SAMPLE", |ui| {
+                                tracker_ui::show_status_label(
+                                    ui,
+                                    &self.tracker_resources,
+                                    "NO SAMPLE MAPPED",
+                                    theme.muted_foreground,
+                                );
+                            });
                         }
                     });
                 });
