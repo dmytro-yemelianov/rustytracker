@@ -185,29 +185,33 @@ where
     let mut song_ended = false;
 
     for frame in output.chunks_mut(2) {
-        let sample = if !song_ended {
-            match playback.render_raw_mono_pcm(module, sample_rate, 1) {
+        let (left_sample, right_sample) = if !song_ended {
+            match playback.render_raw_stereo_pcm(module, sample_rate, 1) {
                 Ok(frames) => {
                     if playback.song_ended() {
                         song_ended = true;
-                        0.0
+                        (0.0, 0.0)
                     } else {
-                        let raw = frames.first().copied().unwrap_or(0);
-                        (raw.clamp(-32768, 32767) as f32) / 32768.0
+                        let (raw_l, raw_r) = frames.first().copied().unwrap_or((0, 0));
+                        let l = (raw_l.clamp(-32768, 32767) as f32) / 32768.0;
+                        let r = (raw_r.clamp(-32768, 32767) as f32) / 32768.0;
+                        (l, r)
                     }
                 }
                 Err(_) => {
                     song_ended = true;
-                    0.0
+                    (0.0, 0.0)
                 }
             }
         } else {
-            0.0
+            (0.0, 0.0)
         };
 
-        let cpal_sample = T::from_sample(sample);
-        for channel_out in frame {
-            *channel_out = cpal_sample;
+        if frame.len() >= 2 {
+            frame[0] = T::from_sample(left_sample);
+            frame[1] = T::from_sample(right_sample);
+        } else if !frame.is_empty() {
+            frame[0] = T::from_sample(left_sample);
         }
     }
 

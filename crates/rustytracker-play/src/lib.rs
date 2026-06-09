@@ -52,6 +52,7 @@ pub const VIB_TAB: [i32; 32] = [
 ];
 
 pub type RawMonoPcmFrame = i32;
+pub type RawStereoPcmFrame = (i32, i32);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlaybackError {
@@ -1238,6 +1239,100 @@ impl PlaybackState {
         }
 
         Ok(rendered)
+    }
+
+    pub fn render_raw_stereo_pcm(
+        &mut self,
+        module: &Module,
+        sample_rate: u32,
+        frame_count: usize,
+    ) -> PlaybackResult<Vec<RawStereoPcmFrame>> {
+        let mut rendered = Vec::with_capacity(frame_count);
+        for _ in 0..frame_count {
+            rendered.push(self.render_raw_stereo_frame(module, sample_rate)?);
+        }
+
+        Ok(rendered)
+    }
+
+    fn render_raw_stereo_frame(
+        &mut self,
+        module: &Module,
+        sample_rate: u32,
+    ) -> PlaybackResult<RawStereoPcmFrame> {
+        let mut current_bpm = self.clock.timing().bpm() as i64;
+
+        if !self.initialized {
+            self.tick_samples_fractional_rem = 5 * sample_rate as i64;
+            self.initialized = true;
+        }
+
+        while self.tick_samples_fractional_rem <= 0 {
+            if self.song_ended {
+                return Ok((0, 0));
+            }
+
+            match self.advance_tick(module)? {
+                TickAdvance::SongEnd => {
+                    self.song_ended = true;
+                    return Ok((0, 0));
+                }
+                _ => {
+                    let new_bpm = self.clock.timing().bpm() as i64;
+                    if new_bpm != current_bpm {
+                        let old_denom = 2 * current_bpm;
+                        let new_denom = 2 * new_bpm;
+                        self.tick_samples_fractional_rem =
+                            (self.tick_samples_fractional_rem * new_denom) / old_denom;
+                        current_bpm = new_bpm;
+                    }
+                    self.tick_samples_fractional_rem += 5 * sample_rate as i64;
+                }
+            }
+        }
+
+        let mut mixed_l = 0.0;
+        let mut mixed_r = 0.0;
+        for channel in &mut self.channels {
+            if channel.active {
+                if let Some(sample_index) = channel.sample_index {
+                    if let Some(sample) = module.samples.get(sample_index) {
+                        let frame_count = sample.data.frame_count();
+                        if frame_count > 0 {
+                            let frequency = period_to_frequency(channel.period, module.header.frequency_table);
+                            let step = frequency / sample_rate as f64;
+
+                            let interpolated_val = get_sample_value_linear(
+                                &sample.data,
+                                channel.sample_frame,
+                                channel.sample_frame_fraction,
+                                sample,
+                            );
+
+                            let vol_factor = (channel.volume as f64 / 255.0)
+                                * (channel.volume_envelope_val as f64 / 256.0)
+                                * (channel.fadeout_volume as f64 / 65536.0);
+
+                            let channel_mono_pcm = interpolated_val * vol_factor;
+
+                            let mut pan = channel.panning as i32 + channel.panning_envelope_val as i32 - 128;
+                            pan = pan.clamp(0, 255);
+
+                            let right_gain = pan as f64 / 255.0;
+                            let left_gain = 1.0 - right_gain;
+
+                            mixed_l += channel_mono_pcm * left_gain;
+                            mixed_r += channel_mono_pcm * right_gain;
+
+                            channel.advance_sample_position(sample, step);
+                        }
+                    }
+                }
+            }
+        }
+
+        self.tick_samples_fractional_rem -= 2 * current_bpm;
+        Ok((mixed_l as i32, mixed_r as i32))
     }
 
     fn render_raw_mono_frame(

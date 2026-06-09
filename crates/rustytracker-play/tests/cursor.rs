@@ -1873,3 +1873,47 @@ fn test_volume_envelope_and_fadeout() {
         assert!(!ch.active);
     }
 }
+
+#[test]
+fn test_raw_stereo_render_with_panning() {
+    let mut module = module_with_two_channel_cells(
+        PLAY_TEST_ONE_ROW,
+        &[
+            (
+                PLAY_TEST_CHANNEL_ZERO,
+                PLAYBACK_FIRST_ROW,
+                test_cell(PLAY_TEST_CHANNEL_ZERO_NOTE, PLAY_TEST_CHANNEL_ZERO_INSTRUMENT),
+            ),
+            (
+                PLAY_TEST_CHANNEL_ONE,
+                PLAYBACK_FIRST_ROW,
+                test_cell(PLAY_TEST_CHANNEL_ONE_NOTE, PLAY_TEST_CHANNEL_ONE_INSTRUMENT),
+            ),
+        ],
+    );
+    map_instrument_to_sample(
+        &mut module,
+        PLAY_TEST_FIRST_INSTRUMENT_INDEX,
+        PLAY_TEST_FIRST_SAMPLE_INDEX,
+    );
+    map_instrument_to_sample(
+        &mut module,
+        PLAY_TEST_SECOND_INSTRUMENT_INDEX,
+        PLAY_TEST_SECOND_SAMPLE_INDEX,
+    );
+
+    module.samples[PLAY_TEST_FIRST_SAMPLE_INDEX].data = SampleData::Pcm16(vec![1000]);
+    module.samples[PLAY_TEST_SECOND_SAMPLE_INDEX].data = SampleData::Pcm16(vec![1000]);
+
+    module.samples[PLAY_TEST_FIRST_SAMPLE_INDEX].panning = 64;
+    module.samples[PLAY_TEST_SECOND_SAMPLE_INDEX].panning = 192;
+
+    let mut playback = PlaybackState::start(&module).unwrap();
+
+    let frames = playback.render_raw_stereo_pcm(&module, 8363, 1).unwrap();
+    assert_eq!(frames.len(), 1);
+
+    let (left, right) = frames[0];
+    assert_eq!(left, 996);
+    assert_eq!(right, 1003);
+}
