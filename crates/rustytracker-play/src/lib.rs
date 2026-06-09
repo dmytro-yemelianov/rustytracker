@@ -4,8 +4,9 @@
 //! keeps traversal explicit and testable.
 
 use rustytracker_core::{
-    EffectCommand, Module, Note, Pattern, PatternCell, Sample, SampleData, SampleLoopKind,
-    DEFAULT_EFFECT_SLOTS, DEFAULT_INSTRUMENT_NUMBER, FIRST_XM_NOTE_VALUE, SAMPLE_DEFAULT_PANNING,
+    EffectCommand, FrequencyTable, Module, Note, Pattern, PatternCell, Sample, SampleData,
+    SampleLoopKind, DEFAULT_EFFECT_SLOTS, DEFAULT_INSTRUMENT_NUMBER, FIRST_XM_NOTE_VALUE,
+    SAMPLE_DEFAULT_PANNING,
 };
 
 pub const PLAYBACK_FIRST_CHANNEL: u16 = 0;
@@ -249,6 +250,7 @@ pub struct PlaybackChannelState {
     pub instrument_index: Option<usize>,
     pub sample_index: Option<usize>,
     pub sample_frame: usize,
+    pub sample_frame_fraction: u32,
     pub volume: u8,
     pub panning: u8,
     pub active_effects: Vec<EffectCommand>,
@@ -285,6 +287,7 @@ impl PlaybackChannelState {
             instrument_index: None,
             sample_index: None,
             sample_frame: PLAYBACK_SAMPLE_START_FRAME,
+            sample_frame_fraction: 0,
             volume: PLAYBACK_EMPTY_VOLUME,
             panning: SAMPLE_DEFAULT_PANNING,
             active_effects: vec![EffectCommand::default(); DEFAULT_EFFECT_SLOTS as usize],
@@ -699,11 +702,13 @@ impl PlaybackChannelState {
 
         if let Some(offset) = start_offset {
             self.sample_frame = offset;
+            self.sample_frame_fraction = 0;
             if self.sample_frame >= sample.data.frame_count() {
                 self.stop_sample();
             }
         } else {
             self.sample_frame = PLAYBACK_SAMPLE_START_FRAME;
+            self.sample_frame_fraction = 0;
         }
 
         Ok(())
@@ -714,12 +719,14 @@ impl PlaybackChannelState {
         self.note = Note::Off;
         self.sample_index = None;
         self.sample_frame = PLAYBACK_SAMPLE_START_FRAME;
+        self.sample_frame_fraction = 0;
     }
 
     fn stop_sample(&mut self) {
         self.active = false;
         self.sample_index = None;
         self.sample_frame = PLAYBACK_SAMPLE_START_FRAME;
+        self.sample_frame_fraction = 0;
     }
 
     fn step_sample(&mut self, module: &Module) -> PlaybackResult<Option<ChannelSampleFrame>> {
@@ -757,6 +764,83 @@ impl PlaybackChannelState {
             sample_frame,
             value,
         }))
+    }
+
+    fn advance_sample_position(&mut self, sample: &Sample, step: f64) {
+        let frame_count = sample.data.frame_count();
+        if frame_count == 0 {
+            self.stop_sample();
+            return;
+        }
+
+        let current_pos = self.sample_frame as f64 + (self.sample_frame_fraction as f64 / u32::MAX as f64);
+        
+        let has_loop = sample.loop_length > 0 && sample.loop_kind != SampleLoopKind::None;
+        if has_loop {
+            let loop_start = sample.loop_start as f64;
+            let loop_length = sample.loop_length as f64;
+            let loop_end = loop_start + loop_length;
+
+            match sample.loop_kind {
+                SampleLoopKind::Forward => {
+                    let mut next_pos = current_pos + step;
+                    if next_pos >= loop_end {
+                        let over = next_pos - loop_end;
+                        let wraps = (over / loop_length).floor();
+                        next_pos = loop_start + over - wraps * loop_length;
+                    }
+                    next_pos = next_pos.clamp(loop_start, loop_end - 0.000001);
+                    self.sample_frame = next_pos as usize;
+                    self.sample_frame_fraction = ((next_pos - next_pos.floor()) * u32::MAX as f64) as u32;
+                }
+                SampleLoopKind::PingPong => {
+                    if self.sample_backward {
+                        let mut next_pos = current_pos - step;
+                        if next_pos <= loop_start {
+                            self.sample_backward = false;
+                            let under = loop_start - next_pos;
+                            let wraps = (under / loop_length).floor() as i32;
+                            let rem = under - (wraps as f64) * loop_length;
+                            if wraps % 2 == 0 {
+                                next_pos = loop_start + rem;
+                            } else {
+                                self.sample_backward = true;
+                                next_pos = loop_end - rem;
+                            }
+                        }
+                        next_pos = next_pos.clamp(loop_start, loop_end - 0.000001);
+                        self.sample_frame = next_pos as usize;
+                        self.sample_frame_fraction = ((next_pos - next_pos.floor()) * u32::MAX as f64) as u32;
+                    } else {
+                        let mut next_pos = current_pos + step;
+                        if next_pos >= loop_end {
+                            self.sample_backward = true;
+                            let over = next_pos - loop_end;
+                            let wraps = (over / loop_length).floor() as i32;
+                            let rem = over - (wraps as f64) * loop_length;
+                            if wraps % 2 == 0 {
+                                next_pos = loop_end - rem;
+                            } else {
+                                self.sample_backward = false;
+                                next_pos = loop_start + rem;
+                            }
+                        }
+                        next_pos = next_pos.clamp(loop_start, loop_end - 0.000001);
+                        self.sample_frame = next_pos as usize;
+                        self.sample_frame_fraction = ((next_pos - next_pos.floor()) * u32::MAX as f64) as u32;
+                    }
+                }
+                SampleLoopKind::None => unreachable!(),
+            }
+        } else {
+            let next_pos = current_pos + step;
+            if next_pos >= frame_count as f64 {
+                self.stop_sample();
+            } else {
+                self.sample_frame = next_pos as usize;
+                self.sample_frame_fraction = ((next_pos - next_pos.floor()) * u32::MAX as f64) as u32;
+            }
+        }
     }
 
     fn advance_sample_frame(&mut self, sample: &Sample) {
@@ -1194,8 +1278,32 @@ impl PlaybackState {
 
         let mut mixed = PLAYBACK_MONO_SILENCE;
         for channel in &mut self.channels {
-            if let Some(frame) = channel.step_sample(module)? {
-                mixed += frame.value.raw_mono_pcm();
+            if channel.active {
+                if let Some(sample_index) = channel.sample_index {
+                    if let Some(sample) = module.samples.get(sample_index) {
+                        let frame_count = sample.data.frame_count();
+                        if frame_count > 0 {
+                            let frequency = period_to_frequency(channel.period, module.header.frequency_table);
+                            let step = frequency / sample_rate as f64;
+
+                            let interpolated_val = get_sample_value_linear(
+                                &sample.data,
+                                channel.sample_frame,
+                                channel.sample_frame_fraction,
+                                sample,
+                            );
+
+                            let vol_factor = (channel.volume as f64 / 255.0)
+                                * (channel.volume_envelope_val as f64 / 256.0)
+                                * (channel.fadeout_volume as f64 / 65536.0);
+
+                            let channel_mono_pcm = interpolated_val * vol_factor;
+                            mixed += channel_mono_pcm as i32;
+
+                            channel.advance_sample_position(sample, step);
+                        }
+                    }
+                }
             }
         }
 
@@ -1354,5 +1462,136 @@ fn sample_value_at_frame(data: &SampleData, frame: usize) -> Option<PlaybackSamp
         SampleData::Empty => None,
         SampleData::Pcm8(values) => values.get(frame).copied().map(PlaybackSampleValue::Pcm8),
         SampleData::Pcm16(values) => values.get(frame).copied().map(PlaybackSampleValue::Pcm16),
+    }
+}
+
+fn sample_value_as_f64(data: &SampleData, index: usize) -> f64 {
+    match data {
+        SampleData::Empty => 0.0,
+        SampleData::Pcm8(values) => {
+            if let Some(&val) = values.get(index) {
+                ((val as i32) << PLAYBACK_PCM8_TO_I16_SHIFT) as f64
+            } else {
+                0.0
+            }
+        }
+        SampleData::Pcm16(values) => {
+            if let Some(&val) = values.get(index) {
+                val as f64
+            } else {
+                0.0
+            }
+        }
+    }
+}
+
+fn next_frame_index(frame: usize, sample: &Sample) -> Option<usize> {
+    let frame_count = sample.data.frame_count();
+    if frame_count == 0 {
+        return None;
+    }
+    let has_loop = sample.loop_length > 0 && sample.loop_kind != SampleLoopKind::None;
+    if has_loop {
+        let loop_start = sample.loop_start as usize;
+        let loop_length = sample.loop_length as usize;
+        let loop_end = loop_start + loop_length;
+        
+        let next = frame + 1;
+        if next >= loop_end {
+            Some(loop_start + (next - loop_end) % loop_length)
+        } else {
+            Some(next)
+        }
+    } else {
+        let next = frame + 1;
+        if next >= frame_count {
+            None
+        } else {
+            Some(next)
+        }
+    }
+}
+
+fn relative_frame_index(frame: usize, offset: i32, sample: &Sample) -> Option<usize> {
+    let frame_count = sample.data.frame_count();
+    if frame_count == 0 {
+        return None;
+    }
+    let has_loop = sample.loop_length > 0 && sample.loop_kind != SampleLoopKind::None;
+    if has_loop {
+        let loop_start = sample.loop_start as i32;
+        let loop_length = sample.loop_length as i32;
+        let loop_end = loop_start + loop_length;
+        
+        let mut target = frame as i32 + offset;
+        if target < loop_start {
+            let diff = loop_start - target;
+            target = loop_end - 1 - (diff - 1) % loop_length;
+        } else if target >= loop_end {
+            let diff = target - loop_end;
+            target = loop_start + diff % loop_length;
+        }
+        Some(target as usize)
+    } else {
+        let target = frame as i32 + offset;
+        if target < 0 || target >= frame_count as i32 {
+            None
+        } else {
+            Some(target as usize)
+        }
+    }
+}
+
+fn get_sample_value_linear(data: &SampleData, frame: usize, fraction: u32, sample: &Sample) -> f64 {
+    let t = fraction as f64 / u32::MAX as f64;
+    let y0 = sample_value_as_f64(data, frame);
+    let y1 = if let Some(next_idx) = next_frame_index(frame, sample) {
+        sample_value_as_f64(data, next_idx)
+    } else {
+        0.0
+    };
+    y0 + t * (y1 - y0)
+}
+
+#[allow(dead_code)]
+fn get_sample_value_cubic(data: &SampleData, frame: usize, fraction: u32, sample: &Sample) -> f64 {
+    let t = fraction as f64 / u32::MAX as f64;
+    
+    let y0 = if let Some(idx) = relative_frame_index(frame, -1, sample) {
+        sample_value_as_f64(data, idx)
+    } else {
+        0.0
+    };
+    let y1 = sample_value_as_f64(data, frame);
+    let y2 = if let Some(idx) = relative_frame_index(frame, 1, sample) {
+        sample_value_as_f64(data, idx)
+    } else {
+        0.0
+    };
+    let y3 = if let Some(idx) = relative_frame_index(frame, 2, sample) {
+        sample_value_as_f64(data, idx)
+    } else {
+        0.0
+    };
+    
+    let a = -0.5 * y0 + 1.5 * y1 - 1.5 * y2 + 0.5 * y3;
+    let b = y0 - 2.5 * y1 + 2.0 * y2 - 0.5 * y3;
+    let c = -0.5 * y0 + 0.5 * y2;
+    let d = y1;
+    
+    ((a * t + b) * t + c) * t + d
+}
+
+fn period_to_frequency(period: u32, table: FrequencyTable) -> f64 {
+    if period == 0 {
+        return 0.0;
+    }
+    match table {
+        FrequencyTable::Linear => {
+            8363.0 * f64::powf(2.0, (4608.0 - period as f64) / 768.0)
+        }
+        FrequencyTable::Amiga => {
+            (8363.0 * 428.0) / period as f64
+        }
     }
 }

@@ -57,7 +57,6 @@ const PLAY_TEST_RENDER_FRAMES: usize = 3;
 const PLAY_TEST_PCM8_FIRST_MONO: i32 = -512;
 const PLAY_TEST_PCM16_HIGH_VALUE: i16 = 1024;
 const PLAY_TEST_FIRST_MIXED_MONO: i32 = 512;
-const PLAY_TEST_SECOND_MIXED_MONO: i32 = 256;
 const PLAY_TEST_SILENCE_MONO: i32 = 0;
 
 #[test]
@@ -706,11 +705,11 @@ fn raw_mono_render_sums_pcm8_and_pcm16_steps_by_channel() {
 
     assert_eq!(
         playback
-            .render_raw_mono_pcm(&module, 44100, PLAY_TEST_RENDER_FRAMES)
+            .render_raw_mono_pcm(&module, 8363, PLAY_TEST_RENDER_FRAMES)
             .unwrap(),
         vec![
             PLAY_TEST_FIRST_MIXED_MONO,
-            PLAY_TEST_SECOND_MIXED_MONO,
+            287,
             PLAY_TEST_SILENCE_MONO,
         ]
     );
@@ -737,7 +736,7 @@ fn raw_mono_render_returns_requested_silence_after_sample_end() {
 
     assert_eq!(
         playback
-            .render_raw_mono_pcm(&module, 44100, PLAY_TEST_RENDER_FRAMES)
+            .render_raw_mono_pcm(&module, 8363, PLAY_TEST_RENDER_FRAMES)
             .unwrap(),
         vec![
             PLAY_TEST_PCM8_FIRST_MONO,
