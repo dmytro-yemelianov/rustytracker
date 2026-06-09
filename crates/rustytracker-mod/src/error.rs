@@ -18,6 +18,31 @@ pub enum ModParseError {
     },
 }
 
+impl fmt::Display for ModParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Truncated { expected, actual } => write!(
+                f,
+                "MOD file truncated: expected at least {expected} bytes, got {actual}"
+            ),
+            Self::InvalidSignature => write!(f, "Invalid MOD signature"),
+            Self::InvalidOrderCount { orders, maximum } => {
+                write!(f, "Invalid MOD order count: {orders}, maximum {maximum}")
+            }
+            Self::InvalidChannelCount {
+                channel_count,
+                minimum,
+                maximum,
+            } => write!(
+                f,
+                "Invalid MOD channel count: {channel_count}, expected {minimum}..={maximum}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ModParseError {}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModWriteError {
     TooManyChannels {
