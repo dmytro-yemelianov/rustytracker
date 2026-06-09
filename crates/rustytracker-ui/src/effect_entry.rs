@@ -7,13 +7,20 @@ use rustytracker_core::{
 const EFFECT_ENTRY_MASK: u16 = 0x0fff;
 const EFFECT_NIBBLE_BITS: u32 = 4;
 const EFFECT_COMMAND_SHIFT: u32 = 8;
+const EFFECT_COMMAND_MASK: u16 = !EFFECT_OPERAND_MASK;
 const EFFECT_OPERAND_MASK: u16 = 0x00ff;
+const EMPTY_EFFECT_COMMAND: u8 = 0x00;
+const EMPTY_EFFECT_OPERAND: u8 = 0x00;
 const NIBBLE_MASK: u8 = 0x0f;
 
 pub(crate) fn append_effect_digit(effect: EffectCommand, digit: u8) -> EffectCommand {
-    let value = ((effect_to_entry_value(effect) << EFFECT_NIBBLE_BITS)
-        | u16::from(digit & NIBBLE_MASK))
-        & EFFECT_ENTRY_MASK;
+    let entry_value = effect_to_entry_value(effect);
+    let shifted_value = (entry_value << EFFECT_NIBBLE_BITS) | u16::from(digit & NIBBLE_MASK);
+    let value = if preserves_effect_command_during_append(effect) {
+        (entry_value & EFFECT_COMMAND_MASK) | (shifted_value & EFFECT_OPERAND_MASK)
+    } else {
+        shifted_value & EFFECT_ENTRY_MASK
+    };
     effect_from_entry_value(value)
 }
 
@@ -27,7 +34,7 @@ fn effect_to_entry_value(effect: EffectCommand) -> u16 {
                 | (effect.operand & NIBBLE_MASK),
         )
     } else if effect.effect == INTERNAL_EFFECT_NONZERO_ARPEGGIO {
-        (0, effect.operand)
+        (EMPTY_EFFECT_COMMAND, effect.operand)
     } else if (INTERNAL_EFFECT_EXTRA_FINE_PORTA_MIN..=INTERNAL_EFFECT_EXTRA_FINE_PORTA_MAX)
         .contains(&effect.effect)
     {
@@ -39,14 +46,19 @@ fn effect_to_entry_value(effect: EffectCommand) -> u16 {
     (u16::from(command) << EFFECT_COMMAND_SHIFT) | u16::from(operand)
 }
 
+fn preserves_effect_command_during_append(effect: EffectCommand) -> bool {
+    (INTERNAL_EFFECT_EXTRA_FINE_PORTA_MIN..=INTERNAL_EFFECT_EXTRA_FINE_PORTA_MAX)
+        .contains(&effect.effect)
+}
+
 fn effect_from_entry_value(value: u16) -> EffectCommand {
     let raw_command = (value >> EFFECT_COMMAND_SHIFT) as u8;
     let command = raw_command & NIBBLE_MASK;
     let operand = (value & EFFECT_OPERAND_MASK) as u8;
 
-    if command == 0 && operand == 0 {
+    if command == EMPTY_EFFECT_COMMAND && operand == EMPTY_EFFECT_OPERAND {
         EffectCommand::default()
-    } else if command == 0 {
+    } else if command == EMPTY_EFFECT_COMMAND {
         EffectCommand {
             effect: INTERNAL_EFFECT_NONZERO_ARPEGGIO,
             operand,
@@ -134,5 +146,22 @@ mod tests {
 
         assert_eq!(value, 0x4105);
         assert_eq!(effect_from_entry_value(value), effect);
+    }
+
+    #[test]
+    fn effect_entry_append_preserves_extra_fine_portamento_internal_effect() {
+        let mut effect = EffectCommand {
+            effect: INTERNAL_EFFECT_EXTRA_FINE_PORTA_MIN,
+            operand: 0x05,
+        };
+        effect = append_effect_digit(effect, 0x0a);
+
+        assert_eq!(
+            effect,
+            EffectCommand {
+                effect: INTERNAL_EFFECT_EXTRA_FINE_PORTA_MIN,
+                operand: 0x5a,
+            }
+        );
     }
 }
