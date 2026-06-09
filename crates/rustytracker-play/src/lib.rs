@@ -3,10 +3,18 @@
 //! Audio mixing and effect execution will build on this crate. The first slice
 //! keeps traversal explicit and testable.
 
+mod error;
+mod timing;
+
+use error::validate_sample_rate;
+pub use error::{PlaybackError, PlaybackResult, PLAYBACK_MIN_SAMPLE_RATE};
 use rustytracker_core::{
     EffectCommand, FrequencyTable, Module, Note, Pattern, PatternCell, Sample, SampleData,
     SampleLoopKind, DEFAULT_EFFECT_SLOTS, DEFAULT_INSTRUMENT_NUMBER, FIRST_XM_NOTE_VALUE,
     SAMPLE_DEFAULT_PANNING,
+};
+pub use timing::{
+    PlaybackTiming, PLAYBACK_MIN_BPM, PLAYBACK_MIN_TICK_SPEED, PLAYBACK_XM_TICK_NANOS_AT_ONE_BPM,
 };
 
 pub const PLAYBACK_FIRST_CHANNEL: u16 = 0;
@@ -17,9 +25,6 @@ pub const PLAYBACK_ORDER_STEP: usize = 1;
 pub const PLAYBACK_ROW_STEP: u16 = 1;
 pub const PLAYBACK_TICK_STEP: u16 = 1;
 pub const PLAYBACK_EMPTY_PATTERN_ROWS: u16 = 0;
-pub const PLAYBACK_MIN_TICK_SPEED: u16 = 1;
-pub const PLAYBACK_MIN_BPM: u16 = 1;
-pub const PLAYBACK_XM_TICK_NANOS_AT_ONE_BPM: u64 = 2_500_000_000;
 pub const PLAYBACK_INSTRUMENT_NUMBER_BASE: u8 = 1;
 pub const PLAYBACK_SAMPLE_START_FRAME: usize = 0;
 pub const PLAYBACK_SAMPLE_FRAME_STEP: usize = 1;
@@ -27,7 +32,6 @@ pub const PLAYBACK_EMPTY_VOLUME: u8 = 0;
 pub const PLAYBACK_PCM8_TO_I16_SHIFT: u32 = 8;
 pub const PLAYBACK_MONO_SILENCE: RawMonoPcmFrame = 0;
 pub const PLAYBACK_STEREO_SILENCE: RawStereoPcmFrame = (0, 0);
-pub const PLAYBACK_MIN_SAMPLE_RATE: u32 = 1;
 pub const EFFECT_SET_SPEED_BPM: u8 = 0x0f;
 pub const SPEED_BPM_THRESHOLD: u8 = 32;
 
@@ -55,60 +59,6 @@ pub const VIB_TAB: [i32; 32] = [
 
 pub type RawMonoPcmFrame = i32;
 pub type RawStereoPcmFrame = (i32, i32);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PlaybackError {
-    InvalidTickSpeed {
-        tick_speed: u16,
-    },
-    InvalidBpm {
-        bpm: u16,
-    },
-    InvalidSampleRate {
-        sample_rate: u32,
-    },
-    EmptyOrderList,
-    OrderIndexOutOfRange {
-        order_index: usize,
-        order_count: usize,
-    },
-    MissingPattern {
-        order_index: usize,
-        pattern_index: usize,
-    },
-    EmptyPattern {
-        pattern_index: usize,
-    },
-    RowOutOfRange {
-        pattern_index: usize,
-        row: u16,
-        rows: u16,
-    },
-    PatternChannelOutOfRange {
-        pattern_index: usize,
-        module_channels: u16,
-        pattern_channels: u16,
-    },
-    MissingInstrument {
-        channel: u16,
-        instrument: u8,
-    },
-    MissingSample {
-        channel: u16,
-        instrument_index: usize,
-        sample_index: usize,
-    },
-}
-
-pub type PlaybackResult<T> = Result<T, PlaybackError>;
-
-fn validate_sample_rate(sample_rate: u32) -> PlaybackResult<()> {
-    if sample_rate < PLAYBACK_MIN_SAMPLE_RATE {
-        return Err(PlaybackError::InvalidSampleRate { sample_rate });
-    }
-
-    Ok(())
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PlaybackPosition {
@@ -932,67 +882,6 @@ pub enum TickAdvance {
     NextRow,
     NextOrder,
     SongEnd,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PlaybackTiming {
-    pub tick_speed: u16,
-    pub bpm: u16,
-    pub tick_duration_nanos: u64,
-}
-
-impl PlaybackTiming {
-    pub fn from_module(module: &Module) -> PlaybackResult<Self> {
-        let tick_speed = module.header.tick_speed;
-        if tick_speed < PLAYBACK_MIN_TICK_SPEED {
-            return Err(PlaybackError::InvalidTickSpeed { tick_speed });
-        }
-
-        let bpm = module.header.bpm;
-        if bpm < PLAYBACK_MIN_BPM {
-            return Err(PlaybackError::InvalidBpm { bpm });
-        }
-
-        Ok(Self {
-            tick_speed,
-            bpm,
-            tick_duration_nanos: PLAYBACK_XM_TICK_NANOS_AT_ONE_BPM / u64::from(bpm),
-        })
-    }
-
-    pub fn ticks_per_row(&self) -> u16 {
-        self.tick_speed
-    }
-
-    pub fn bpm(&self) -> u16 {
-        self.bpm
-    }
-
-    pub fn tick_duration_nanos(&self) -> u64 {
-        self.tick_duration_nanos
-    }
-
-    pub fn row_duration_nanos(&self) -> u64 {
-        self.tick_duration_nanos
-            .saturating_mul(u64::from(self.tick_speed))
-    }
-
-    pub fn set_bpm(&mut self, bpm: u16) -> PlaybackResult<()> {
-        if bpm < PLAYBACK_MIN_BPM {
-            return Err(PlaybackError::InvalidBpm { bpm });
-        }
-        self.bpm = bpm;
-        self.tick_duration_nanos = PLAYBACK_XM_TICK_NANOS_AT_ONE_BPM / u64::from(bpm);
-        Ok(())
-    }
-
-    pub fn set_tick_speed(&mut self, tick_speed: u16) -> PlaybackResult<()> {
-        if tick_speed < PLAYBACK_MIN_TICK_SPEED {
-            return Err(PlaybackError::InvalidTickSpeed { tick_speed });
-        }
-        self.tick_speed = tick_speed;
-        Ok(())
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
