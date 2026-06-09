@@ -56,6 +56,8 @@ pub enum CoreError {
     EmptyOrderList,
     TooManyOrders { requested: usize, maximum: usize },
     InvalidOrderIndex { index: usize, len: usize },
+    InvalidInstrumentIndex { index: usize, len: usize },
+    InvalidSampleIndex { index: usize, len: usize },
     PatternNumberOverflow,
 }
 
