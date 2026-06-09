@@ -87,6 +87,58 @@ fn test_replace_module_with_undo() {
 }
 
 #[test]
+fn edit_instrument_and_sample_records_one_undo_snapshot() {
+    let module = Module::empty();
+    let mut editor = ModuleEditor::new(module);
+
+    editor
+        .edit_instrument_and_sample_with_undo(0, Some(0), |instrument, sample| {
+            instrument.volume_fadeout = 123;
+            sample.unwrap().volume = 77;
+        })
+        .unwrap();
+
+    assert_eq!(editor.module().instruments[0].volume_fadeout, 123);
+    assert_eq!(editor.module().samples[0].volume, 77);
+
+    assert!(editor.undo());
+    assert_eq!(
+        editor.module().instruments[0].volume_fadeout,
+        rustytracker_core::SAMPLE_DEFAULT_VOLUME_FADEOUT
+    );
+    assert_eq!(
+        editor.module().samples[0].volume,
+        rustytracker_core::SAMPLE_DEFAULT_VOLUME
+    );
+
+    assert!(editor.redo());
+    assert_eq!(editor.module().instruments[0].volume_fadeout, 123);
+    assert_eq!(editor.module().samples[0].volume, 77);
+}
+
+#[test]
+fn invalid_instrument_sample_edit_does_not_create_undo_snapshot() {
+    let module = Module::empty();
+    let mut editor = ModuleEditor::new(module);
+
+    assert_eq!(
+        editor.edit_instrument_and_sample_with_undo(usize::MAX, None, |_, _| {}),
+        Err(CoreError::InvalidInstrumentIndex {
+            index: usize::MAX,
+            len: rustytracker_core::DEFAULT_INSTRUMENTS,
+        })
+    );
+    assert_eq!(
+        editor.edit_instrument_and_sample_with_undo(0, Some(usize::MAX), |_, _| {}),
+        Err(CoreError::InvalidSampleIndex {
+            index: usize::MAX,
+            len: rustytracker_core::DEFAULT_SAMPLE_COUNT,
+        })
+    );
+    assert!(!editor.undo());
+}
+
+#[test]
 fn invalid_cell_edit_does_not_create_undo_snapshot() {
     let module = Module::empty();
     let mut editor = ModuleEditor::new(module);

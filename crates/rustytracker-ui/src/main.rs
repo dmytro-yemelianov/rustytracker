@@ -5,7 +5,8 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use eframe::egui;
 use egui::{Color32, Key, RichText, Ui};
 use rustytracker_core::{
-    EffectCommand, Module, Note, NoteName, PatternCell, SampleData, SampleLoopKind,
+    EffectCommand, Envelope, Instrument, InstrumentName, Module, Note, NoteName, PatternCell,
+    Sample, SampleData, SampleLoopKind, SampleName,
 };
 use rustytracker_edit::ModuleEditor;
 use rustytracker_play::PlaybackState;
@@ -230,6 +231,76 @@ where
 enum ViewMode {
     PatternEditor,
     InstrumentEditor,
+}
+
+#[derive(Default)]
+struct InstrumentEditorEdits {
+    instrument_name: Option<InstrumentName>,
+    instrument_volume_fadeout: Option<u16>,
+    volume_envelope: Option<Envelope>,
+    sample_name: Option<SampleName>,
+    sample_volume: Option<u8>,
+    sample_panning: Option<u8>,
+    sample_finetune: Option<i8>,
+    sample_relative_note: Option<i8>,
+    sample_loop_kind: Option<SampleLoopKind>,
+    sample_loop_start: Option<u32>,
+    sample_loop_length: Option<u32>,
+}
+
+impl InstrumentEditorEdits {
+    fn has_changes(&self) -> bool {
+        self.instrument_name.is_some()
+            || self.instrument_volume_fadeout.is_some()
+            || self.volume_envelope.is_some()
+            || self.sample_name.is_some()
+            || self.sample_volume.is_some()
+            || self.sample_panning.is_some()
+            || self.sample_finetune.is_some()
+            || self.sample_relative_note.is_some()
+            || self.sample_loop_kind.is_some()
+            || self.sample_loop_start.is_some()
+            || self.sample_loop_length.is_some()
+    }
+
+    fn apply(self, instrument: &mut Instrument, sample: Option<&mut Sample>) {
+        if let Some(name) = self.instrument_name {
+            instrument.name = name;
+        }
+        if let Some(volume_fadeout) = self.instrument_volume_fadeout {
+            instrument.volume_fadeout = volume_fadeout;
+        }
+        if let Some(volume_envelope) = self.volume_envelope {
+            instrument.volume_envelope = volume_envelope;
+        }
+
+        if let Some(sample) = sample {
+            if let Some(name) = self.sample_name {
+                sample.name = name;
+            }
+            if let Some(volume) = self.sample_volume {
+                sample.volume = volume;
+            }
+            if let Some(panning) = self.sample_panning {
+                sample.panning = panning;
+            }
+            if let Some(finetune) = self.sample_finetune {
+                sample.finetune = finetune;
+            }
+            if let Some(relative_note) = self.sample_relative_note {
+                sample.relative_note = relative_note;
+            }
+            if let Some(loop_kind) = self.sample_loop_kind {
+                sample.loop_kind = loop_kind;
+            }
+            if let Some(loop_start) = self.sample_loop_start {
+                sample.loop_start = loop_start;
+            }
+            if let Some(loop_length) = self.sample_loop_length {
+                sample.loop_length = loop_length;
+            }
+        }
+    }
 }
 
 struct RustyTrackerApp {
@@ -1206,345 +1277,459 @@ fn get_hex_key_value(input: &egui::InputState) -> Option<u8> {
 impl RustyTrackerApp {
     fn render_instrument_editor(&mut self, ui: &mut Ui) {
         let ins_idx = (self.selected_instrument as usize).saturating_sub(1);
-        let mut module = self.editor.module().clone();
 
-        if ins_idx >= module.instruments.len() {
-            ui.label("Selected instrument is out of range.");
-            return;
-        }
+        let (edits, sample_idx) = {
+            let module = self.editor.module();
+            let Some(instrument) = module.instruments.get(ins_idx) else {
+                ui.label("Selected instrument is out of range.");
+                return;
+            };
 
-        let sample_idx = module.instruments[ins_idx].sample_slots[0].unwrap_or(ins_idx);
+            let mapped_sample_idx = instrument.sample_slots.first().and_then(|slot| *slot);
+            let fallback_sample_idx = (ins_idx < module.samples.len()).then_some(ins_idx);
+            let sample_idx = mapped_sample_idx.or(fallback_sample_idx);
+            let sample = sample_idx.and_then(|index| module.samples.get(index));
 
-        let mut ins_changed = false;
-        let mut name_str = module.instruments[ins_idx].name.as_str().to_string();
+            let mut edits = InstrumentEditorEdits::default();
+            let mut name_str = instrument.name.as_str().to_string();
+            let mut volume_fadeout = instrument.volume_fadeout;
+            let mut volume_envelope = instrument.volume_envelope.clone();
+            let mut volume_envelope_changed = false;
 
-        ui.vertical(|ui| {
-            ui.heading("Instrument & Sample Editor");
-            ui.separator();
+            ui.vertical(|ui| {
+                ui.heading("Instrument & Sample Editor");
+                ui.separator();
 
-            ui.columns(2, |columns| {
-                // Column 0: Instrument & Envelopes
-                columns[0].vertical(|ui| {
-                    ui.group(|ui| {
-                        ui.label("Instrument Settings");
-                        ui.horizontal(|ui| {
-                            ui.label("Name:");
-                            if ui.text_edit_singleline(&mut name_str).changed() {
-                                ins_changed = true;
-                            }
+                ui.columns(2, |columns| {
+                    // Column 0: Instrument & Envelopes
+                    columns[0].vertical(|ui| {
+                        ui.group(|ui| {
+                            ui.label("Instrument Settings");
+                            ui.horizontal(|ui| {
+                                ui.label("Name:");
+                                if ui.text_edit_singleline(&mut name_str).changed() {
+                                    let name = InstrumentName::new(&name_str);
+                                    if name != instrument.name {
+                                        edits.instrument_name = Some(name);
+                                    }
+                                }
+                            });
+
+                            ui.horizontal(|ui| {
+                                ui.label("Volume Fadeout:");
+                                if ui
+                                    .add(egui::Slider::new(&mut volume_fadeout, 0..=65535))
+                                    .changed()
+                                    && volume_fadeout != instrument.volume_fadeout
+                                {
+                                    edits.instrument_volume_fadeout = Some(volume_fadeout);
+                                }
+                            });
                         });
 
-                        let ins = &mut module.instruments[ins_idx];
-                        ui.horizontal(|ui| {
-                            ui.label("Volume Fadeout:");
-                            ui.add(egui::Slider::new(&mut ins.volume_fadeout, 0..=65535));
-                        });
-                    });
+                        // Volume Envelope Settings
+                        ui.group(|ui| {
+                            let env = &mut volume_envelope;
 
-                    // Volume Envelope Settings
-                    ui.group(|ui| {
-                        let ins = &mut module.instruments[ins_idx];
-                        let env = &mut ins.volume_envelope;
-
-                        let mut env_active = (env.flags & 1) != 0;
-                        if ui
-                            .checkbox(&mut env_active, "Volume Envelope Active")
-                            .changed()
-                        {
-                            if env_active {
-                                env.flags |= 1;
-                            } else {
-                                env.flags &= !1;
+                            let mut env_active = (env.flags & 1) != 0;
+                            if ui
+                                .checkbox(&mut env_active, "Volume Envelope Active")
+                                .changed()
+                            {
+                                if env_active {
+                                    env.flags |= 1;
+                                } else {
+                                    env.flags &= !1;
+                                }
+                                volume_envelope_changed = true;
                             }
-                        }
 
-                        let mut env_sustain = (env.flags & 2) != 0;
-                        if ui.checkbox(&mut env_sustain, "Sustain Enabled").changed() {
+                            let mut env_sustain = (env.flags & 2) != 0;
+                            if ui.checkbox(&mut env_sustain, "Sustain Enabled").changed() {
+                                if env_sustain {
+                                    env.flags |= 2;
+                                } else {
+                                    env.flags &= !2;
+                                }
+                                volume_envelope_changed = true;
+                            }
                             if env_sustain {
-                                env.flags |= 2;
-                            } else {
-                                env.flags &= !2;
-                            }
-                        }
-                        if env_sustain {
-                            ui.horizontal(|ui| {
-                                ui.label("Sustain Point:");
-                                ui.add(
-                                    egui::DragValue::new(&mut env.sustain_point)
-                                        .clamp_range(0..=env.point_count.saturating_sub(1)),
-                                );
-                            });
-                        }
-
-                        let mut env_loop = (env.flags & 4) != 0;
-                        if ui.checkbox(&mut env_loop, "Loop Enabled").changed() {
-                            if env_loop {
-                                env.flags |= 4;
-                            } else {
-                                env.flags &= !4;
-                            }
-                        }
-                        if env_loop {
-                            ui.horizontal(|ui| {
-                                ui.label("Loop Start:");
-                                ui.add(
-                                    egui::DragValue::new(&mut env.loop_start_point)
-                                        .clamp_range(0..=env.point_count.saturating_sub(1)),
-                                );
-                                ui.label("Loop End:");
-                                ui.add(
-                                    egui::DragValue::new(&mut env.loop_end_point)
-                                        .clamp_range(0..=env.point_count.saturating_sub(1)),
-                                );
-                            });
-                        }
-
-                        ui.separator();
-                        ui.label("Envelope Points:");
-
-                        let mut to_remove = None;
-                        for idx in 0..env.point_count as usize {
-                            if let Some(pt) = env.points.get_mut(idx) {
                                 ui.horizontal(|ui| {
-                                    ui.label(format!("Pt {idx}:"));
-                                    ui.label("Frame:");
-                                    ui.add(
-                                        egui::DragValue::new(&mut pt.frame).clamp_range(0..=32767),
-                                    );
-                                    ui.label("Val:");
-                                    ui.add(egui::DragValue::new(&mut pt.value).clamp_range(0..=64));
-
-                                    if ui.button("🗑").clicked() {
-                                        to_remove = Some(idx);
+                                    ui.label("Sustain Point:");
+                                    if ui
+                                        .add(
+                                            egui::DragValue::new(&mut env.sustain_point)
+                                                .clamp_range(0..=env.point_count.saturating_sub(1)),
+                                        )
+                                        .changed()
+                                    {
+                                        volume_envelope_changed = true;
                                     }
                                 });
                             }
-                        }
 
-                        if let Some(idx) = to_remove {
-                            env.points.remove(idx);
-                            env.point_count = env.points.len() as u8;
-                        }
-
-                        if env.point_count < 12 && ui.button("+ Add Point").clicked() {
-                            let last_frame = env.points.last().map(|p| p.frame + 10).unwrap_or(0);
-                            env.points.push(rustytracker_core::EnvelopePoint {
-                                frame: last_frame,
-                                value: 64,
-                            });
-                            env.point_count = env.points.len() as u8;
-                        }
-                    });
-                });
-
-                // Column 1: Sample Settings & Waveform
-                columns[1].vertical(|ui| {
-                    if sample_idx >= module.samples.len() {
-                        ui.label("No sample mapped.");
-                        return;
-                    }
-
-                    let sample = &mut module.samples[sample_idx];
-
-                    ui.group(|ui| {
-                        ui.label("Sample Settings");
-
-                        let mut s_name = sample.name.as_str().to_string();
-                        ui.horizontal(|ui| {
-                            ui.label("Name:");
-                            if ui.text_edit_singleline(&mut s_name).changed() {
-                                sample.name = rustytracker_core::SampleName::new(&s_name);
+                            let mut env_loop = (env.flags & 4) != 0;
+                            if ui.checkbox(&mut env_loop, "Loop Enabled").changed() {
+                                if env_loop {
+                                    env.flags |= 4;
+                                } else {
+                                    env.flags &= !4;
+                                }
+                                volume_envelope_changed = true;
                             }
-                        });
-
-                        ui.horizontal(|ui| {
-                            ui.label("Volume:");
-                            ui.add(egui::Slider::new(&mut sample.volume, 0..=255));
-                        });
-
-                        ui.horizontal(|ui| {
-                            ui.label("Panning:");
-                            ui.add(egui::Slider::new(&mut sample.panning, 0..=255));
-                        });
-
-                        ui.horizontal(|ui| {
-                            ui.label("Finetune:");
-                            ui.add(
-                                egui::DragValue::new(&mut sample.finetune).clamp_range(-128..=127),
-                            );
-                            ui.label("Relative Note:");
-                            ui.add(
-                                egui::DragValue::new(&mut sample.relative_note)
-                                    .clamp_range(-96..=95),
-                            );
-                        });
-
-                        // Loop settings
-                        ui.horizontal(|ui| {
-                            egui::ComboBox::from_label("Loop Mode")
-                                .selected_text(match sample.loop_kind {
-                                    SampleLoopKind::None => "None",
-                                    SampleLoopKind::Forward => "Forward",
-                                    SampleLoopKind::PingPong => "Ping-pong",
-                                })
-                                .show_ui(ui, |ui| {
-                                    ui.selectable_value(
-                                        &mut sample.loop_kind,
-                                        SampleLoopKind::None,
-                                        "None",
-                                    );
-                                    ui.selectable_value(
-                                        &mut sample.loop_kind,
-                                        SampleLoopKind::Forward,
-                                        "Forward",
-                                    );
-                                    ui.selectable_value(
-                                        &mut sample.loop_kind,
-                                        SampleLoopKind::PingPong,
-                                        "Ping-pong",
-                                    );
+                            if env_loop {
+                                ui.horizontal(|ui| {
+                                    ui.label("Loop Start:");
+                                    if ui
+                                        .add(
+                                            egui::DragValue::new(&mut env.loop_start_point)
+                                                .clamp_range(0..=env.point_count.saturating_sub(1)),
+                                        )
+                                        .changed()
+                                    {
+                                        volume_envelope_changed = true;
+                                    }
+                                    ui.label("Loop End:");
+                                    if ui
+                                        .add(
+                                            egui::DragValue::new(&mut env.loop_end_point)
+                                                .clamp_range(0..=env.point_count.saturating_sub(1)),
+                                        )
+                                        .changed()
+                                    {
+                                        volume_envelope_changed = true;
+                                    }
                                 });
-                        });
+                            }
 
-                        if sample.loop_kind != SampleLoopKind::None {
-                            ui.horizontal(|ui| {
-                                ui.label("Loop Start:");
-                                ui.add(
-                                    egui::DragValue::new(&mut sample.loop_start)
-                                        .clamp_range(0..=sample.length),
-                                );
-                                ui.label("Loop Length:");
-                                ui.add(
-                                    egui::DragValue::new(&mut sample.loop_length)
-                                        .clamp_range(0..=sample.length),
-                                );
-                            });
-                        }
+                            ui.separator();
+                            ui.label("Envelope Points:");
+
+                            let mut to_remove = None;
+                            for idx in 0..env.point_count as usize {
+                                if let Some(pt) = env.points.get_mut(idx) {
+                                    ui.horizontal(|ui| {
+                                        ui.label(format!("Pt {idx}:"));
+                                        ui.label("Frame:");
+                                        if ui
+                                            .add(
+                                                egui::DragValue::new(&mut pt.frame)
+                                                    .clamp_range(0..=32767),
+                                            )
+                                            .changed()
+                                        {
+                                            volume_envelope_changed = true;
+                                        }
+                                        ui.label("Val:");
+                                        if ui
+                                            .add(
+                                                egui::DragValue::new(&mut pt.value)
+                                                    .clamp_range(0..=64),
+                                            )
+                                            .changed()
+                                        {
+                                            volume_envelope_changed = true;
+                                        }
+
+                                        if ui.button("🗑").clicked() {
+                                            to_remove = Some(idx);
+                                        }
+                                    });
+                                }
+                            }
+
+                            if let Some(idx) = to_remove {
+                                env.points.remove(idx);
+                                env.point_count = env.points.len() as u8;
+                                volume_envelope_changed = true;
+                            }
+
+                            if env.point_count < 12 && ui.button("+ Add Point").clicked() {
+                                let last_frame =
+                                    env.points.last().map(|p| p.frame + 10).unwrap_or(0);
+                                env.points.push(rustytracker_core::EnvelopePoint {
+                                    frame: last_frame,
+                                    value: 64,
+                                });
+                                env.point_count = env.points.len() as u8;
+                                volume_envelope_changed = true;
+                            }
+                        });
                     });
 
-                    // Waveform visualization
-                    ui.group(|ui| {
-                        ui.label("Sample Waveform");
+                    // Column 1: Sample Settings & Waveform
+                    columns[1].vertical(|ui| {
+                        if let Some(sample) = sample {
+                            ui.group(|ui| {
+                                ui.label("Sample Settings");
 
-                        let width = 320.0;
-                        let height = 120.0;
-
-                        let (rect, _response) =
-                            ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::hover());
-
-                        let painter = ui.painter_at(rect);
-
-                        // Background
-                        painter.rect_filled(rect, 4.0, Color32::from_black_alpha(150));
-
-                        // Grid lines
-                        let mid_y = rect.min.y + height / 2.0;
-                        painter.line_segment(
-                            [egui::pos2(rect.min.x, mid_y), egui::pos2(rect.max.x, mid_y)],
-                            egui::Stroke::new(1.0, Color32::DARK_GRAY),
-                        );
-
-                        // Draw loop overlay if looping
-                        if sample.loop_kind != SampleLoopKind::None && sample.length > 0 {
-                            let start_ratio = sample.loop_start as f32 / sample.length as f32;
-                            let end_ratio = (sample.loop_start + sample.loop_length) as f32
-                                / sample.length as f32;
-
-                            let start_x = rect.min.x + start_ratio * width;
-                            let end_x = rect.min.x + end_ratio * width;
-
-                            let loop_rect = egui::Rect::from_min_max(
-                                egui::pos2(start_x, rect.min.y),
-                                egui::pos2(end_x, rect.max.y),
-                            );
-                            painter.rect_filled(
-                                loop_rect,
-                                0.0,
-                                Color32::from_rgba_unmultiplied(0, 100, 255, 30),
-                            );
-
-                            // Loop boundary vertical lines
-                            painter.line_segment(
-                                [
-                                    egui::pos2(start_x, rect.min.y),
-                                    egui::pos2(start_x, rect.max.y),
-                                ],
-                                egui::Stroke::new(
-                                    1.0,
-                                    Color32::from_rgba_unmultiplied(0, 100, 255, 120),
-                                ),
-                            );
-                            painter.line_segment(
-                                [egui::pos2(end_x, rect.min.y), egui::pos2(end_x, rect.max.y)],
-                                egui::Stroke::new(
-                                    1.0,
-                                    Color32::from_rgba_unmultiplied(0, 100, 255, 120),
-                                ),
-                            );
-                        }
-
-                        // Render waveform path
-                        let sample_len = match &sample.data {
-                            SampleData::Pcm8(d) => d.len(),
-                            SampleData::Pcm16(d) => d.len(),
-                            SampleData::Empty => 0,
-                        };
-
-                        if sample_len > 0 {
-                            let points: Vec<egui::Pos2> = (0..width as usize)
-                                .map(|x| {
-                                    let sample_idx =
-                                        ((x as f32 / width) * sample_len as f32) as usize;
-                                    let val = match &sample.data {
-                                        SampleData::Pcm8(d) => {
-                                            if let Some(&v) = d.get(sample_idx) {
-                                                v as f32 / 128.0
-                                            } else {
-                                                0.0
-                                            }
+                                let mut s_name = sample.name.as_str().to_string();
+                                ui.horizontal(|ui| {
+                                    ui.label("Name:");
+                                    if ui.text_edit_singleline(&mut s_name).changed() {
+                                        let name = SampleName::new(&s_name);
+                                        if name != sample.name {
+                                            edits.sample_name = Some(name);
                                         }
-                                        SampleData::Pcm16(d) => {
-                                            if let Some(&v) = d.get(sample_idx) {
-                                                v as f32 / 32768.0
-                                            } else {
-                                                0.0
-                                            }
+                                    }
+                                });
+
+                                let mut volume = sample.volume;
+                                ui.horizontal(|ui| {
+                                    ui.label("Volume:");
+                                    if ui.add(egui::Slider::new(&mut volume, 0..=255)).changed()
+                                        && volume != sample.volume
+                                    {
+                                        edits.sample_volume = Some(volume);
+                                    }
+                                });
+
+                                let mut panning = sample.panning;
+                                ui.horizontal(|ui| {
+                                    ui.label("Panning:");
+                                    if ui.add(egui::Slider::new(&mut panning, 0..=255)).changed()
+                                        && panning != sample.panning
+                                    {
+                                        edits.sample_panning = Some(panning);
+                                    }
+                                });
+
+                                let mut finetune = sample.finetune;
+                                let mut relative_note = sample.relative_note;
+                                ui.horizontal(|ui| {
+                                    ui.label("Finetune:");
+                                    if ui
+                                        .add(
+                                            egui::DragValue::new(&mut finetune)
+                                                .clamp_range(-128..=127),
+                                        )
+                                        .changed()
+                                        && finetune != sample.finetune
+                                    {
+                                        edits.sample_finetune = Some(finetune);
+                                    }
+                                    ui.label("Relative Note:");
+                                    if ui
+                                        .add(
+                                            egui::DragValue::new(&mut relative_note)
+                                                .clamp_range(-96..=95),
+                                        )
+                                        .changed()
+                                        && relative_note != sample.relative_note
+                                    {
+                                        edits.sample_relative_note = Some(relative_note);
+                                    }
+                                });
+
+                                // Loop settings
+                                let mut loop_kind = sample.loop_kind;
+                                ui.horizontal(|ui| {
+                                    egui::ComboBox::from_label("Loop Mode")
+                                        .selected_text(match loop_kind {
+                                            SampleLoopKind::None => "None",
+                                            SampleLoopKind::Forward => "Forward",
+                                            SampleLoopKind::PingPong => "Ping-pong",
+                                        })
+                                        .show_ui(ui, |ui| {
+                                            ui.selectable_value(
+                                                &mut loop_kind,
+                                                SampleLoopKind::None,
+                                                "None",
+                                            );
+                                            ui.selectable_value(
+                                                &mut loop_kind,
+                                                SampleLoopKind::Forward,
+                                                "Forward",
+                                            );
+                                            ui.selectable_value(
+                                                &mut loop_kind,
+                                                SampleLoopKind::PingPong,
+                                                "Ping-pong",
+                                            );
+                                        });
+                                });
+                                if loop_kind != sample.loop_kind {
+                                    edits.sample_loop_kind = Some(loop_kind);
+                                }
+
+                                if loop_kind != SampleLoopKind::None {
+                                    let mut loop_start = sample.loop_start;
+                                    let mut loop_length = sample.loop_length;
+                                    ui.horizontal(|ui| {
+                                        ui.label("Loop Start:");
+                                        if ui
+                                            .add(
+                                                egui::DragValue::new(&mut loop_start)
+                                                    .clamp_range(0..=sample.length),
+                                            )
+                                            .changed()
+                                            && loop_start != sample.loop_start
+                                        {
+                                            edits.sample_loop_start = Some(loop_start);
                                         }
-                                        SampleData::Empty => 0.0,
-                                    };
+                                        ui.label("Loop Length:");
+                                        if ui
+                                            .add(
+                                                egui::DragValue::new(&mut loop_length)
+                                                    .clamp_range(0..=sample.length),
+                                            )
+                                            .changed()
+                                            && loop_length != sample.loop_length
+                                        {
+                                            edits.sample_loop_length = Some(loop_length);
+                                        }
+                                    });
+                                }
+                            });
 
-                                    let px_x = rect.min.x + x as f32;
-                                    let px_y = mid_y - val * (height / 2.0 - 5.0);
-                                    egui::pos2(px_x, px_y)
-                                })
-                                .collect();
+                            // Waveform visualization
+                            ui.group(|ui| {
+                                ui.label("Sample Waveform");
 
-                            for window in points.windows(2) {
-                                painter.line_segment(
-                                    [window[0], window[1]],
-                                    egui::Stroke::new(1.5, Color32::LIGHT_BLUE),
+                                let width = 320.0;
+                                let height = 120.0;
+
+                                let (rect, _response) = ui.allocate_exact_size(
+                                    egui::vec2(width, height),
+                                    egui::Sense::hover(),
                                 );
-                            }
+
+                                let painter = ui.painter_at(rect);
+
+                                // Background
+                                painter.rect_filled(rect, 4.0, Color32::from_black_alpha(150));
+
+                                // Grid lines
+                                let mid_y = rect.min.y + height / 2.0;
+                                painter.line_segment(
+                                    [egui::pos2(rect.min.x, mid_y), egui::pos2(rect.max.x, mid_y)],
+                                    egui::Stroke::new(1.0, Color32::DARK_GRAY),
+                                );
+
+                                // Draw loop overlay if looping
+                                let visible_loop_kind =
+                                    edits.sample_loop_kind.unwrap_or(sample.loop_kind);
+                                let visible_loop_start =
+                                    edits.sample_loop_start.unwrap_or(sample.loop_start);
+                                let visible_loop_length =
+                                    edits.sample_loop_length.unwrap_or(sample.loop_length);
+                                if visible_loop_kind != SampleLoopKind::None && sample.length > 0 {
+                                    let start_ratio =
+                                        visible_loop_start as f32 / sample.length as f32;
+                                    let end_ratio = (visible_loop_start + visible_loop_length)
+                                        as f32
+                                        / sample.length as f32;
+
+                                    let start_x = rect.min.x + start_ratio * width;
+                                    let end_x = rect.min.x + end_ratio * width;
+
+                                    let loop_rect = egui::Rect::from_min_max(
+                                        egui::pos2(start_x, rect.min.y),
+                                        egui::pos2(end_x, rect.max.y),
+                                    );
+                                    painter.rect_filled(
+                                        loop_rect,
+                                        0.0,
+                                        Color32::from_rgba_unmultiplied(0, 100, 255, 30),
+                                    );
+
+                                    // Loop boundary vertical lines
+                                    painter.line_segment(
+                                        [
+                                            egui::pos2(start_x, rect.min.y),
+                                            egui::pos2(start_x, rect.max.y),
+                                        ],
+                                        egui::Stroke::new(
+                                            1.0,
+                                            Color32::from_rgba_unmultiplied(0, 100, 255, 120),
+                                        ),
+                                    );
+                                    painter.line_segment(
+                                        [
+                                            egui::pos2(end_x, rect.min.y),
+                                            egui::pos2(end_x, rect.max.y),
+                                        ],
+                                        egui::Stroke::new(
+                                            1.0,
+                                            Color32::from_rgba_unmultiplied(0, 100, 255, 120),
+                                        ),
+                                    );
+                                }
+
+                                // Render waveform path
+                                let sample_len = match &sample.data {
+                                    SampleData::Pcm8(d) => d.len(),
+                                    SampleData::Pcm16(d) => d.len(),
+                                    SampleData::Empty => 0,
+                                };
+
+                                if sample_len > 0 {
+                                    let points: Vec<egui::Pos2> = (0..width as usize)
+                                        .map(|x| {
+                                            let sample_idx =
+                                                ((x as f32 / width) * sample_len as f32) as usize;
+                                            let val = match &sample.data {
+                                                SampleData::Pcm8(d) => {
+                                                    if let Some(&v) = d.get(sample_idx) {
+                                                        v as f32 / 128.0
+                                                    } else {
+                                                        0.0
+                                                    }
+                                                }
+                                                SampleData::Pcm16(d) => {
+                                                    if let Some(&v) = d.get(sample_idx) {
+                                                        v as f32 / 32768.0
+                                                    } else {
+                                                        0.0
+                                                    }
+                                                }
+                                                SampleData::Empty => 0.0,
+                                            };
+
+                                            let px_x = rect.min.x + x as f32;
+                                            let px_y = mid_y - val * (height / 2.0 - 5.0);
+                                            egui::pos2(px_x, px_y)
+                                        })
+                                        .collect();
+
+                                    for window in points.windows(2) {
+                                        painter.line_segment(
+                                            [window[0], window[1]],
+                                            egui::Stroke::new(1.5, Color32::LIGHT_BLUE),
+                                        );
+                                    }
+                                } else {
+                                    painter.text(
+                                        egui::pos2(rect.min.x + width / 2.0, mid_y),
+                                        egui::Align2::CENTER_CENTER,
+                                        "No Audio Waveform Data",
+                                        egui::FontId::proportional(14.0),
+                                        Color32::GRAY,
+                                    );
+                                }
+                            });
                         } else {
-                            painter.text(
-                                egui::pos2(rect.min.x + width / 2.0, mid_y),
-                                egui::Align2::CENTER_CENTER,
-                                "No Audio Waveform Data",
-                                egui::FontId::proportional(14.0),
-                                Color32::GRAY,
-                            );
+                            ui.label("No sample mapped.");
                         }
                     });
                 });
             });
-        });
 
-        if ins_changed {
-            module.instruments[ins_idx].name = rustytracker_core::InstrumentName::new(&name_str);
-        }
+            if volume_envelope_changed && volume_envelope != instrument.volume_envelope {
+                edits.volume_envelope = Some(volume_envelope);
+            }
 
-        if self.editor.module() != &module {
-            self.editor.replace_module_with_undo(module);
+            (edits, sample_idx)
+        };
+
+        if edits.has_changes()
+            && self
+                .editor
+                .edit_instrument_and_sample_with_undo(ins_idx, sample_idx, |instrument, sample| {
+                    edits.apply(instrument, sample);
+                })
+                .is_ok()
+        {
             self.commit_edit_to_audio();
         }
     }

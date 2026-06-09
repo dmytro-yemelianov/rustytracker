@@ -6,8 +6,8 @@
 use std::collections::VecDeque;
 
 use rustytracker_core::{
-    CoreError, CoreResult, EffectCommand, Module, Note, PatternCell, MAX_ACTIVE_ORDERS,
-    MAX_XM_NOTES,
+    CoreError, CoreResult, EffectCommand, Instrument, Module, Note, PatternCell, Sample,
+    MAX_ACTIVE_ORDERS, MAX_XM_NOTES,
 };
 
 pub const DEFAULT_UNDO_LIMIT: usize = 64;
@@ -125,6 +125,47 @@ impl ModuleEditor {
             self.begin_transaction();
             self.module = module;
         }
+    }
+
+    pub fn edit_instrument_and_sample_with_undo<F>(
+        &mut self,
+        instrument_index: usize,
+        sample_index: Option<usize>,
+        edit: F,
+    ) -> CoreResult<()>
+    where
+        F: FnOnce(&mut Instrument, Option<&mut Sample>),
+    {
+        let instrument_len = self.module.instruments.len();
+        if instrument_index >= instrument_len {
+            return Err(CoreError::InvalidInstrumentIndex {
+                index: instrument_index,
+                len: instrument_len,
+            });
+        }
+
+        if let Some(index) = sample_index {
+            let sample_len = self.module.samples.len();
+            if index >= sample_len {
+                return Err(CoreError::InvalidSampleIndex {
+                    index,
+                    len: sample_len,
+                });
+            }
+        }
+
+        self.begin_transaction();
+
+        let Module {
+            instruments,
+            samples,
+            ..
+        } = &mut self.module;
+        let instrument = &mut instruments[instrument_index];
+        let sample = sample_index.map(|index| &mut samples[index]);
+        edit(instrument, sample);
+
+        Ok(())
     }
 
     pub fn into_module(self) -> Module {
