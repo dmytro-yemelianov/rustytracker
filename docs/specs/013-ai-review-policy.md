@@ -11,6 +11,8 @@ CodeRabbit should be used as a post-validation review gate for pull requests:
 - Run the relevant local validation first (`cargo fmt --check`, focused tests,
   workspace tests when appropriate, clippy, and diff whitespace checks).
 - Let CodeRabbit review the pushed PR.
+- Request re-review deliberately after meaningful fixes instead of relying on
+  review runs for every small follow-up commit.
 - Treat each comment as a hypothesis. Verify the claim against current code,
   docs/specs, fixture behavior, and parser/writer normalization before acting.
 - Fix correctness, compatibility, API-stability, missing-test, and
@@ -18,6 +20,19 @@ CodeRabbit should be used as a post-validation review gate for pull requests:
 - Skip or answer findings that conflict with documented RustyTracker behavior,
   especially internal normalized representations that are intentionally
   converted at format boundaries.
+
+## Review Budget
+
+CodeRabbit review capacity is finite. To avoid burning review slots while a
+stack of small PRs is in flight:
+
+- keep automatic initial PR review enabled, but disable automatic incremental
+  review;
+- batch small fixups before requesting another review;
+- prefer local validation and human judgment for docs-only or configuration-only
+  PRs when CodeRabbit is rate-limited;
+- continue using CodeRabbit for behavior-sensitive Rust changes, compatibility
+  fixes, public API moves, and parser/writer boundary work.
 
 ## Mechanical Split PRs
 
@@ -34,7 +49,13 @@ a mechanical extraction.
 
 ## Merge Policy
 
-A PR can merge when local validation passes, CodeRabbit's status is complete,
-and there are no unresolved valid actionable review threads. While CodeRabbit is
-queued or reviewing, independent branches may continue, but the pending PR
-should not merge on stale review state.
+A behavior-changing code PR can merge when local validation passes, CodeRabbit's
+status is complete, and there are no unresolved valid actionable review threads.
+While CodeRabbit is queued or reviewing, independent branches may continue, but
+the pending code PR should not merge on stale review state.
+
+Docs-only, configuration-only, and already-reviewed mechanical cleanup PRs may
+merge after local validation when CodeRabbit is unavailable or rate-limited, as
+long as there are no unresolved valid actionable comments already present.
+Generic warnings such as docstring coverage are advisory for mechanical split
+PRs unless they identify a concrete public API regression.

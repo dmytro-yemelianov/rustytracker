@@ -35,7 +35,9 @@ reviews:
   auto_review:
     enabled: true
     drafts: false
-    auto_incremental_review: true
+    # Avoid consuming review budget on every small fixup commit. Request
+    # `@coderabbitai review` after batching meaningful changes.
+    auto_incremental_review: false
   pre_merge_checks:
     custom_checks:
       - mode: "error"
