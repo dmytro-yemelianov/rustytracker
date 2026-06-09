@@ -6,6 +6,7 @@ const XM_ENVELOPE_LOOP_FLAG: u8 = 0x04;
 
 pub(crate) const PLAYBACK_DEFAULT_FADEOUT_VOLUME: u32 = 65536;
 const PLAYBACK_ENVELOPE_INTERPOLATION_SHIFT: u32 = 16;
+const PLAYBACK_ENVELOPE_INTERPOLATION_SCALE: i32 = 1_i32 << PLAYBACK_ENVELOPE_INTERPOLATION_SHIFT;
 pub(crate) const PLAYBACK_ENVELOPE_DEFAULT_VOLUME: u16 = 256;
 pub(crate) const PLAYBACK_ENVELOPE_DEFAULT_PANNING: u16 = 128;
 
@@ -94,11 +95,11 @@ impl PlaybackEnvelopeState {
             dx = 1;
         }
 
-        let t = (p_b.frame as i32 - self.step as i32) * PLAYBACK_DEFAULT_FADEOUT_VOLUME as i32 / dx;
+        let t = (p_b.frame as i32 - self.step as i32) * PLAYBACK_ENVELOPE_INTERPOLATION_SCALE / dx;
         let y0 = p_a.value as i32;
         let y1 = p_b.value as i32;
 
-        let y = (y0 * t) + (y1 * (PLAYBACK_DEFAULT_FADEOUT_VOLUME as i32 - t));
+        let y = (y0 * t) + (y1 * (PLAYBACK_ENVELOPE_INTERPOLATION_SCALE - t));
         (y >> PLAYBACK_ENVELOPE_INTERPOLATION_SHIFT) as u16
     }
 }
