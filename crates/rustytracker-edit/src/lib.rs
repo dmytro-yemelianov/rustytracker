@@ -113,6 +113,11 @@ impl ModuleEditor {
         &self.module
     }
 
+    pub fn module_mut(&mut self) -> &mut Module {
+        &mut self.module
+    }
+
+
     pub fn into_module(self) -> Module {
         self.module
     }
