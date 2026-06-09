@@ -4,10 +4,11 @@ use rustytracker_core::{
 };
 use rustytracker_play::{
     ChannelSampleFrame, PlaybackChannelState, PlaybackClock, PlaybackCursor, PlaybackEnvelopeState,
-    PlaybackError, PlaybackSampleValue, PlaybackState, PlaybackTiming, RowAdvance, TickAdvance,
-    EFFECT_ARPEGGIO_ZERO, EFFECT_PATTERN_BREAK, EFFECT_POSITION_JUMP, EFFECT_SET_SPEED_BPM,
-    EFFECT_TONE_PORTAMENTO, EFFECT_VOLUME_SLIDE, PLAYBACK_FIRST_ORDER_INDEX, PLAYBACK_FIRST_ROW,
-    PLAYBACK_FIRST_TICK, PLAYBACK_ORDER_STEP, PLAYBACK_ROW_STEP, PLAYBACK_TICK_STEP,
+    PlaybackError, PlaybackSampleValue, PlaybackState, PlaybackTiming, RawMonoPcmFrame,
+    RawStereoPcmFrame, RowAdvance, TickAdvance, EFFECT_ARPEGGIO_ZERO, EFFECT_PATTERN_BREAK,
+    EFFECT_POSITION_JUMP, EFFECT_SET_SPEED_BPM, EFFECT_TONE_PORTAMENTO, EFFECT_VOLUME_SLIDE,
+    PLAYBACK_FIRST_ORDER_INDEX, PLAYBACK_FIRST_ROW, PLAYBACK_FIRST_TICK, PLAYBACK_MONO_SILENCE,
+    PLAYBACK_ORDER_STEP, PLAYBACK_ROW_STEP, PLAYBACK_STEREO_SILENCE, PLAYBACK_TICK_STEP,
     SPEED_BPM_THRESHOLD, VIB_TAB,
 };
 
@@ -68,6 +69,8 @@ fn crate_root_re_exports_channel_api() {
     let _ = core::mem::size_of::<PlaybackChannelState>();
     let _ = core::mem::size_of::<PlaybackEnvelopeState>();
     let _ = core::mem::size_of::<PlaybackSampleValue>();
+    let _ = core::mem::size_of::<RawMonoPcmFrame>();
+    let _ = core::mem::size_of::<RawStereoPcmFrame>();
 
     assert_eq!(EFFECT_ARPEGGIO_ZERO, 0x00);
     assert_eq!(EFFECT_TONE_PORTAMENTO, 0x03);
@@ -76,6 +79,8 @@ fn crate_root_re_exports_channel_api() {
     assert_eq!(EFFECT_PATTERN_BREAK, 0x0d);
     assert_eq!(EFFECT_SET_SPEED_BPM, 0x0f);
     assert_eq!(SPEED_BPM_THRESHOLD, 32);
+    assert_eq!(PLAYBACK_MONO_SILENCE, 0);
+    assert_eq!(PLAYBACK_STEREO_SILENCE, (0, 0));
     assert_eq!(VIB_TAB.len(), 32);
 }
 
