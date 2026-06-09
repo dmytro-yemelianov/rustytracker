@@ -173,6 +173,7 @@ fn sequencing_an_order_uses_the_next_pattern_number_after_current_highest() {
 fn default_instruments_and_samples_match_empty_song_pool_defaults() {
     let module = Module::empty();
     let instrument = &module.instruments[0];
+    let second_instrument = &module.instruments[1];
     let sample = &module.samples[0];
 
     assert_eq!(instrument.name.as_str(), "");
@@ -183,6 +184,11 @@ fn default_instruments_and_samples_match_empty_song_pool_defaults() {
         .note_sample_map
         .iter()
         .all(|&sample_index| sample_index == Some(0)));
+    assert_eq!(second_instrument.sample_slots[0], Some(16));
+    assert!(second_instrument
+        .note_sample_map
+        .iter()
+        .all(|&sample_index| sample_index == Some(16)));
     assert_eq!(instrument.volume_envelope, Envelope::default());
     assert_eq!(instrument.panning_envelope, Envelope::default());
     assert_eq!(instrument.vibrato, Vibrato::default());

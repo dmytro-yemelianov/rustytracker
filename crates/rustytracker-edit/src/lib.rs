@@ -3,6 +3,8 @@
 //! Exposes a command-driven and snapshot-based transaction model for pattern edits,
 //! order modifications, transpositions, and selections.
 
+use std::collections::VecDeque;
+
 use rustytracker_core::{
     CoreError, CoreResult, EffectCommand, Module, Note, PatternCell, MAX_ACTIVE_ORDERS,
     MAX_XM_NOTES,
@@ -32,33 +34,33 @@ impl Selection {
 /// Undo/Redo stack for snapshot-based state restoration.
 #[derive(Debug, Clone)]
 pub struct UndoHistory {
-    undo_stack: Vec<Module>,
-    redo_stack: Vec<Module>,
+    undo_stack: VecDeque<Module>,
+    redo_stack: VecDeque<Module>,
     limit: usize,
 }
 
 impl UndoHistory {
     pub fn new(limit: usize) -> Self {
         Self {
-            undo_stack: Vec::new(),
-            redo_stack: Vec::new(),
+            undo_stack: VecDeque::new(),
+            redo_stack: VecDeque::new(),
             limit,
         }
     }
 
     pub fn save_state(&mut self, state: &Module) {
-        self.undo_stack.push(state.clone());
+        self.undo_stack.push_back(state.clone());
         if self.undo_stack.len() > self.limit {
-            self.undo_stack.remove(0);
+            self.undo_stack.pop_front();
         }
         self.redo_stack.clear();
     }
 
     pub fn undo(&mut self, current: &mut Module) -> bool {
-        if let Some(prev) = self.undo_stack.pop() {
-            self.redo_stack.push(current.clone());
+        if let Some(prev) = self.undo_stack.pop_back() {
+            self.redo_stack.push_back(current.clone());
             if self.redo_stack.len() > self.limit {
-                self.redo_stack.remove(0);
+                self.redo_stack.pop_front();
             }
             *current = prev;
             true
@@ -68,10 +70,10 @@ impl UndoHistory {
     }
 
     pub fn redo(&mut self, current: &mut Module) -> bool {
-        if let Some(next) = self.redo_stack.pop() {
-            self.undo_stack.push(current.clone());
+        if let Some(next) = self.redo_stack.pop_back() {
+            self.undo_stack.push_back(current.clone());
             if self.undo_stack.len() > self.limit {
-                self.undo_stack.remove(0);
+                self.undo_stack.pop_front();
             }
             *current = next;
             true
@@ -117,6 +119,13 @@ impl ModuleEditor {
         &mut self.module
     }
 
+    /// Replace the module as a single undoable transaction when a caller edits a full snapshot.
+    pub fn replace_module_with_undo(&mut self, module: Module) {
+        if self.module != module {
+            self.begin_transaction();
+            self.module = module;
+        }
+    }
 
     pub fn into_module(self) -> Module {
         self.module
@@ -152,14 +161,20 @@ impl ModuleEditor {
         row: u16,
         note: Note,
     ) -> CoreResult<()> {
+        let mut cell = self
+            .module
+            .patterns
+            .get(pattern_idx)
+            .ok_or(CoreError::PatternNumberOverflow)?
+            .cell(channel, row)?
+            .clone();
+        cell.note = note;
         self.begin_transaction();
         let pattern = self
             .module
             .patterns
             .get_mut(pattern_idx)
             .ok_or(CoreError::PatternNumberOverflow)?;
-        let mut cell = pattern.cell(channel, row)?.clone();
-        cell.note = note;
         pattern.set_cell(channel, row, cell)
     }
 
@@ -170,14 +185,20 @@ impl ModuleEditor {
         row: u16,
         instrument: u8,
     ) -> CoreResult<()> {
+        let mut cell = self
+            .module
+            .patterns
+            .get(pattern_idx)
+            .ok_or(CoreError::PatternNumberOverflow)?
+            .cell(channel, row)?
+            .clone();
+        cell.instrument = instrument;
         self.begin_transaction();
         let pattern = self
             .module
             .patterns
             .get_mut(pattern_idx)
             .ok_or(CoreError::PatternNumberOverflow)?;
-        let mut cell = pattern.cell(channel, row)?.clone();
-        cell.instrument = instrument;
         pattern.set_cell(channel, row, cell)
     }
 
@@ -189,13 +210,13 @@ impl ModuleEditor {
         slot: u8,
         command: EffectCommand,
     ) -> CoreResult<()> {
-        self.begin_transaction();
-        let pattern = self
+        let mut cell = self
             .module
             .patterns
-            .get_mut(pattern_idx)
-            .ok_or(CoreError::PatternNumberOverflow)?;
-        let mut cell = pattern.cell(channel, row)?.clone();
+            .get(pattern_idx)
+            .ok_or(CoreError::PatternNumberOverflow)?
+            .cell(channel, row)?
+            .clone();
         if usize::from(slot) >= cell.effects.len() {
             return Err(CoreError::InvalidEffectSlot {
                 slot,
@@ -203,28 +224,40 @@ impl ModuleEditor {
             });
         }
         cell.effects[usize::from(slot)] = command;
-        pattern.set_cell(channel, row, cell)
-    }
-
-    pub fn clear_cell(&mut self, pattern_idx: usize, channel: u16, row: u16) -> CoreResult<()> {
         self.begin_transaction();
         let pattern = self
             .module
             .patterns
             .get_mut(pattern_idx)
             .ok_or(CoreError::PatternNumberOverflow)?;
+        pattern.set_cell(channel, row, cell)
+    }
+
+    pub fn clear_cell(&mut self, pattern_idx: usize, channel: u16, row: u16) -> CoreResult<()> {
+        let pattern = self
+            .module
+            .patterns
+            .get(pattern_idx)
+            .ok_or(CoreError::PatternNumberOverflow)?;
+        pattern.cell(channel, row)?;
+        let effect_slots = pattern.effect_slots();
         let clean_cell = PatternCell {
             note: Note::Empty,
             instrument: 0,
-            effects: vec![EffectCommand::default(); usize::from(pattern.effect_slots())],
+            effects: vec![EffectCommand::default(); usize::from(effect_slots)],
         };
+        self.begin_transaction();
+        let pattern = self
+            .module
+            .patterns
+            .get_mut(pattern_idx)
+            .ok_or(CoreError::PatternNumberOverflow)?;
         pattern.set_cell(channel, row, clean_cell)
     }
 
     // --- Order List Editing ---
 
     pub fn insert_duplicate_order(&mut self, index: usize) -> CoreResult<()> {
-        self.begin_transaction();
         if self.module.orders.len() >= MAX_ACTIVE_ORDERS {
             return Err(CoreError::TooManyOrders {
                 requested: self.module.orders.len() + 1,
@@ -239,18 +272,19 @@ impl ModuleEditor {
                 index,
                 len: self.module.orders.len(),
             })?;
+        self.begin_transaction();
         self.module.orders.insert(index + 1, pattern);
         Ok(())
     }
 
     pub fn delete_order(&mut self, index: usize) -> CoreResult<()> {
-        self.begin_transaction();
         if index >= self.module.orders.len() {
             return Err(CoreError::InvalidOrderIndex {
                 index,
                 len: self.module.orders.len(),
             });
         }
+        self.begin_transaction();
         if self.module.orders.len() > 1 {
             self.module.orders.remove(index);
         } else {
@@ -260,19 +294,16 @@ impl ModuleEditor {
     }
 
     pub fn set_order_pattern(&mut self, index: usize, pattern_idx: u8) -> CoreResult<()> {
-        self.begin_transaction();
         let len = self.module.orders.len();
-        let val = self
-            .module
-            .orders
-            .get_mut(index)
-            .ok_or(CoreError::InvalidOrderIndex { index, len })?;
-        *val = pattern_idx;
+        if index >= len {
+            return Err(CoreError::InvalidOrderIndex { index, len });
+        }
+        self.begin_transaction();
+        self.module.orders[index] = pattern_idx;
         Ok(())
     }
 
     pub fn move_order(&mut self, from_idx: usize, to_idx: usize) -> CoreResult<()> {
-        self.begin_transaction();
         let len = self.module.orders.len();
         if from_idx >= len || to_idx >= len {
             return Err(CoreError::InvalidOrderIndex {
@@ -280,6 +311,7 @@ impl ModuleEditor {
                 len,
             });
         }
+        self.begin_transaction();
         let item = self.module.orders.remove(from_idx);
         self.module.orders.insert(to_idx, item);
         Ok(())
@@ -294,6 +326,10 @@ impl ModuleEditor {
         selection: Selection,
         semitones: i8,
     ) -> CoreResult<()> {
+        self.module
+            .patterns
+            .get(pattern_idx)
+            .ok_or(CoreError::PatternNumberOverflow)?;
         self.begin_transaction();
         let pattern = self
             .module
@@ -324,6 +360,10 @@ impl ModuleEditor {
         from_ins: u8,
         to_ins: u8,
     ) -> CoreResult<()> {
+        self.module
+            .patterns
+            .get(pattern_idx)
+            .ok_or(CoreError::PatternNumberOverflow)?;
         self.begin_transaction();
         let pattern = self
             .module
@@ -354,6 +394,10 @@ impl ModuleEditor {
         clear_instruments: bool,
         clear_effects: bool,
     ) -> CoreResult<()> {
+        self.module
+            .patterns
+            .get(pattern_idx)
+            .ok_or(CoreError::PatternNumberOverflow)?;
         self.begin_transaction();
         let pattern = self
             .module
@@ -387,11 +431,10 @@ impl ModuleEditor {
 
     /// Inserts a blank row at the target index in the pattern, shifting rows down and discarding the last row.
     pub fn insert_row(&mut self, pattern_idx: usize, row_idx: u16) -> CoreResult<()> {
-        self.begin_transaction();
         let pattern = self
             .module
             .patterns
-            .get_mut(pattern_idx)
+            .get(pattern_idx)
             .ok_or(CoreError::PatternNumberOverflow)?;
         let rows = pattern.rows();
         let chs = pattern.channels();
@@ -400,6 +443,13 @@ impl ModuleEditor {
         if row_idx >= rows {
             return Err(CoreError::InvalidRow { row: row_idx, rows });
         }
+
+        self.begin_transaction();
+        let pattern = self
+            .module
+            .patterns
+            .get_mut(pattern_idx)
+            .ok_or(CoreError::PatternNumberOverflow)?;
 
         // We shift cells down starting from the end
         for row in (row_idx + 1..rows).rev() {
@@ -424,11 +474,10 @@ impl ModuleEditor {
 
     /// Deletes the row at the target index, shifting subsequent rows up and filling the last row with empty cells.
     pub fn delete_row(&mut self, pattern_idx: usize, row_idx: u16) -> CoreResult<()> {
-        self.begin_transaction();
         let pattern = self
             .module
             .patterns
-            .get_mut(pattern_idx)
+            .get(pattern_idx)
             .ok_or(CoreError::PatternNumberOverflow)?;
         let rows = pattern.rows();
         let chs = pattern.channels();
@@ -437,6 +486,13 @@ impl ModuleEditor {
         if row_idx >= rows {
             return Err(CoreError::InvalidRow { row: row_idx, rows });
         }
+
+        self.begin_transaction();
+        let pattern = self
+            .module
+            .patterns
+            .get_mut(pattern_idx)
+            .ok_or(CoreError::PatternNumberOverflow)?;
 
         // Shift up
         for row in row_idx..rows - 1 {

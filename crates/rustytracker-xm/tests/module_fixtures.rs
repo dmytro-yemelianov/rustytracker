@@ -1,8 +1,11 @@
 use std::fs;
-use std::path::PathBuf;
 
 use rustytracker_core::{
     EnvelopePoint, FrequencyTable, SampleData, SampleLoopKind, SAMPLES_PER_INSTRUMENT,
+};
+use rustytracker_test_support::{
+    milkytracker_fixture_path as fixture_path,
+    milkytracker_fixtures_available as fixtures_available,
 };
 use rustytracker_xm::parse_xm_module;
 
@@ -241,6 +244,10 @@ const FIXTURES: &[ExpectedModule] = &[
 
 #[test]
 fn parses_bundled_xm_files_into_core_modules() {
+    if !fixtures_available() {
+        return;
+    }
+
     for fixture in FIXTURES {
         let bytes = fs::read(fixture_path(fixture.file_name)).unwrap();
         let module = parse_xm_module(&bytes).unwrap();
@@ -394,12 +401,6 @@ fn adds_empty_patterns_for_orders_past_declared_pattern_count() {
     assert_eq!(appended.rows(), XM_TEST_DEFAULT_ROWS);
     assert_eq!(appended.channels(), XM_TEST_CHANNELS);
     assert_eq!(appended.effect_slots(), XM_TEST_EFFECT_SLOTS);
-}
-
-fn fixture_path(file_name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../MilkyTracker/resources/music")
-        .join(file_name)
 }
 
 fn synthetic_xm_with_sparse_order_reference() -> Vec<u8> {

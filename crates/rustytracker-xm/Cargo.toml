@@ -9,3 +9,5 @@ rust-version.workspace = true
 [dependencies]
 rustytracker-core = { path = "../rustytracker-core" }
 
+[dev-dependencies]
+rustytracker-test-support = { path = "../rustytracker-test-support" }

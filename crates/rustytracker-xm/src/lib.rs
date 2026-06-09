@@ -7,12 +7,14 @@ use rustytracker_core::{
     EffectCommand, Envelope as CoreEnvelope, EnvelopePoint as CoreEnvelopePoint, FrequencyTable,
     Instrument, InstrumentName, Module, ModuleHeader, ModuleTitle, Note, Pattern, PatternCell,
     Sample, SampleData as CoreSampleData, SampleLoopKind, SampleName, Vibrato as CoreVibrato,
-    SAMPLES_PER_INSTRUMENT, SAMPLE_DEFAULT_FLAGS, SAMPLE_DEFAULT_VOLUME_FADEOUT,
+    EDITOR_PATTERN_CHANNELS, MAX_ACTIVE_ORDERS, MAX_INSTRUMENTS, MAX_PATTERNS, MIN_ACTIVE_ORDERS,
+    MIN_CHANNEL_COUNT, SAMPLES_PER_INSTRUMENT, SAMPLE_DEFAULT_FLAGS, SAMPLE_DEFAULT_VOLUME_FADEOUT,
 };
 
-const XM_SIGNATURE: &[u8; 17] = b"Extended Module: ";
+pub const XM_HEADER_SIGNATURE_LENGTH: usize = 17;
+pub const XM_HEADER_SIGNATURE: &[u8; XM_HEADER_SIGNATURE_LENGTH] = b"Extended Module: ";
 const XM_MARKER: u8 = 0x1a;
-const TITLE_OFFSET: usize = 17;
+const TITLE_OFFSET: usize = XM_HEADER_SIGNATURE_LENGTH;
 const TITLE_LEN: usize = 20;
 const MARKER_OFFSET: usize = 37;
 const TRACKER_OFFSET: usize = 38;
@@ -201,10 +203,33 @@ pub enum XmParseError {
         song_length: usize,
         available: usize,
     },
+    InvalidOrderCount {
+        order_count: usize,
+        minimum: usize,
+        maximum: usize,
+    },
+    InvalidChannelCount {
+        channel_count: u16,
+        minimum: u16,
+        maximum: u16,
+    },
+    TooManyPatterns {
+        pattern_count: u16,
+        maximum: usize,
+    },
+    TooManyInstruments {
+        instrument_count: u16,
+        maximum: usize,
+    },
     PatternHeaderTooShort {
         pattern_index: usize,
         expected: usize,
         actual: usize,
+    },
+    InvalidPatternHeaderLength {
+        pattern_index: usize,
+        header_length: u32,
+        minimum: usize,
     },
     PatternDataTooShort {
         pattern_index: usize,
@@ -273,6 +298,12 @@ pub enum XmWriteError {
         requested: usize,
         maximum: usize,
     },
+    EmptyOrderList,
+    InvalidChannelCount {
+        channel_count: u16,
+        minimum: u16,
+        maximum: u16,
+    },
     TooManyPatterns {
         requested: usize,
         maximum: usize,
@@ -285,6 +316,17 @@ pub enum XmWriteError {
         pattern_index: usize,
         byte_len: usize,
         maximum: usize,
+    },
+    InvalidPatternShape {
+        pattern_index: usize,
+        channels: u16,
+        required_channels: u16,
+    },
+    PatternDataOutsideChannelCount {
+        pattern_index: usize,
+        row: u16,
+        channel: u16,
+        channel_count: u16,
     },
     TooManyInstrumentSamples {
         instrument_index: usize,
@@ -440,7 +482,7 @@ pub fn parse_xm_header(bytes: &[u8]) -> XmResult<XmModuleHeader> {
         });
     }
 
-    if &bytes[..XM_SIGNATURE.len()] != XM_SIGNATURE {
+    if &bytes[..XM_HEADER_SIGNATURE_LENGTH] != XM_HEADER_SIGNATURE {
         return Err(XmParseError::InvalidSignature);
     }
 
@@ -462,6 +504,36 @@ pub fn parse_xm_header(bytes: &[u8]) -> XmResult<XmModuleHeader> {
     let flags = read_u16(bytes, XM_FLAGS_FIELD_OFFSET);
     let default_tick_speed = read_u16(bytes, XM_TICK_SPEED_FIELD_OFFSET);
     let default_bpm = read_u16(bytes, XM_BPM_FIELD_OFFSET);
+
+    if !(MIN_ACTIVE_ORDERS..=MAX_ACTIVE_ORDERS).contains(&(song_length as usize)) {
+        return Err(XmParseError::InvalidOrderCount {
+            order_count: song_length as usize,
+            minimum: MIN_ACTIVE_ORDERS,
+            maximum: MAX_ACTIVE_ORDERS,
+        });
+    }
+
+    if !(MIN_CHANNEL_COUNT..=EDITOR_PATTERN_CHANNELS).contains(&channel_count) {
+        return Err(XmParseError::InvalidChannelCount {
+            channel_count,
+            minimum: MIN_CHANNEL_COUNT,
+            maximum: EDITOR_PATTERN_CHANNELS,
+        });
+    }
+
+    if pattern_count as usize > MAX_PATTERNS {
+        return Err(XmParseError::TooManyPatterns {
+            pattern_count,
+            maximum: MAX_PATTERNS,
+        });
+    }
+
+    if instrument_count as usize > MAX_INSTRUMENTS {
+        return Err(XmParseError::TooManyInstruments {
+            instrument_count,
+            maximum: MAX_INSTRUMENTS,
+        });
+    }
 
     let order_end = ORDER_TABLE_OFFSET + song_length as usize;
     if order_end > bytes.len() {
@@ -494,30 +566,42 @@ pub fn parse_xm_header(bytes: &[u8]) -> XmResult<XmModuleHeader> {
 }
 
 pub fn write_xm_header(module: &Module) -> XmWriteResult<Vec<u8>> {
-    if module.orders.len() > XM_ORDER_TABLE_LEN {
+    if module.orders.is_empty() {
+        return Err(XmWriteError::EmptyOrderList);
+    }
+
+    if module.orders.len() > MAX_ACTIVE_ORDERS {
         return Err(XmWriteError::TooManyOrders {
             requested: module.orders.len(),
-            maximum: XM_ORDER_TABLE_LEN,
+            maximum: MAX_ACTIVE_ORDERS,
         });
     }
 
-    if module.patterns.len() > U16_MAX_AS_USIZE {
+    if !(MIN_CHANNEL_COUNT..=EDITOR_PATTERN_CHANNELS).contains(&module.header.channel_count) {
+        return Err(XmWriteError::InvalidChannelCount {
+            channel_count: module.header.channel_count,
+            minimum: MIN_CHANNEL_COUNT,
+            maximum: EDITOR_PATTERN_CHANNELS,
+        });
+    }
+
+    if module.patterns.len() > MAX_PATTERNS {
         return Err(XmWriteError::TooManyPatterns {
             requested: module.patterns.len(),
-            maximum: U16_MAX_AS_USIZE,
+            maximum: MAX_PATTERNS,
         });
     }
 
-    if module.instruments.len() > U16_MAX_AS_USIZE {
+    if module.instruments.len() > MAX_INSTRUMENTS {
         return Err(XmWriteError::TooManyInstruments {
             requested: module.instruments.len(),
-            maximum: U16_MAX_AS_USIZE,
+            maximum: MAX_INSTRUMENTS,
         });
     }
 
     let mut bytes = vec![ASCII_NUL; XM_MIN_HEADER_BYTES];
 
-    bytes[..XM_SIGNATURE.len()].copy_from_slice(XM_SIGNATURE);
+    bytes[..XM_HEADER_SIGNATURE_LENGTH].copy_from_slice(XM_HEADER_SIGNATURE);
     bytes[MARKER_OFFSET] = XM_MARKER;
     write_fixed_text(
         &mut bytes[TITLE_OFFSET..TITLE_OFFSET + TITLE_LEN],
@@ -583,10 +667,12 @@ pub fn write_xm_patterns(module: &Module) -> XmWriteResult<Vec<u8>> {
     let mut bytes = Vec::new();
 
     for (pattern_index, pattern) in module.patterns.iter().enumerate() {
-        let data = if pattern_is_empty(pattern) {
+        validate_xm_pattern_shape(module, pattern_index, pattern)?;
+
+        let data = if pattern_is_empty(pattern, module.header.channel_count) {
             Vec::new()
         } else {
-            write_xm_pattern_data(pattern)
+            write_xm_pattern_data(pattern, module.header.channel_count)
         };
 
         if data.len() > U16_MAX_AS_USIZE {
@@ -615,6 +701,39 @@ pub fn write_xm_patterns(module: &Module) -> XmWriteResult<Vec<u8>> {
     }
 
     Ok(bytes)
+}
+
+fn validate_xm_pattern_shape(
+    module: &Module,
+    pattern_index: usize,
+    pattern: &Pattern,
+) -> XmWriteResult<()> {
+    let channel_count = module.header.channel_count;
+    if pattern.channels() < channel_count {
+        return Err(XmWriteError::InvalidPatternShape {
+            pattern_index,
+            channels: pattern.channels(),
+            required_channels: channel_count,
+        });
+    }
+
+    for row in 0..pattern.rows() {
+        for channel in channel_count..pattern.channels() {
+            let cell = pattern
+                .cell(channel, row)
+                .expect("writer walks cells inside pattern bounds");
+            if !cell_is_empty(cell) {
+                return Err(XmWriteError::PatternDataOutsideChannelCount {
+                    pattern_index,
+                    row,
+                    channel,
+                    channel_count,
+                });
+            }
+        }
+    }
+
+    Ok(())
 }
 
 pub fn write_xm_instruments(module: &Module) -> XmWriteResult<Vec<u8>> {
@@ -1017,19 +1136,13 @@ fn write_xm_delta16(bytes: &mut Vec<u8>, values: &[i16]) {
     }
 }
 
-fn pattern_is_empty(pattern: &Pattern) -> bool {
+fn pattern_is_empty(pattern: &Pattern, channel_count: u16) -> bool {
     for row in 0..pattern.rows() {
-        for channel in 0..pattern.channels() {
+        for channel in 0..channel_count {
             let cell = pattern
                 .cell(channel, row)
                 .expect("writer walks cells inside pattern bounds");
-            if cell.note != Note::Empty
-                || cell.instrument != EMPTY_OPERAND
-                || cell
-                    .effects
-                    .iter()
-                    .any(|effect| *effect != EffectCommand::default())
-            {
+            if !cell_is_empty(cell) {
                 return false;
             }
         }
@@ -1038,11 +1151,20 @@ fn pattern_is_empty(pattern: &Pattern) -> bool {
     true
 }
 
-fn write_xm_pattern_data(pattern: &Pattern) -> Vec<u8> {
+fn cell_is_empty(cell: &PatternCell) -> bool {
+    cell.note == Note::Empty
+        && cell.instrument == EMPTY_OPERAND
+        && cell
+            .effects
+            .iter()
+            .all(|effect| *effect == EffectCommand::default())
+}
+
+fn write_xm_pattern_data(pattern: &Pattern, channel_count: u16) -> Vec<u8> {
     let mut bytes = Vec::new();
 
     for row in 0..pattern.rows() {
-        for channel in 0..pattern.channels() {
+        for channel in 0..channel_count {
             let cell = pattern
                 .cell(channel, row)
                 .expect("writer walks cells inside pattern bounds");
@@ -1275,6 +1397,23 @@ pub fn parse_xm_pattern_headers(
         }
 
         let header_length = read_u32(bytes, offset);
+        if header_length < fixed_pattern_header_len as u32 {
+            return Err(XmParseError::InvalidPatternHeaderLength {
+                pattern_index,
+                header_length,
+                minimum: fixed_pattern_header_len,
+            });
+        }
+
+        let declared_header_end = offset + header_length as usize;
+        if declared_header_end > bytes.len() {
+            return Err(XmParseError::PatternHeaderTooShort {
+                pattern_index,
+                expected: declared_header_end,
+                actual: bytes.len(),
+            });
+        }
+
         let packing_type = bytes[offset + XM_PATTERN_TYPE_OFFSET];
         let (row_count, packed_data_len) = if header.version == XM_VERSION_1_02 {
             (
@@ -1288,7 +1427,7 @@ pub fn parse_xm_pattern_headers(
             )
         };
 
-        let packed_data_offset = header_end;
+        let packed_data_offset = declared_header_end;
         let next_offset = packed_data_offset + packed_data_len as usize;
         if next_offset > bytes.len() {
             return Err(XmParseError::PatternDataTooShort {

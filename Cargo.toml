@@ -4,7 +4,9 @@ members = [
     "crates/rustytracker-core",
     "crates/rustytracker-edit",
     "crates/rustytracker-mod",
-    "crates/rustytracker-play", "crates/rustytracker-ui",
+    "crates/rustytracker-play",
+    "crates/rustytracker-ui",
+    "crates/rustytracker-test-support",
     "crates/rustytracker-xm",
     "crates/rustytracker-wasm",
 ]

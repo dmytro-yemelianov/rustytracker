@@ -1,7 +1,10 @@
 use std::fs;
-use std::path::PathBuf;
 
 use rustytracker_core::SampleLoopKind;
+use rustytracker_test_support::{
+    milkytracker_fixture_path as fixture_path,
+    milkytracker_fixtures_available as fixtures_available,
+};
 use rustytracker_xm::{
     parse_xm_header, parse_xm_instruments, parse_xm_pattern_headers, XmModuleHeader, XmParseError,
     XmSampleData,
@@ -266,6 +269,10 @@ const FIXTURES: &[ExpectedInstrumentSection] = &[
 
 #[test]
 fn parses_milkytracker_bundled_xm_instrument_sections() {
+    if !fixtures_available() {
+        return;
+    }
+
     for fixture in FIXTURES {
         let bytes = fs::read(fixture_path(fixture.file_name)).unwrap();
         let header = parse_xm_header(&bytes).unwrap();
@@ -501,6 +508,10 @@ fn rejects_adpcm_packed_xm_samples_explicitly() {
 
 #[test]
 fn rejects_truncated_instrument_header() {
+    if !fixtures_available() {
+        return;
+    }
+
     let bytes = fs::read(fixture_path("milky.xm")).unwrap();
     let header = parse_xm_header(&bytes).unwrap();
     let pattern_headers = parse_xm_pattern_headers(&bytes, &header).unwrap();
@@ -518,6 +529,10 @@ fn rejects_truncated_instrument_header() {
 
 #[test]
 fn rejects_truncated_sample_data() {
+    if !fixtures_available() {
+        return;
+    }
+
     let mut bytes = fs::read(fixture_path("milky.xm")).unwrap();
     let header = parse_xm_header(&bytes).unwrap();
     let pattern_headers = parse_xm_pattern_headers(&bytes, &header).unwrap();
@@ -532,12 +547,6 @@ fn rejects_truncated_sample_data() {
             ..
         })
     ));
-}
-
-fn fixture_path(file_name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../MilkyTracker/resources/music")
-        .join(file_name)
 }
 
 #[derive(Debug)]

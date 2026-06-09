@@ -1,4 +1,4 @@
-use rustytracker_core::{EffectCommand, Module, Note, NoteName};
+use rustytracker_core::{CoreError, EffectCommand, Module, Note, NoteName};
 use rustytracker_edit::{ModuleEditor, Selection};
 
 #[test]
@@ -62,6 +62,73 @@ fn test_undo_redo_snapshots() {
         editor.module().patterns[0].cell(0, 0).unwrap().instrument,
         5
     );
+}
+
+#[test]
+fn test_replace_module_with_undo() {
+    let module = Module::empty();
+    let mut editor = ModuleEditor::new(module.clone());
+
+    editor.replace_module_with_undo(module.clone());
+    assert!(!editor.can_undo());
+
+    let mut edited = module;
+    edited.orders = vec![0, 0];
+    editor.replace_module_with_undo(edited.clone());
+
+    assert_eq!(editor.module().orders, vec![0, 0]);
+    assert!(editor.can_undo());
+
+    assert!(editor.undo());
+    assert_eq!(editor.module().orders, vec![0]);
+
+    assert!(editor.redo());
+    assert_eq!(editor.module(), &edited);
+}
+
+#[test]
+fn invalid_cell_edit_does_not_create_undo_snapshot() {
+    let module = Module::empty();
+    let mut editor = ModuleEditor::new(module);
+
+    let note_c4 = Note::key(4, NoteName::C).unwrap();
+    editor.set_note(0, 0, 0, note_c4).unwrap();
+    assert_eq!(
+        editor.set_effect(
+            0,
+            0,
+            0,
+            99,
+            EffectCommand {
+                effect: 0x0c,
+                operand: 64,
+            },
+        ),
+        Err(CoreError::InvalidEffectSlot { slot: 99, slots: 2 })
+    );
+
+    assert!(editor.undo());
+    assert_eq!(
+        editor.module().patterns[0].cell(0, 0).unwrap().note,
+        Note::Empty
+    );
+    assert!(!editor.undo());
+}
+
+#[test]
+fn invalid_order_edit_does_not_create_undo_snapshot() {
+    let module = Module::empty();
+    let mut editor = ModuleEditor::new(module);
+
+    editor.insert_duplicate_order(0).unwrap();
+    assert_eq!(
+        editor.set_order_pattern(99, 4),
+        Err(CoreError::InvalidOrderIndex { index: 99, len: 2 })
+    );
+
+    assert!(editor.undo());
+    assert_eq!(editor.module().orders, vec![0]);
+    assert!(!editor.undo());
 }
 
 #[test]
