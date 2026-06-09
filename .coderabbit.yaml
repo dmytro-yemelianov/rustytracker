@@ -23,6 +23,8 @@ reviews:
         Review Rust changes for MilkyTracker compatibility, typed domain modeling, precise error context, and focused tests.
         Do not accept scattered magic numbers in production code. Numeric compatibility values must live in named constants or enums near the relevant parser/domain module, with names that explain the format or behavior.
         Inline literals are acceptable only for obvious zero/one loop mechanics, enum discriminants, local array indexes made clearer by existing constants, and fixture data in tests.
+        Treat compatibility findings as claims to prove from this repository's specs, parser/writer normalization, and tests. If the code intentionally uses an internal normalized representation and converts it at a format boundary, suggest additive compatibility or tests rather than removing the internal representation.
+        For mechanical module-splitting PRs, focus on behavior preservation, crate-root re-exports, lost trait implementations, misplaced constants, and missing facade/boundary tests. Avoid broad architecture rewrites or documentation-coverage requests unless they are directly tied to the moved API.
     - path: "crates/rustytracker-xm/**"
       instructions: |
         Treat XM parser behavior as compatibility-sensitive. Check byte offsets, lengths, bit masks, effect mapping, note conversion, and packed-cell decoding against the specs in docs/specs.
@@ -51,3 +53,4 @@ knowledge_base:
     enabled: true
     filePatterns:
       - "docs/specs/006-coding-standards.md"
+      - "docs/specs/013-ai-review-policy.md"
