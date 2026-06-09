@@ -202,7 +202,7 @@ Goal: desktop tracker UI after headless engine is credible.
 
 Status: in progress.
 
-Done:
+Tasks:
 
 - [x] add `rustytracker-ui` crate
 - [x] implement responsive egui (eframe) desktop layout (menu bar, control bar, side panels, and central grid)
@@ -211,11 +211,23 @@ Done:
 - [x] implement keyboard piano note entry and hex digit shifts for instrument/effect values in edit mode
 - [x] implement desktop file loader dialogue using `rfd` and signature-based XM/MOD auto-detection
 - [x] implement tick-accumulator simulated playback playhead tracing linked to `rustytracker-play` engine
+- [x] replace generic egui pattern grid with custom tracker-painted pattern surface
+- [x] add semantic tracker theme layer for custom-painted tracker surfaces
+- [x] add selectable tracker palette settings
+- [x] add bitmap-font-backed tracker text renderer
+- [x] replace generic transport, view, and side-panel action controls with compact tracker-styled controls
+- [x] replace generic instrument/sample editor containers and waveform with tracker-painted surfaces
+- [x] replace generic instrument/sample editor toggles and loop selector with tracker-styled controls
+- [ ] replace generic instrument/sample editor controls with compact tracker-styled controls
+- [x] split CPAL output engine and callback into a focused audio module
+- [ ] split remaining `rustytracker-ui` app/input/editor monolith into focused modules
 
 Acceptance:
 
 - UI consumes `core`, `edit`, `play`, and format crates instead of owning engine
   behavior
+- pattern/editor surfaces use fixed tracker metrics, semantic colors, and
+  deterministic hit testing
 
 ## Immediate Backlog
 
