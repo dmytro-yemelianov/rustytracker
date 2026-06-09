@@ -17,17 +17,16 @@
 
 mod channel;
 mod cursor;
+mod effects;
 mod envelope;
 mod error;
+mod flow;
 mod timing;
 
 pub use channel::{
-    ChannelSampleFrame, PlaybackChannelState, PlaybackSampleValue, EFFECT_ARPEGGIO_NONZERO,
-    EFFECT_ARPEGGIO_ZERO, EFFECT_FINE_VOLUME_SLIDE_DOWN, EFFECT_FINE_VOLUME_SLIDE_UP,
-    EFFECT_PANNING, EFFECT_PORTAMENTO_DOWN, EFFECT_PORTAMENTO_UP, EFFECT_SAMPLE_OFFSET,
-    EFFECT_TONE_PORTAMENTO, EFFECT_VIBRATO, EFFECT_VIBRATO_VOLSLIDE, EFFECT_VOLUME,
-    EFFECT_VOLUME_SLIDE, PLAYBACK_EMPTY_VOLUME, PLAYBACK_INSTRUMENT_NUMBER_BASE,
-    PLAYBACK_PCM8_TO_I16_SHIFT, PLAYBACK_SAMPLE_FRAME_STEP, PLAYBACK_SAMPLE_START_FRAME, VIB_TAB,
+    ChannelSampleFrame, PlaybackChannelState, PlaybackSampleValue, PLAYBACK_EMPTY_VOLUME,
+    PLAYBACK_INSTRUMENT_NUMBER_BASE, PLAYBACK_PCM8_TO_I16_SHIFT, PLAYBACK_SAMPLE_FRAME_STEP,
+    PLAYBACK_SAMPLE_START_FRAME,
 };
 pub use cursor::{
     ChannelRowState, PlaybackClock, PlaybackCursor, PlaybackPosition, PlaybackRowState, RowAdvance,
@@ -35,9 +34,18 @@ pub use cursor::{
     PLAYBACK_FIRST_ROW, PLAYBACK_FIRST_TICK, PLAYBACK_ORDER_STEP, PLAYBACK_ROW_STEP,
     PLAYBACK_TICK_STEP,
 };
+pub use effects::{
+    EFFECT_ARPEGGIO_NONZERO, EFFECT_ARPEGGIO_ZERO, EFFECT_FINE_VOLUME_SLIDE_DOWN,
+    EFFECT_FINE_VOLUME_SLIDE_UP, EFFECT_PANNING, EFFECT_PORTAMENTO_DOWN, EFFECT_PORTAMENTO_UP,
+    EFFECT_SAMPLE_OFFSET, EFFECT_TONE_PORTAMENTO, EFFECT_VIBRATO, EFFECT_VIBRATO_VOLSLIDE,
+    EFFECT_VOLUME, EFFECT_VOLUME_SLIDE, VIB_TAB,
+};
 pub use envelope::PlaybackEnvelopeState;
 use error::validate_sample_rate;
 pub use error::{PlaybackError, PlaybackResult, PLAYBACK_MIN_SAMPLE_RATE};
+pub use flow::{
+    EFFECT_PATTERN_BREAK, EFFECT_POSITION_JUMP, EFFECT_SET_SPEED_BPM, SPEED_BPM_THRESHOLD,
+};
 use rustytracker_core::{FrequencyTable, Module, Sample, SampleData, SampleLoopKind};
 pub use timing::{
     PlaybackTiming, PLAYBACK_MIN_BPM, PLAYBACK_MIN_TICK_SPEED, PLAYBACK_XM_TICK_NANOS_AT_ONE_BPM,
@@ -45,11 +53,6 @@ pub use timing::{
 
 pub const PLAYBACK_MONO_SILENCE: RawMonoPcmFrame = 0;
 pub const PLAYBACK_STEREO_SILENCE: RawStereoPcmFrame = (0, 0);
-pub const EFFECT_SET_SPEED_BPM: u8 = 0x0f;
-pub const SPEED_BPM_THRESHOLD: u8 = 32;
-
-pub const EFFECT_POSITION_JUMP: u8 = 0x0b;
-pub const EFFECT_PATTERN_BREAK: u8 = 0x0d;
 
 pub type RawMonoPcmFrame = i32;
 pub type RawStereoPcmFrame = (i32, i32);
@@ -436,51 +439,8 @@ impl PlaybackState {
         module: &Module,
         row_state: &PlaybackRowState,
     ) -> PlaybackResult<()> {
-        let mut requested_order = None;
-        let mut requested_row = None;
-
-        for channel in &row_state.channels {
-            for effect in &channel.cell.effects {
-                if effect.effect == EFFECT_SET_SPEED_BPM {
-                    if effect.operand == 0 {
-                        self.song_ended = true;
-                    } else if effect.operand < SPEED_BPM_THRESHOLD {
-                        self.clock.set_tick_speed(u16::from(effect.operand))?;
-                    } else {
-                        self.clock.set_bpm(u16::from(effect.operand))?;
-                    }
-                } else if effect.effect == EFFECT_POSITION_JUMP {
-                    requested_order = Some(usize::from(effect.operand));
-                } else if effect.effect == EFFECT_PATTERN_BREAK {
-                    let bcd = effect.operand;
-                    let row = u16::from(bcd >> 4) * 10 + u16::from(bcd & 0x0f);
-                    requested_row = Some(row);
-                }
-            }
-        }
-
-        if requested_order.is_some() || requested_row.is_some() {
-            let current_pos = self.clock.position(module)?;
-
-            let target_order = match requested_order {
-                Some(order) => order,
-                None => {
-                    let next_order = current_pos.order_index + 1;
-                    if next_order >= module.orders.len() {
-                        usize::from(module.header.restart_position)
-                    } else {
-                        next_order
-                    }
-                }
-            };
-
-            let target_row = requested_row.unwrap_or_default();
-
-            self.clock.set_jump_target(PlaybackPosition {
-                order_index: target_order,
-                pattern_index: 0,
-                row: target_row,
-            });
+        if flow::apply_row_flow(&mut self.clock, module, row_state)? {
+            self.song_ended = true;
         }
 
         for channel in &row_state.channels {

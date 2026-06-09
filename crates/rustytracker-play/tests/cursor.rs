@@ -5,8 +5,10 @@ use rustytracker_core::{
 use rustytracker_play::{
     ChannelSampleFrame, PlaybackChannelState, PlaybackClock, PlaybackCursor, PlaybackEnvelopeState,
     PlaybackError, PlaybackSampleValue, PlaybackState, PlaybackTiming, RowAdvance, TickAdvance,
-    EFFECT_ARPEGGIO_ZERO, PLAYBACK_FIRST_ORDER_INDEX, PLAYBACK_FIRST_ROW, PLAYBACK_FIRST_TICK,
-    PLAYBACK_ORDER_STEP, PLAYBACK_ROW_STEP, PLAYBACK_TICK_STEP, VIB_TAB,
+    EFFECT_ARPEGGIO_ZERO, EFFECT_PATTERN_BREAK, EFFECT_POSITION_JUMP, EFFECT_SET_SPEED_BPM,
+    EFFECT_TONE_PORTAMENTO, EFFECT_VOLUME_SLIDE, PLAYBACK_FIRST_ORDER_INDEX, PLAYBACK_FIRST_ROW,
+    PLAYBACK_FIRST_TICK, PLAYBACK_ORDER_STEP, PLAYBACK_ROW_STEP, PLAYBACK_TICK_STEP,
+    SPEED_BPM_THRESHOLD, VIB_TAB,
 };
 
 const PLAY_TEST_CHANNELS: u16 = 1;
@@ -68,6 +70,12 @@ fn crate_root_re_exports_channel_api() {
     let _ = core::mem::size_of::<PlaybackSampleValue>();
 
     assert_eq!(EFFECT_ARPEGGIO_ZERO, 0x00);
+    assert_eq!(EFFECT_TONE_PORTAMENTO, 0x03);
+    assert_eq!(EFFECT_VOLUME_SLIDE, 0x0a);
+    assert_eq!(EFFECT_POSITION_JUMP, 0x0b);
+    assert_eq!(EFFECT_PATTERN_BREAK, 0x0d);
+    assert_eq!(EFFECT_SET_SPEED_BPM, 0x0f);
+    assert_eq!(SPEED_BPM_THRESHOLD, 32);
     assert_eq!(VIB_TAB.len(), 32);
 }
 
