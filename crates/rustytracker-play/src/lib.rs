@@ -26,6 +26,7 @@ pub const PLAYBACK_SAMPLE_FRAME_STEP: usize = 1;
 pub const PLAYBACK_EMPTY_VOLUME: u8 = 0;
 pub const PLAYBACK_PCM8_TO_I16_SHIFT: u32 = 8;
 pub const PLAYBACK_MONO_SILENCE: RawMonoPcmFrame = 0;
+pub const PLAYBACK_STEREO_SILENCE: RawStereoPcmFrame = (0, 0);
 pub const EFFECT_SET_SPEED_BPM: u8 = 0x0f;
 pub const SPEED_BPM_THRESHOLD: u8 = 32;
 
@@ -1252,12 +1253,22 @@ impl PlaybackState {
         sample_rate: u32,
         frame_count: usize,
     ) -> PlaybackResult<Vec<RawMonoPcmFrame>> {
-        let mut rendered = Vec::with_capacity(frame_count);
-        for _ in 0..frame_count {
-            rendered.push(self.render_raw_mono_frame(module, sample_rate)?);
+        let mut rendered = vec![PLAYBACK_MONO_SILENCE; frame_count];
+        self.render_raw_mono_into(module, sample_rate, &mut rendered)?;
+        Ok(rendered)
+    }
+
+    pub fn render_raw_mono_into(
+        &mut self,
+        module: &Module,
+        sample_rate: u32,
+        output: &mut [RawMonoPcmFrame],
+    ) -> PlaybackResult<()> {
+        for frame in output {
+            *frame = self.render_raw_mono_frame(module, sample_rate)?;
         }
 
-        Ok(rendered)
+        Ok(())
     }
 
     pub fn render_raw_stereo_pcm(
@@ -1266,12 +1277,22 @@ impl PlaybackState {
         sample_rate: u32,
         frame_count: usize,
     ) -> PlaybackResult<Vec<RawStereoPcmFrame>> {
-        let mut rendered = Vec::with_capacity(frame_count);
-        for _ in 0..frame_count {
-            rendered.push(self.render_raw_stereo_frame(module, sample_rate)?);
+        let mut rendered = vec![PLAYBACK_STEREO_SILENCE; frame_count];
+        self.render_raw_stereo_into(module, sample_rate, &mut rendered)?;
+        Ok(rendered)
+    }
+
+    pub fn render_raw_stereo_into(
+        &mut self,
+        module: &Module,
+        sample_rate: u32,
+        output: &mut [RawStereoPcmFrame],
+    ) -> PlaybackResult<()> {
+        for frame in output {
+            *frame = self.render_raw_stereo_frame(module, sample_rate)?;
         }
 
-        Ok(rendered)
+        Ok(())
     }
 
     pub fn render_to_wav(&mut self, module: &Module, sample_rate: u32) -> PlaybackResult<Vec<u8>> {
@@ -1287,15 +1308,14 @@ impl PlaybackState {
 
         let mut total_samples_written: u32 = 0;
         let buffer_frames = 1024;
+        let mut frames = vec![PLAYBACK_STEREO_SILENCE; buffer_frames];
+        let mut bytes = Vec::with_capacity(buffer_frames * 4);
 
         while !self.song_ended() {
-            let frames = self.render_raw_stereo_pcm(module, sample_rate, buffer_frames)?;
-            if frames.is_empty() {
-                break;
-            }
+            self.render_raw_stereo_into(module, sample_rate, &mut frames)?;
 
-            let mut bytes = Vec::with_capacity(frames.len() * 4);
-            for (left_i32, right_i32) in frames {
+            bytes.clear();
+            for &(left_i32, right_i32) in &frames {
                 let left_i16 = left_i32.clamp(-32768, 32767) as i16;
                 let right_i16 = right_i32.clamp(-32768, 32767) as i16;
                 bytes.extend_from_slice(&left_i16.to_le_bytes());
@@ -1349,7 +1369,7 @@ impl PlaybackState {
         Ok(buffer.into_inner())
     }
 
-    fn render_raw_stereo_frame(
+    pub fn render_raw_stereo_frame(
         &mut self,
         module: &Module,
         sample_rate: u32,
@@ -1363,13 +1383,13 @@ impl PlaybackState {
 
         while self.tick_samples_fractional_rem <= 0 {
             if self.song_ended {
-                return Ok((0, 0));
+                return Ok(PLAYBACK_STEREO_SILENCE);
             }
 
             match self.advance_tick(module)? {
                 TickAdvance::SongEnd => {
                     self.song_ended = true;
-                    return Ok((0, 0));
+                    return Ok(PLAYBACK_STEREO_SILENCE);
                 }
                 _ => {
                     let new_bpm = self.clock.timing().bpm() as i64;
@@ -1434,7 +1454,7 @@ impl PlaybackState {
         Ok((mixed_l as i32, mixed_r as i32))
     }
 
-    fn render_raw_mono_frame(
+    pub fn render_raw_mono_frame(
         &mut self,
         module: &Module,
         sample_rate: u32,
@@ -1710,36 +1730,6 @@ fn next_frame_index(frame: usize, sample: &Sample) -> Option<usize> {
     }
 }
 
-fn relative_frame_index(frame: usize, offset: i32, sample: &Sample) -> Option<usize> {
-    let frame_count = sample.data.frame_count();
-    if frame_count == 0 {
-        return None;
-    }
-    let has_loop = sample.loop_length > 0 && sample.loop_kind != SampleLoopKind::None;
-    if has_loop {
-        let loop_start = sample.loop_start as i32;
-        let loop_length = sample.loop_length as i32;
-        let loop_end = loop_start + loop_length;
-
-        let mut target = frame as i32 + offset;
-        if target < loop_start {
-            let diff = loop_start - target;
-            target = loop_end - 1 - (diff - 1) % loop_length;
-        } else if target >= loop_end {
-            let diff = target - loop_end;
-            target = loop_start + diff % loop_length;
-        }
-        Some(target as usize)
-    } else {
-        let target = frame as i32 + offset;
-        if target < 0 || target >= frame_count as i32 {
-            None
-        } else {
-            Some(target as usize)
-        }
-    }
-}
-
 fn get_sample_value_linear(data: &SampleData, frame: usize, fraction: u32, sample: &Sample) -> f64 {
     let t = fraction as f64 / u32::MAX as f64;
     let y0 = sample_value_as_f64(data, frame);
@@ -1749,35 +1739,6 @@ fn get_sample_value_linear(data: &SampleData, frame: usize, fraction: u32, sampl
         0.0
     };
     y0 + t * (y1 - y0)
-}
-
-#[allow(dead_code)]
-fn get_sample_value_cubic(data: &SampleData, frame: usize, fraction: u32, sample: &Sample) -> f64 {
-    let t = fraction as f64 / u32::MAX as f64;
-
-    let y0 = if let Some(idx) = relative_frame_index(frame, -1, sample) {
-        sample_value_as_f64(data, idx)
-    } else {
-        0.0
-    };
-    let y1 = sample_value_as_f64(data, frame);
-    let y2 = if let Some(idx) = relative_frame_index(frame, 1, sample) {
-        sample_value_as_f64(data, idx)
-    } else {
-        0.0
-    };
-    let y3 = if let Some(idx) = relative_frame_index(frame, 2, sample) {
-        sample_value_as_f64(data, idx)
-    } else {
-        0.0
-    };
-
-    let a = -0.5 * y0 + 1.5 * y1 - 1.5 * y2 + 0.5 * y3;
-    let b = y0 - 2.5 * y1 + 2.0 * y2 - 0.5 * y3;
-    let c = -0.5 * y0 + 0.5 * y2;
-    let d = y1;
-
-    ((a * t + b) * t + c) * t + d
 }
 
 fn period_to_frequency(period: u32, table: FrequencyTable, use_pal_clock: bool) -> f64 {

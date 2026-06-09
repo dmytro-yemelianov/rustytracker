@@ -226,6 +226,11 @@ pub enum XmParseError {
         expected: usize,
         actual: usize,
     },
+    InvalidPatternHeaderLength {
+        pattern_index: usize,
+        header_length: u32,
+        minimum: usize,
+    },
     PatternDataTooShort {
         pattern_index: usize,
         expected: usize,
@@ -311,6 +316,17 @@ pub enum XmWriteError {
         pattern_index: usize,
         byte_len: usize,
         maximum: usize,
+    },
+    InvalidPatternShape {
+        pattern_index: usize,
+        channels: u16,
+        required_channels: u16,
+    },
+    PatternDataOutsideChannelCount {
+        pattern_index: usize,
+        row: u16,
+        channel: u16,
+        channel_count: u16,
     },
     TooManyInstrumentSamples {
         instrument_index: usize,
@@ -651,10 +667,12 @@ pub fn write_xm_patterns(module: &Module) -> XmWriteResult<Vec<u8>> {
     let mut bytes = Vec::new();
 
     for (pattern_index, pattern) in module.patterns.iter().enumerate() {
-        let data = if pattern_is_empty(pattern) {
+        validate_xm_pattern_shape(module, pattern_index, pattern)?;
+
+        let data = if pattern_is_empty(pattern, module.header.channel_count) {
             Vec::new()
         } else {
-            write_xm_pattern_data(pattern)
+            write_xm_pattern_data(pattern, module.header.channel_count)
         };
 
         if data.len() > U16_MAX_AS_USIZE {
@@ -683,6 +701,39 @@ pub fn write_xm_patterns(module: &Module) -> XmWriteResult<Vec<u8>> {
     }
 
     Ok(bytes)
+}
+
+fn validate_xm_pattern_shape(
+    module: &Module,
+    pattern_index: usize,
+    pattern: &Pattern,
+) -> XmWriteResult<()> {
+    let channel_count = module.header.channel_count;
+    if pattern.channels() < channel_count {
+        return Err(XmWriteError::InvalidPatternShape {
+            pattern_index,
+            channels: pattern.channels(),
+            required_channels: channel_count,
+        });
+    }
+
+    for row in 0..pattern.rows() {
+        for channel in channel_count..pattern.channels() {
+            let cell = pattern
+                .cell(channel, row)
+                .expect("writer walks cells inside pattern bounds");
+            if !cell_is_empty(cell) {
+                return Err(XmWriteError::PatternDataOutsideChannelCount {
+                    pattern_index,
+                    row,
+                    channel,
+                    channel_count,
+                });
+            }
+        }
+    }
+
+    Ok(())
 }
 
 pub fn write_xm_instruments(module: &Module) -> XmWriteResult<Vec<u8>> {
@@ -1085,19 +1136,13 @@ fn write_xm_delta16(bytes: &mut Vec<u8>, values: &[i16]) {
     }
 }
 
-fn pattern_is_empty(pattern: &Pattern) -> bool {
+fn pattern_is_empty(pattern: &Pattern, channel_count: u16) -> bool {
     for row in 0..pattern.rows() {
-        for channel in 0..pattern.channels() {
+        for channel in 0..channel_count {
             let cell = pattern
                 .cell(channel, row)
                 .expect("writer walks cells inside pattern bounds");
-            if cell.note != Note::Empty
-                || cell.instrument != EMPTY_OPERAND
-                || cell
-                    .effects
-                    .iter()
-                    .any(|effect| *effect != EffectCommand::default())
-            {
+            if !cell_is_empty(cell) {
                 return false;
             }
         }
@@ -1106,11 +1151,20 @@ fn pattern_is_empty(pattern: &Pattern) -> bool {
     true
 }
 
-fn write_xm_pattern_data(pattern: &Pattern) -> Vec<u8> {
+fn cell_is_empty(cell: &PatternCell) -> bool {
+    cell.note == Note::Empty
+        && cell.instrument == EMPTY_OPERAND
+        && cell
+            .effects
+            .iter()
+            .all(|effect| *effect == EffectCommand::default())
+}
+
+fn write_xm_pattern_data(pattern: &Pattern, channel_count: u16) -> Vec<u8> {
     let mut bytes = Vec::new();
 
     for row in 0..pattern.rows() {
-        for channel in 0..pattern.channels() {
+        for channel in 0..channel_count {
             let cell = pattern
                 .cell(channel, row)
                 .expect("writer walks cells inside pattern bounds");
@@ -1343,6 +1397,23 @@ pub fn parse_xm_pattern_headers(
         }
 
         let header_length = read_u32(bytes, offset);
+        if header_length < fixed_pattern_header_len as u32 {
+            return Err(XmParseError::InvalidPatternHeaderLength {
+                pattern_index,
+                header_length,
+                minimum: fixed_pattern_header_len,
+            });
+        }
+
+        let declared_header_end = offset + header_length as usize;
+        if declared_header_end > bytes.len() {
+            return Err(XmParseError::PatternHeaderTooShort {
+                pattern_index,
+                expected: declared_header_end,
+                actual: bytes.len(),
+            });
+        }
+
         let packing_type = bytes[offset + XM_PATTERN_TYPE_OFFSET];
         let (row_count, packed_data_len) = if header.version == XM_VERSION_1_02 {
             (
@@ -1356,7 +1427,7 @@ pub fn parse_xm_pattern_headers(
             )
         };
 
-        let packed_data_offset = header_end;
+        let packed_data_offset = declared_header_end;
         let next_offset = packed_data_offset + packed_data_len as usize;
         if next_offset > bytes.len() {
             return Err(XmParseError::PatternDataTooShort {

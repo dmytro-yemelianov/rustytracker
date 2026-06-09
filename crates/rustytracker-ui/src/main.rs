@@ -191,13 +191,12 @@ where
 
     for frame in output.chunks_mut(2) {
         let (left_sample, right_sample) = if !song_ended {
-            match playback.render_raw_stereo_pcm(module, sample_rate, 1) {
-                Ok(frames) => {
+            match playback.render_raw_stereo_frame(module, sample_rate) {
+                Ok((raw_l, raw_r)) => {
                     if playback.song_ended() {
                         song_ended = true;
                         (0.0, 0.0)
                     } else {
-                        let (raw_l, raw_r) = frames.first().copied().unwrap_or((0, 0));
                         let l = (raw_l.clamp(-32768, 32767) as f32) / 32768.0;
                         let r = (raw_r.clamp(-32768, 32767) as f32) / 32768.0;
                         (l, r)

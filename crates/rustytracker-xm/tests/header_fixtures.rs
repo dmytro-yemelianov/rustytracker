@@ -501,6 +501,47 @@ fn rejects_truncated_pattern_data() {
 }
 
 #[test]
+fn pattern_headers_advance_by_declared_header_length() {
+    let mut bytes = synthetic_xm_header_bytes();
+    bytes[XM_TEST_PATTERNS_FIELD_OFFSET..XM_TEST_PATTERNS_FIELD_OFFSET + 2]
+        .copy_from_slice(&1_u16.to_le_bytes());
+    let pattern_offset = bytes.len();
+    bytes.extend_from_slice(&12_u32.to_le_bytes());
+    bytes.push(0);
+    bytes.extend_from_slice(&1_u16.to_le_bytes());
+    bytes.extend_from_slice(&5_u16.to_le_bytes());
+    bytes.extend_from_slice(&[0xaa, 0xbb, 0xcc]);
+    bytes.extend_from_slice(&[49, 1, 0, 0, 0]);
+
+    let header = parse_xm_header(&bytes).unwrap();
+    let patterns = parse_xm_pattern_headers(&bytes, &header).unwrap();
+
+    assert_eq!(patterns[0].header_length, 12);
+    assert_eq!(patterns[0].packed_data_offset, pattern_offset + 12);
+    assert_eq!(patterns[0].next_offset, pattern_offset + 17);
+}
+
+#[test]
+fn rejects_pattern_headers_smaller_than_required_fields() {
+    let mut bytes = synthetic_xm_header_bytes();
+    bytes[XM_TEST_PATTERNS_FIELD_OFFSET..XM_TEST_PATTERNS_FIELD_OFFSET + 2]
+        .copy_from_slice(&1_u16.to_le_bytes());
+    bytes.extend_from_slice(&8_u32.to_le_bytes());
+    bytes.extend_from_slice(&[0; 5]);
+
+    let header = parse_xm_header(&bytes).unwrap();
+
+    assert_eq!(
+        parse_xm_pattern_headers(&bytes, &header).unwrap_err(),
+        XmParseError::InvalidPatternHeaderLength {
+            pattern_index: 0,
+            header_length: 8,
+            minimum: 9,
+        }
+    );
+}
+
+#[test]
 fn rejects_non_xm_signature() {
     if !fixtures_available() {
         return;

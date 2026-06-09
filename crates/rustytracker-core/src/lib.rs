@@ -436,7 +436,7 @@ impl Instrument {
         Self {
             name: InstrumentName::default(),
             sample_slots,
-            note_sample_map: vec![Some(DEFAULT_NOTE_SAMPLE_INDEX); MAX_XM_NOTES as usize],
+            note_sample_map: vec![Some(first_sample); MAX_XM_NOTES as usize],
             volume_envelope: Envelope::default(),
             panning_envelope: Envelope::default(),
             vibrato: Vibrato::default(),

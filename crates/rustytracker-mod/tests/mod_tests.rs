@@ -1,4 +1,6 @@
-use rustytracker_core::{Module, Note, Sample, SampleData, SampleLoopKind};
+use rustytracker_core::{
+    EffectCommand, Module, Note, Pattern, PatternCell, Sample, SampleData, SampleLoopKind,
+};
 use rustytracker_mod::{parse_mod_module, write_mod_module, ModParseError, ModWriteError};
 
 /// Helper to generate a valid, minimal MOD buffer.
@@ -142,6 +144,70 @@ fn rejects_mod_samples_that_exceed_header_length_field() {
             sample_index: 0,
             byte_len: sample_len,
             maximum: 131_070,
+        }
+    );
+}
+
+#[test]
+fn mod_writer_exports_samples_through_instrument_slots() {
+    let mut module = Module::empty();
+    module.header.channel_count = 4;
+    module.instruments[1].sample_slots[0] = Some(16);
+    module.samples[1] = Sample {
+        data: SampleData::Pcm8(vec![1, 1, 1, 1]),
+        ..Sample::default()
+    };
+    module.samples[16] = Sample {
+        data: SampleData::Pcm8(vec![9, 8, 7, 6]),
+        volume: 128,
+        finetune: -16,
+        ..Sample::default()
+    };
+
+    let exported = write_mod_module(&module).unwrap();
+    let reparsed = parse_mod_module(&exported).unwrap();
+
+    assert_eq!(reparsed.samples[1].volume, 128);
+    assert_eq!(reparsed.samples[1].finetune, -16);
+    assert_eq!(reparsed.samples[1].data, SampleData::Pcm8(vec![9, 8, 7, 6]));
+}
+
+#[test]
+fn mod_writer_rejects_patterns_that_do_not_match_mod_shape() {
+    let mut module = Module::empty();
+    module.header.channel_count = 4;
+    module.patterns[0] = Pattern::new(63, 4, rustytracker_core::DEFAULT_EFFECT_SLOTS);
+
+    assert_eq!(
+        write_mod_module(&module).unwrap_err(),
+        ModWriteError::InvalidPatternShape {
+            pattern_index: 0,
+            rows: 63,
+            channels: 4,
+            required_rows: 64,
+            required_channels: 4,
+        }
+    );
+}
+
+#[test]
+fn mod_writer_rejects_extra_effect_slots_that_mod_cannot_store() {
+    let mut module = Module::empty();
+    module.header.channel_count = 4;
+    let mut cell = PatternCell::default();
+    cell.effects[1] = EffectCommand {
+        effect: 0x0f,
+        operand: 0x7d,
+    };
+    module.patterns[0].set_cell(0, 0, cell).unwrap();
+
+    assert_eq!(
+        write_mod_module(&module).unwrap_err(),
+        ModWriteError::UnsupportedExtraEffect {
+            pattern_index: 0,
+            row: 0,
+            channel: 0,
+            effect_slot: 1,
         }
     );
 }

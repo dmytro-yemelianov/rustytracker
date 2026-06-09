@@ -31,19 +31,29 @@ impl RustyTrackerWasmEngine {
     }
 
     pub fn render_stereo(&mut self, sample_rate: u32, out_l: &mut [f32], out_r: &mut [f32]) {
-        let frame_count = out_l.len();
-        if let Ok(frames) =
-            self.playback
-                .render_raw_stereo_pcm(&self.module, sample_rate, frame_count)
-        {
-            for (i, &(left_i32, right_i32)) in frames.iter().enumerate() {
-                if i < out_l.len() {
+        for i in 0..out_l.len() {
+            match self
+                .playback
+                .render_raw_stereo_frame(&self.module, sample_rate)
+            {
+                Ok((left_i32, right_i32)) => {
                     out_l[i] = (left_i32.clamp(-32768, 32767) as f32) / 32768.0;
+                    if i < out_r.len() {
+                        out_r[i] = (right_i32.clamp(-32768, 32767) as f32) / 32768.0;
+                    }
                 }
-                if i < out_r.len() {
-                    out_r[i] = (right_i32.clamp(-32768, 32767) as f32) / 32768.0;
+                Err(_) => {
+                    out_l[i..].fill(0.0);
+                    if i < out_r.len() {
+                        out_r[i..].fill(0.0);
+                    }
+                    return;
                 }
             }
+        }
+
+        if out_r.len() > out_l.len() {
+            out_r[out_l.len()..].fill(0.0);
         }
     }
 

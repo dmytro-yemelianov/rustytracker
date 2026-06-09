@@ -380,6 +380,26 @@ pub enum ModWriteError {
         byte_len: usize,
         maximum: usize,
     },
+    MissingSample {
+        instrument_index: usize,
+        sample_index: usize,
+    },
+    MissingPattern {
+        pattern_index: usize,
+    },
+    InvalidPatternShape {
+        pattern_index: usize,
+        rows: u16,
+        channels: u16,
+        required_rows: u16,
+        required_channels: u16,
+    },
+    UnsupportedExtraEffect {
+        pattern_index: usize,
+        row: u16,
+        channel: u16,
+        effect_slot: usize,
+    },
 }
 
 impl std::fmt::Display for ModWriteError {
@@ -395,6 +415,35 @@ impl std::fmt::Display for ModWriteError {
             } => write!(
                 f,
                 "Sample {sample_index} is too long for MOD format: {byte_len} bytes, maximum {maximum}"
+            ),
+            Self::MissingSample {
+                instrument_index,
+                sample_index,
+            } => write!(
+                f,
+                "Instrument {instrument_index} references missing sample {sample_index}"
+            ),
+            Self::MissingPattern { pattern_index } => {
+                write!(f, "Order list references missing pattern {pattern_index}")
+            }
+            Self::InvalidPatternShape {
+                pattern_index,
+                rows,
+                channels,
+                required_rows,
+                required_channels,
+            } => write!(
+                f,
+                "Pattern {pattern_index} has shape {rows}x{channels}, but MOD export requires {required_rows}x{required_channels}"
+            ),
+            Self::UnsupportedExtraEffect {
+                pattern_index,
+                row,
+                channel,
+                effect_slot,
+            } => write!(
+                f,
+                "Pattern {pattern_index} row {row} channel {channel} has non-empty extra effect slot {effect_slot}, which MOD cannot represent"
             ),
         }
     }
@@ -454,7 +503,7 @@ pub fn write_mod_module(module: &Module) -> Result<Vec<u8>, ModWriteError> {
         let loop_start_words;
         let loop_length_words;
 
-        if let Some(sample) = module.samples.get(i) {
+        if let Some((sample_index, sample)) = mod_instrument_sample(module, i)? {
             let sample_bytes = match &sample.data {
                 SampleData::Pcm8(data) => {
                     let mut data = data.clone();
@@ -480,7 +529,7 @@ pub fn write_mod_module(module: &Module) -> Result<Vec<u8>, ModWriteError> {
 
             if final_bytes.len() > MOD_MAX_SAMPLE_BYTES {
                 return Err(ModWriteError::SampleTooLong {
-                    sample_index: i,
+                    sample_index,
                     byte_len: final_bytes.len(),
                     maximum: MOD_MAX_SAMPLE_BYTES,
                 });
@@ -540,16 +589,23 @@ pub fn write_mod_module(module: &Module) -> Result<Vec<u8>, ModWriteError> {
         let pattern = module
             .patterns
             .get(p)
-            .ok_or(ModWriteError::TooManyPatterns {
-                patterns: num_patterns,
-            })?;
+            .ok_or(ModWriteError::MissingPattern { pattern_index: p })?;
+
+        if pattern.rows() != 64 || pattern.channels() < module.header.channel_count {
+            return Err(ModWriteError::InvalidPatternShape {
+                pattern_index: p,
+                rows: pattern.rows(),
+                channels: pattern.channels(),
+                required_rows: 64,
+                required_channels: module.header.channel_count,
+            });
+        }
 
         for r in 0..64 {
             for c in 0..module.header.channel_count {
                 let cell = pattern
                     .cell(c, r)
-                    .cloned()
-                    .unwrap_or_else(|_| PatternCell::default());
+                    .expect("writer validated pattern shape before walking cells");
 
                 let note_val = cell.note.raw();
                 let note_period = note_to_amiga_period(note_val);
@@ -560,7 +616,18 @@ pub fn write_mod_module(module: &Module) -> Result<Vec<u8>, ModWriteError> {
                     0
                 };
 
-                let primary_effect = cell.effects.first().cloned().unwrap_or_default();
+                for (effect_slot, effect) in cell.effects.iter().enumerate().skip(1) {
+                    if *effect != EffectCommand::default() {
+                        return Err(ModWriteError::UnsupportedExtraEffect {
+                            pattern_index: p,
+                            row: r,
+                            channel: c,
+                            effect_slot,
+                        });
+                    }
+                }
+
+                let primary_effect = cell.effects.first().copied().unwrap_or_default();
                 let (effect, operand) =
                     effect_to_mod(primary_effect.effect, primary_effect.operand);
 
@@ -583,6 +650,26 @@ pub fn write_mod_module(module: &Module) -> Result<Vec<u8>, ModWriteError> {
     }
 
     Ok(bytes)
+}
+
+fn mod_instrument_sample(
+    module: &Module,
+    instrument_index: usize,
+) -> Result<Option<(usize, &Sample)>, ModWriteError> {
+    let Some(instrument) = module.instruments.get(instrument_index) else {
+        return Ok(None);
+    };
+    let Some(sample_index) = instrument.sample_slots.first().and_then(|slot| *slot) else {
+        return Ok(None);
+    };
+    let Some(sample) = module.samples.get(sample_index) else {
+        return Err(ModWriteError::MissingSample {
+            instrument_index,
+            sample_index,
+        });
+    };
+
+    Ok(Some((sample_index, sample)))
 }
 
 fn pad_string(s: &str, len: usize) -> Vec<u8> {
