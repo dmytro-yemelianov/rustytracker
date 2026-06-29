@@ -32,7 +32,7 @@ pub(crate) const USAGE: &str = concat!(
     "usage: rustytracker dump <module.xm|module.mod> --format json\n",
     "       rustytracker play-state <module.xm|module.mod> --rows <count>\n",
     "       rustytracker export-wav <module.xm|module.mod> <output.wav> ",
-    "[--sample-rate <rate>] [--mixer <hifi|milkytracker|amiga|protracker>]"
+    "[--sample-rate <rate>] [--mixer <hifi|rustysynth|amiga|protracker>]"
 );
 const PLAY_STATE_MIN_ROWS: usize = 1;
 const FNV_OFFSET: u64 = 0xcbf29ce484222325;
