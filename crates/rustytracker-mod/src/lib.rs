@@ -3,6 +3,8 @@
 //! Handles 15-instrument and 31-instrument MOD modules, Amiga period note decoding,
 //! standard effect mapping, and signed 8-bit PCM sample loading.
 
+mod error;
+
 use rustytracker_core::{
     EffectCommand, Envelope, Instrument, Module, Note, Pattern, PatternCell, Sample, SampleData,
     SampleLoopKind, DEFAULT_BPM, DEFAULT_EFFECT_SLOTS, DEFAULT_INSTRUMENTS, DEFAULT_MAIN_VOLUME,
@@ -10,6 +12,8 @@ use rustytracker_core::{
     MIN_CHANNEL_COUNT, SAMPLES_PER_INSTRUMENT, SAMPLE_DEFAULT_PANNING,
     SAMPLE_DEFAULT_RELATIVE_NOTE, SAMPLE_DEFAULT_TYPE, SAMPLE_DEFAULT_VOLUME_FADEOUT,
 };
+
+pub use error::{ModParseError, ModWriteError};
 
 const MOD_MIN_15_INSTRUMENT_BYTES: usize = 600;
 const MOD_TITLE_LEN: usize = 20;
@@ -37,24 +41,6 @@ const MOD_RESTART_POSITION_MASK: u16 = 0x7f;
 const MOD_EMPTY_LOOP_START_WORDS: u16 = 0;
 const MOD_EMPTY_LOOP_LENGTH_WORDS: u16 = 1;
 const MOD_SAMPLE_8_BIT_FLAGS: u8 = 1;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ModParseError {
-    Truncated {
-        expected: usize,
-        actual: usize,
-    },
-    InvalidSignature,
-    InvalidOrderCount {
-        orders: usize,
-        maximum: usize,
-    },
-    InvalidChannelCount {
-        channel_count: u16,
-        minimum: u16,
-        maximum: u16,
-    },
-}
 
 /// Parses a MOD file byte buffer into a core `Module`.
 pub fn parse_mod_module(bytes: &[u8]) -> Result<Module, ModParseError> {
@@ -395,93 +381,6 @@ fn clean_string(bytes: &[u8]) -> String {
     s.trim_end().to_owned()
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ModWriteError {
-    TooManyChannels {
-        channels: u16,
-    },
-    TooManyOrders {
-        orders: usize,
-    },
-    TooManyPatterns {
-        patterns: usize,
-    },
-    SampleTooLong {
-        sample_index: usize,
-        byte_len: usize,
-        maximum: usize,
-    },
-    MissingSample {
-        instrument_index: usize,
-        sample_index: usize,
-    },
-    MissingPattern {
-        pattern_index: usize,
-    },
-    InvalidPatternShape {
-        pattern_index: usize,
-        rows: u16,
-        channels: u16,
-        required_rows: u16,
-        required_channels: u16,
-    },
-    UnsupportedExtraEffect {
-        pattern_index: usize,
-        row: u16,
-        channel: u16,
-        effect_slot: usize,
-    },
-}
-
-impl std::fmt::Display for ModWriteError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::TooManyChannels { channels } => write!(f, "Too many channels for MOD format: {channels}"),
-            Self::TooManyOrders { orders } => write!(f, "Too many orders for MOD format: {orders}"),
-            Self::TooManyPatterns { patterns } => write!(f, "Too many patterns for MOD format: {patterns}"),
-            Self::SampleTooLong {
-                sample_index,
-                byte_len,
-                maximum,
-            } => write!(
-                f,
-                "Sample {sample_index} is too long for MOD format: {byte_len} bytes, maximum {maximum}"
-            ),
-            Self::MissingSample {
-                instrument_index,
-                sample_index,
-            } => write!(
-                f,
-                "Instrument {instrument_index} references missing sample {sample_index}"
-            ),
-            Self::MissingPattern { pattern_index } => {
-                write!(f, "Order list references missing pattern {pattern_index}")
-            }
-            Self::InvalidPatternShape {
-                pattern_index,
-                rows,
-                channels,
-                required_rows,
-                required_channels,
-            } => write!(
-                f,
-                "Pattern {pattern_index} has shape {rows}x{channels}, but MOD export requires {required_rows}x{required_channels}"
-            ),
-            Self::UnsupportedExtraEffect {
-                pattern_index,
-                row,
-                channel,
-                effect_slot,
-            } => write!(
-                f,
-                "Pattern {pattern_index} row {row} channel {channel} has non-empty extra effect slot {effect_slot}, which MOD cannot represent"
-            ),
-        }
-    }
-}
-
-impl std::error::Error for ModWriteError {}
-
 pub fn write_mod_module(module: &Module) -> Result<Vec<u8>, ModWriteError> {
     if module.header.channel_count < MIN_CHANNEL_COUNT
         || module.header.channel_count > MOD_MAX_CHANNELS
@@ -643,11 +542,16 @@ pub fn write_mod_module(module: &Module) -> Result<Vec<u8>, ModWriteError> {
                 let note_val = cell.note.raw();
                 let note_period = note_to_amiga_period(note_val);
 
-                let ins_num = if cell.instrument <= MOD_MAX_INSTRUMENT_NUMBER {
-                    cell.instrument
-                } else {
-                    0
-                };
+                if cell.instrument > MOD_MAX_INSTRUMENT_NUMBER {
+                    return Err(ModWriteError::UnsupportedInstrument {
+                        pattern_index: p,
+                        row: r,
+                        channel: c,
+                        instrument: cell.instrument,
+                        maximum: MOD_MAX_INSTRUMENT_NUMBER,
+                    });
+                }
+                let ins_num = cell.instrument;
 
                 for (effect_slot, effect) in cell.effects.iter().enumerate().skip(1) {
                     if *effect != EffectCommand::default() {

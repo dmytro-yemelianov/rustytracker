@@ -1,4 +1,3 @@
-use std::path::Path;
 use eframe::egui;
 use rustytracker_core::{
     Envelope, Instrument, InstrumentName, Module, Sample, SampleLoopKind, SampleName,
@@ -6,6 +5,7 @@ use rustytracker_core::{
 use rustytracker_edit::ModuleEditor;
 use rustytracker_play::PlaybackState;
 use rustytracker_xm::{XM_HEADER_SIGNATURE, XM_HEADER_SIGNATURE_LENGTH};
+use std::path::Path;
 
 use crate::audio::AudioPlaybackEngine;
 use crate::tracker_ui;
@@ -147,7 +147,8 @@ impl RustyTrackerApp {
     }
 
     pub(crate) fn commit_edit_to_audio(&mut self) {
-        self.audio_engine.update_module(self.editor.module().clone());
+        self.audio_engine
+            .update_module(self.editor.module().clone());
     }
 
     pub(crate) fn sync_playhead_position(&mut self) {
@@ -181,7 +182,8 @@ impl RustyTrackerApp {
                     self.active_order_index = 0;
                     self.active_channel = 0;
                     self.is_mod = is_mod;
-                    self.audio_engine.update_module(self.editor.module().clone());
+                    self.audio_engine
+                        .update_module(self.editor.module().clone());
                     self.audio_engine.stop();
                 }
                 Err(err) => {

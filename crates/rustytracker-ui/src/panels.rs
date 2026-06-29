@@ -1,12 +1,9 @@
+use crate::app::{InstrumentEditorEdits, RustyTrackerApp, ViewMode};
+use crate::tracker_ui;
 use eframe::egui;
 use egui::Ui;
-use rustytracker_core::{
-    Envelope, EnvelopePoint, Instrument, InstrumentName, Note, Pattern, PatternCell, Sample,
-    SampleLoopKind, SampleName,
-};
+use rustytracker_core::{InstrumentName, SampleLoopKind, SampleName};
 use rustytracker_play::PlaybackState;
-use crate::app::{RustyTrackerApp, ViewMode, ActiveField, InstrumentEditorEdits};
-use crate::tracker_ui;
 
 impl RustyTrackerApp {
     pub(crate) fn render_menu_bar(&mut self, ui: &mut Ui) {
@@ -501,7 +498,9 @@ impl RustyTrackerApp {
                     let mut s_finetune = sample.finetune;
                     ui.horizontal(|ui| {
                         ui.label("Finetune:");
-                        let changed = ui.add(egui::Slider::new(&mut s_finetune, -128..=127)).changed();
+                        let changed = ui
+                            .add(egui::Slider::new(&mut s_finetune, -128..=127))
+                            .changed();
                         if changed {
                             edits.sample_finetune = Some(s_finetune);
                         }
@@ -510,7 +509,9 @@ impl RustyTrackerApp {
                     let mut s_rel_note = sample.relative_note;
                     ui.horizontal(|ui| {
                         ui.label("Relative Note:");
-                        let changed = ui.add(egui::Slider::new(&mut s_rel_note, -96..=95)).changed();
+                        let changed = ui
+                            .add(egui::Slider::new(&mut s_rel_note, -96..=95))
+                            .changed();
                         if changed {
                             edits.sample_relative_note = Some(s_rel_note);
                         }
@@ -527,9 +528,21 @@ impl RustyTrackerApp {
                                 SampleLoopKind::PingPong => "Ping-Pong",
                             })
                             .show_ui(ui, |ui| {
-                                ui.selectable_value(&mut loop_mode, SampleLoopKind::None, "No Loop");
-                                ui.selectable_value(&mut loop_mode, SampleLoopKind::Forward, "Forward");
-                                ui.selectable_value(&mut loop_mode, SampleLoopKind::PingPong, "Ping-Pong");
+                                ui.selectable_value(
+                                    &mut loop_mode,
+                                    SampleLoopKind::None,
+                                    "No Loop",
+                                );
+                                ui.selectable_value(
+                                    &mut loop_mode,
+                                    SampleLoopKind::Forward,
+                                    "Forward",
+                                );
+                                ui.selectable_value(
+                                    &mut loop_mode,
+                                    SampleLoopKind::PingPong,
+                                    "Ping-Pong",
+                                );
                             });
                         if loop_mode != prev_mode {
                             edits.sample_loop_kind = Some(loop_mode);
@@ -566,10 +579,8 @@ impl RustyTrackerApp {
                     tracker_ui::show_list_heading(ui, &self.tracker_resources, "WAVEFORM PREVIEW");
                     ui.separator();
 
-                    let visible_loop_kind =
-                        edits.sample_loop_kind.unwrap_or(sample.loop_kind);
-                    let visible_loop_start =
-                        edits.sample_loop_start.unwrap_or(sample.loop_start);
+                    let visible_loop_kind = edits.sample_loop_kind.unwrap_or(sample.loop_kind);
+                    let visible_loop_start = edits.sample_loop_start.unwrap_or(sample.loop_start);
                     let visible_loop_length =
                         edits.sample_loop_length.unwrap_or(sample.loop_length);
 

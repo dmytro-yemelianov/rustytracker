@@ -1,7 +1,7 @@
+use crate::app::{ActiveField, RustyTrackerApp};
 use eframe::egui;
 use egui::Key;
 use rustytracker_core::{EffectCommand, Note, NoteName};
-use crate::app::{RustyTrackerApp, ActiveField};
 
 impl RustyTrackerApp {
     pub(crate) fn handle_keyboard_input(&mut self, ctx: &egui::Context) {
@@ -184,7 +184,7 @@ impl RustyTrackerApp {
                         }
                         ActiveField::Effect0 => {
                             let mut cmd = cell.effects.first().copied().unwrap_or_default();
-                            cmd.operand = (cmd.operand << 4) | digit;
+                            cmd = crate::effect_entry::append_effect_digit(cmd, digit);
                             let _ = self.editor.set_effect(
                                 active_pattern_idx,
                                 self.active_channel,
@@ -196,7 +196,7 @@ impl RustyTrackerApp {
                         }
                         ActiveField::Effect1 => {
                             let mut cmd = cell.effects.get(1).copied().unwrap_or_default();
-                            cmd.operand = (cmd.operand << 4) | digit;
+                            cmd = crate::effect_entry::append_effect_digit(cmd, digit);
                             let _ = self.editor.set_effect(
                                 active_pattern_idx,
                                 self.active_channel,

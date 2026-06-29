@@ -1,5 +1,6 @@
 mod app;
 mod audio;
+mod effect_entry;
 mod input;
 mod panels;
 mod tracker_ui;

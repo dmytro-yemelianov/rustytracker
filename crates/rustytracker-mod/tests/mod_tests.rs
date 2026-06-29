@@ -226,6 +226,28 @@ fn mod_writer_rejects_extra_effect_slots_that_mod_cannot_store() {
 }
 
 #[test]
+fn mod_writer_rejects_instruments_that_mod_cannot_store() {
+    let mut module = Module::empty();
+    module.header.channel_count = 4;
+    let cell = PatternCell {
+        instrument: 32,
+        ..PatternCell::default()
+    };
+    module.patterns[0].set_cell(0, 0, cell).unwrap();
+
+    assert_eq!(
+        write_mod_module(&module).unwrap_err(),
+        ModWriteError::UnsupportedInstrument {
+            pattern_index: 0,
+            row: 0,
+            channel: 0,
+            instrument: 32,
+            maximum: 31,
+        }
+    );
+}
+
+#[test]
 fn test_15_instrument_parsing() {
     // 15 instruments, 4 channels
     // 1 pattern of 4 channels * 64 rows * 4 bytes = 1024 bytes

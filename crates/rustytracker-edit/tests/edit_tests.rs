@@ -400,7 +400,6 @@ fn test_pattern_insert_delete_row() {
     );
 }
 
-
 #[test]
 fn test_undo_limit() {
     let module = Module::empty();

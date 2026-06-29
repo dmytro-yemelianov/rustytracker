@@ -404,7 +404,11 @@ impl EditCommand {
             EditCommand::InsertOrder { index, pattern_idx } => {
                 module.orders.insert(*index, *pattern_idx);
             }
-            EditCommand::DeleteOrder { index, was_only_one, .. } => {
+            EditCommand::DeleteOrder {
+                index,
+                was_only_one,
+                ..
+            } => {
                 if *was_only_one {
                     if !module.orders.is_empty() {
                         module.orders[0] = 0;
@@ -751,7 +755,10 @@ impl ModuleEditor {
     }
 
     /// Stub to satisfy legacy callers. Commands are now auto-recorded on every mutation.
-    #[deprecated(since = "0.2.0", note = "Commands are now auto-recorded, begin_transaction is no longer needed.")]
+    #[deprecated(
+        since = "0.2.0",
+        note = "Commands are now auto-recorded, begin_transaction is no longer needed."
+    )]
     pub fn begin_transaction(&mut self) {}
 
     pub fn undo(&mut self) -> bool {
@@ -1000,10 +1007,7 @@ impl ModuleEditor {
             });
         }
 
-        let cmd = EditCommand::MoveOrder {
-            from_idx,
-            to_idx,
-        };
+        let cmd = EditCommand::MoveOrder { from_idx, to_idx };
 
         let item = self.module.orders.remove(from_idx);
         self.module.orders.insert(to_idx, item);

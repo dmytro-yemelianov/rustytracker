@@ -1,5 +1,6 @@
-use std::fmt;
 use std::path::Path;
+
+mod error;
 
 use rustytracker_core::{
     EffectCommand, Envelope, FrequencyTable, Module, Pattern, PatternCell, Sample, SampleData,
@@ -9,16 +10,25 @@ use rustytracker_play::{PlaybackChannelState, PlaybackRowState, PlaybackState, T
 use rustytracker_xm::{XM_HEADER_SIGNATURE, XM_HEADER_SIGNATURE_LENGTH};
 use serde::Serialize;
 
+pub use error::DumpError;
+
 const DUMP_SCHEMA_VERSION: u16 = 1;
 const DUMP_COMMAND: &str = "dump";
 const PLAY_STATE_SCHEMA_VERSION: u16 = 1;
 const PLAY_STATE_FORMAT: &str = "play_state";
 const PLAY_STATE_COMMAND: &str = "play-state";
 const EXPORT_WAV_COMMAND: &str = "export-wav";
+const EXPORT_WAV_SAMPLE_RATE_FLAG: &str = "--sample-rate";
+const EXPORT_WAV_MIN_SAMPLE_RATE: u32 = 1;
 const DEFAULT_EXPORT_SAMPLE_RATE: u32 = 44100;
 const FORMAT_FLAG: &str = "--format";
 const JSON_FORMAT: &str = "json";
 const ROWS_FLAG: &str = "--rows";
+pub(crate) const USAGE: &str = concat!(
+    "usage: rustytracker dump <module.xm|module.mod> --format json\n",
+    "       rustytracker play-state <module.xm|module.mod> --rows <count>\n",
+    "       rustytracker export-wav <module.xm|module.mod> <output.wav> [--sample-rate <rate>]"
+);
 const PLAY_STATE_MIN_ROWS: usize = 1;
 const FNV_OFFSET: u64 = 0xcbf29ce484222325;
 const FNV_PRIME: u64 = 0x100000001b3;
@@ -34,70 +44,6 @@ const SAMPLE_LOOP_PING_PONG: &str = "ping_pong";
 const SAMPLE_DATA_EMPTY: &str = "empty";
 const SAMPLE_DATA_PCM8: &str = "pcm8";
 const SAMPLE_DATA_PCM16: &str = "pcm16";
-
-#[derive(Debug)]
-pub enum DumpError {
-    Io(std::io::Error),
-    Json(serde_json::Error),
-    Xm(rustytracker_xm::XmParseError),
-    Mod(rustytracker_mod::ModParseError),
-    Playback(rustytracker_play::PlaybackError),
-    InvalidArguments,
-    InvalidRowCount(String),
-    UnsupportedFormat(String),
-}
-
-impl fmt::Display for DumpError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Io(error) => write!(formatter, "I/O error: {error}"),
-            Self::Json(error) => write!(formatter, "JSON error: {error}"),
-            Self::Xm(error) => write!(formatter, "XM parse error: {error:?}"),
-            Self::Mod(error) => write!(formatter, "MOD parse error: {error:?}"),
-            Self::Playback(error) => write!(formatter, "playback error: {error:?}"),
-            Self::InvalidArguments => write!(
-                formatter,
-                "usage: rustytracker dump <module.xm|module.mod> --format json\n       rustytracker play-state <module.xm|module.mod> --rows <count>\n       rustytracker export-wav <module.xm|module.mod> <output.wav> [--sample-rate <rate>]"
-            ),
-            Self::InvalidRowCount(value) => write!(formatter, "invalid play-state row count: {value}"),
-            Self::UnsupportedFormat(format) => {
-                write!(formatter, "unsupported dump format: {format}")
-            }
-        }
-    }
-}
-
-impl std::error::Error for DumpError {}
-
-impl From<std::io::Error> for DumpError {
-    fn from(error: std::io::Error) -> Self {
-        Self::Io(error)
-    }
-}
-
-impl From<serde_json::Error> for DumpError {
-    fn from(error: serde_json::Error) -> Self {
-        Self::Json(error)
-    }
-}
-
-impl From<rustytracker_xm::XmParseError> for DumpError {
-    fn from(error: rustytracker_xm::XmParseError) -> Self {
-        Self::Xm(error)
-    }
-}
-
-impl From<rustytracker_mod::ModParseError> for DumpError {
-    fn from(error: rustytracker_mod::ModParseError) -> Self {
-        Self::Mod(error)
-    }
-}
-
-impl From<rustytracker_play::PlaybackError> for DumpError {
-    fn from(error: rustytracker_play::PlaybackError) -> Self {
-        Self::Playback(error)
-    }
-}
 
 #[derive(Debug, Serialize)]
 pub struct ModuleDump {
@@ -353,11 +299,9 @@ where
     let mut sample_rate = DEFAULT_EXPORT_SAMPLE_RATE;
 
     if let Some(arg) = args.next() {
-        if arg == "--sample-rate" {
+        if arg == EXPORT_WAV_SAMPLE_RATE_FLAG {
             let rate_str = args.next().ok_or(DumpError::InvalidArguments)?;
-            sample_rate = rate_str
-                .parse::<u32>()
-                .map_err(|_| DumpError::InvalidArguments)?;
+            sample_rate = parse_export_sample_rate(rate_str)?;
         } else {
             return Err(DumpError::InvalidArguments);
         }
@@ -393,6 +337,18 @@ fn parse_requested_rows(rows: String) -> Result<usize, DumpError> {
         .map_err(|_| DumpError::InvalidRowCount(rows.clone()))?;
 
     validate_requested_rows(requested_rows, rows)
+}
+
+fn parse_export_sample_rate(sample_rate: String) -> Result<u32, DumpError> {
+    let parsed = sample_rate
+        .parse::<u32>()
+        .map_err(|_| DumpError::InvalidSampleRate(sample_rate.clone()))?;
+
+    if parsed < EXPORT_WAV_MIN_SAMPLE_RATE {
+        return Err(DumpError::InvalidSampleRate(sample_rate));
+    }
+
+    Ok(parsed)
 }
 
 fn validate_requested_rows(requested_rows: usize, source: String) -> Result<usize, DumpError> {

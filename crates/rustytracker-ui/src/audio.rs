@@ -1,5 +1,5 @@
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use rustytracker_core::Module;
@@ -282,7 +282,9 @@ fn write_audio<T>(
         local_state.playback = None;
     }
 
-    status.is_playing.store(local_state.is_playing, Ordering::Relaxed);
+    status
+        .is_playing
+        .store(local_state.is_playing, Ordering::Relaxed);
     if local_state.is_playing {
         if let Some(pb) = &local_state.playback {
             if let Ok(pos) = pb.clock().position(module) {

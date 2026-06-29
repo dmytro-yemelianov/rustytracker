@@ -3,10 +3,13 @@ use rustytracker_core::{
     SampleLoopKind, DEFAULT_EFFECT_SLOTS,
 };
 use rustytracker_play::{
-    ChannelSampleFrame, PlaybackClock, PlaybackCursor, PlaybackError, PlaybackSampleValue,
-    PlaybackState, PlaybackTiming, RowAdvance, TickAdvance, PLAYBACK_FIRST_ORDER_INDEX,
-    PLAYBACK_FIRST_ROW, PLAYBACK_FIRST_TICK, PLAYBACK_ORDER_STEP, PLAYBACK_ROW_STEP,
-    PLAYBACK_TICK_STEP,
+    ChannelSampleFrame, PlaybackChannelState, PlaybackClock, PlaybackCursor, PlaybackEnvelopeState,
+    PlaybackError, PlaybackSampleValue, PlaybackState, PlaybackTiming, RawMonoPcmFrame,
+    RawStereoPcmFrame, RowAdvance, TickAdvance, EFFECT_ARPEGGIO_ZERO, EFFECT_PATTERN_BREAK,
+    EFFECT_POSITION_JUMP, EFFECT_SET_SPEED_BPM, EFFECT_TONE_PORTAMENTO, EFFECT_VOLUME_SLIDE,
+    PLAYBACK_FIRST_ORDER_INDEX, PLAYBACK_FIRST_ROW, PLAYBACK_FIRST_TICK, PLAYBACK_MONO_SILENCE,
+    PLAYBACK_ORDER_STEP, PLAYBACK_ROW_STEP, PLAYBACK_STEREO_SILENCE, PLAYBACK_TICK_STEP,
+    SPEED_BPM_THRESHOLD, VIB_TAB,
 };
 
 const PLAY_TEST_CHANNELS: u16 = 1;
@@ -28,6 +31,7 @@ const PLAY_TEST_DEFAULT_BPM: u16 = 125;
 const PLAY_TEST_FAST_BPM: u16 = 250;
 const PLAY_TEST_ZERO_TICK_SPEED: u16 = 0;
 const PLAY_TEST_ZERO_BPM: u16 = 0;
+const PLAY_TEST_ZERO_SAMPLE_RATE: u32 = 0;
 const PLAY_TEST_DEFAULT_TICK_NANOS: u64 = 20_000_000;
 const PLAY_TEST_DEFAULT_ROW_NANOS: u64 =
     PLAY_TEST_DEFAULT_TICK_NANOS * PLAY_TEST_DEFAULT_TICK_SPEED as u64;
@@ -58,6 +62,52 @@ const PLAY_TEST_PCM8_FIRST_MONO: i32 = -512;
 const PLAY_TEST_PCM16_HIGH_VALUE: i16 = 1024;
 const PLAY_TEST_FIRST_MIXED_MONO: i32 = 512;
 const PLAY_TEST_SILENCE_MONO: i32 = 0;
+const PLAY_TEST_ENVELOPE_ENABLED_FLAG: u8 = 0x01;
+
+#[test]
+fn crate_root_re_exports_channel_api() {
+    let _ = core::mem::size_of::<PlaybackChannelState>();
+    let _ = core::mem::size_of::<PlaybackEnvelopeState>();
+    let _ = core::mem::size_of::<PlaybackSampleValue>();
+    let _ = core::mem::size_of::<RawMonoPcmFrame>();
+    let _ = core::mem::size_of::<RawStereoPcmFrame>();
+
+    assert_eq!(EFFECT_ARPEGGIO_ZERO, 0x00);
+    assert_eq!(EFFECT_TONE_PORTAMENTO, 0x03);
+    assert_eq!(EFFECT_VOLUME_SLIDE, 0x0a);
+    assert_eq!(EFFECT_POSITION_JUMP, 0x0b);
+    assert_eq!(EFFECT_PATTERN_BREAK, 0x0d);
+    assert_eq!(EFFECT_SET_SPEED_BPM, 0x0f);
+    assert_eq!(SPEED_BPM_THRESHOLD, 32);
+    assert_eq!(PLAYBACK_MONO_SILENCE, 0);
+    assert_eq!(PLAYBACK_STEREO_SILENCE, (0, 0));
+    assert_eq!(VIB_TAB.len(), 32);
+}
+
+#[test]
+fn envelope_value_clamps_before_first_point() {
+    let envelope = Envelope {
+        points: vec![
+            EnvelopePoint {
+                frame: 4,
+                value: 200,
+            },
+            EnvelopePoint {
+                frame: 8,
+                value: 100,
+            },
+        ],
+        point_count: 2,
+        sustain_point: 0,
+        loop_start_point: 0,
+        loop_end_point: 0,
+        flags: PLAY_TEST_ENVELOPE_ENABLED_FLAG,
+    };
+
+    let state = PlaybackEnvelopeState::new();
+
+    assert_eq!(state.get_value(&envelope, 256), 200);
+}
 
 #[test]
 fn starts_at_first_order_first_row() {
@@ -445,6 +495,77 @@ fn playback_state_releases_channel_on_note_off() {
     assert_eq!(channel.note, Note::Off);
     assert_eq!(channel.sample_index, None);
     assert_eq!(channel.sample_frame, PLAY_TEST_SAMPLE_START_FRAME);
+}
+
+#[test]
+fn playback_state_note_off_with_instrument_releases_current_instrument() {
+    let mut note_off = note_off_cell();
+    note_off.instrument = PLAY_TEST_CHANNEL_ONE_INSTRUMENT;
+
+    let mut module = module_with_two_channel_cells(
+        PLAY_TEST_TWO_ROWS,
+        &[
+            (
+                PLAY_TEST_CHANNEL_ZERO,
+                PLAYBACK_FIRST_ROW,
+                test_cell(
+                    PLAY_TEST_CHANNEL_ZERO_NOTE,
+                    PLAY_TEST_CHANNEL_ZERO_INSTRUMENT,
+                ),
+            ),
+            (
+                PLAY_TEST_CHANNEL_ZERO,
+                PLAYBACK_FIRST_ROW + PLAYBACK_ROW_STEP,
+                note_off,
+            ),
+        ],
+    );
+    module.header.tick_speed = PLAY_TEST_ONE_TICK_PER_ROW;
+    map_instrument_to_sample(
+        &mut module,
+        PLAY_TEST_FIRST_INSTRUMENT_INDEX,
+        PLAY_TEST_FIRST_SAMPLE_INDEX,
+    );
+    map_instrument_to_sample(
+        &mut module,
+        PLAY_TEST_SECOND_INSTRUMENT_INDEX,
+        PLAY_TEST_SECOND_SAMPLE_INDEX,
+    );
+    module.instruments[PLAY_TEST_FIRST_INSTRUMENT_INDEX].volume_envelope = Envelope {
+        points: vec![
+            EnvelopePoint {
+                frame: 0,
+                value: 256,
+            },
+            EnvelopePoint {
+                frame: 2,
+                value: 128,
+            },
+            EnvelopePoint { frame: 5, value: 0 },
+        ],
+        point_count: 3,
+        sustain_point: 1,
+        loop_start_point: 0,
+        loop_end_point: 0,
+        flags: 0x01 | 0x02,
+    };
+
+    let mut playback = PlaybackState::start(&module).unwrap();
+    assert_eq!(
+        playback.advance_tick(&module).unwrap(),
+        TickAdvance::NextRow
+    );
+    let channel = &playback.channels()[PLAY_TEST_CHANNEL_ZERO as usize];
+
+    assert!(channel.active);
+    assert!(!channel.keyon);
+    assert_eq!(channel.note, Note::Off);
+    assert_eq!(channel.instrument, PLAY_TEST_CHANNEL_ZERO_INSTRUMENT);
+    assert_eq!(
+        channel.instrument_index,
+        Some(PLAY_TEST_FIRST_INSTRUMENT_INDEX)
+    );
+    assert_eq!(channel.sample_index, Some(PLAY_TEST_FIRST_SAMPLE_INDEX));
 }
 
 #[test]
@@ -1159,6 +1280,68 @@ fn test_effect_position_jump() {
 }
 
 #[test]
+fn position_jump_target_uses_order_pattern_index() {
+    let mut module = Module::empty_with_channels(PLAY_TEST_CHANNELS).unwrap();
+    module.orders = vec![0, 2, 1];
+    module.patterns = vec![
+        Pattern::new(2, PLAY_TEST_CHANNELS, DEFAULT_EFFECT_SLOTS),
+        Pattern::new(2, PLAY_TEST_CHANNELS, DEFAULT_EFFECT_SLOTS),
+        Pattern::new(2, PLAY_TEST_CHANNELS, DEFAULT_EFFECT_SLOTS),
+    ];
+    module.header.tick_speed = 1;
+
+    let cell = PatternCell {
+        effects: vec![
+            EffectCommand {
+                effect: EFFECT_POSITION_JUMP,
+                operand: 1,
+            },
+            EffectCommand::default(),
+        ],
+        ..PatternCell::default()
+    };
+    module.patterns[0].set_cell(0, 0, cell).unwrap();
+
+    let playback = PlaybackState::start(&module).unwrap();
+    let target = playback.clock().jump_target().unwrap();
+
+    assert_eq!(target.order_index, 1);
+    assert_eq!(target.pattern_index, 2);
+    assert_eq!(target.row, 0);
+}
+
+#[test]
+fn pattern_break_target_uses_next_order_pattern_index() {
+    let mut module = Module::empty_with_channels(PLAY_TEST_CHANNELS).unwrap();
+    module.orders = vec![0, 2, 1];
+    module.patterns = vec![
+        Pattern::new(2, PLAY_TEST_CHANNELS, DEFAULT_EFFECT_SLOTS),
+        Pattern::new(2, PLAY_TEST_CHANNELS, DEFAULT_EFFECT_SLOTS),
+        Pattern::new(4, PLAY_TEST_CHANNELS, DEFAULT_EFFECT_SLOTS),
+    ];
+    module.header.tick_speed = 1;
+
+    let cell = PatternCell {
+        effects: vec![
+            EffectCommand::default(),
+            EffectCommand {
+                effect: EFFECT_PATTERN_BREAK,
+                operand: 0x01,
+            },
+        ],
+        ..PatternCell::default()
+    };
+    module.patterns[0].set_cell(0, 0, cell).unwrap();
+
+    let playback = PlaybackState::start(&module).unwrap();
+    let target = playback.clock().jump_target().unwrap();
+
+    assert_eq!(target.order_index, 1);
+    assert_eq!(target.pattern_index, 2);
+    assert_eq!(target.row, 1);
+}
+
+#[test]
 fn test_effect_pattern_break() {
     let mut module = Module::empty_with_channels(PLAY_TEST_CHANNELS).unwrap();
     module.orders = vec![0, 1];
@@ -1300,11 +1483,11 @@ fn test_effect_arpeggio() {
     };
     module.patterns[0].set_cell(0, 0, cell_0).unwrap();
 
-    // Row 1: No Note with Arpeggio 0x00 (operand 0) -> uses memory (0x37)
+    // Row 1: No Note with explicit Arpeggio 0x00 -> uses memory (0x37)
     let cell_1 = PatternCell {
         effects: vec![
             EffectCommand {
-                effect: 0x00, // Arpeggio (zero)
+                effect: 0x20, // Explicit arpeggio, displayed/written as 000
                 operand: 0x00,
             },
             EffectCommand::default(),
@@ -1346,6 +1529,69 @@ fn test_effect_arpeggio() {
     playback.advance_tick(&module).unwrap();
     let ch = &playback.channels()[0];
     assert_eq!(ch.period, 4608 - 7 * 64); // Tick 2 -> offset 7 (from memory)
+}
+
+#[test]
+fn raw_zero_effect_nonzero_operand_applies_arpeggio() {
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_ONE_ROW]);
+    module.header.tick_speed = 3;
+
+    let cell = PatternCell {
+        note: Note::Key(49),
+        instrument: 1,
+        effects: vec![
+            EffectCommand {
+                effect: EFFECT_ARPEGGIO_ZERO,
+                operand: 0x37,
+            },
+            EffectCommand::default(),
+        ],
+    };
+    module.patterns[0].set_cell(0, 0, cell).unwrap();
+    map_instrument_to_sample(&mut module, 0, 0);
+
+    let mut playback = PlaybackState::start(&module).unwrap();
+
+    assert_eq!(playback.channels()[0].period, 4608);
+
+    playback.advance_tick(&module).unwrap();
+    assert_eq!(playback.channels()[0].period, 4608 - 3 * 64);
+
+    playback.advance_tick(&module).unwrap();
+    assert_eq!(playback.channels()[0].period, 4608 - 7 * 64);
+}
+
+#[test]
+fn default_effect_slots_do_not_reuse_arpeggio_memory() {
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_TWO_ROWS]);
+    module.header.tick_speed = 3;
+
+    let cell_0 = PatternCell {
+        note: Note::Key(49),
+        instrument: 1,
+        effects: vec![
+            EffectCommand {
+                effect: 0x20,
+                operand: 0x37,
+            },
+            EffectCommand::default(),
+        ],
+    };
+    module.patterns[0].set_cell(0, 0, cell_0).unwrap();
+    map_instrument_to_sample(&mut module, 0, 0);
+
+    let mut playback = PlaybackState::start(&module).unwrap();
+    playback.advance_tick(&module).unwrap();
+    assert_eq!(playback.channels()[0].period, 4608 - 3 * 64);
+
+    playback.advance_tick(&module).unwrap();
+    playback.advance_tick(&module).unwrap();
+    assert_eq!(playback.channels()[0].period, 4608);
+
+    playback.advance_tick(&module).unwrap();
+    assert_eq!(playback.channels()[0].period, 4608);
 }
 
 #[test]
@@ -1994,4 +2240,36 @@ fn test_render_to_wav() {
     let file_size = u32::from_le_bytes(wav_bytes[4..8].try_into().unwrap());
     assert_eq!(file_size, data_size + 36);
     assert_eq!(wav_bytes.len(), data_size as usize + 44);
+}
+
+#[test]
+fn render_to_wav_rejects_zero_sample_rate() {
+    let module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_ONE_ROW]);
+    let mut playback = PlaybackState::start(&module).unwrap();
+
+    assert_eq!(
+        playback
+            .render_to_wav(&module, PLAY_TEST_ZERO_SAMPLE_RATE)
+            .unwrap_err(),
+        PlaybackError::InvalidSampleRate {
+            sample_rate: PLAY_TEST_ZERO_SAMPLE_RATE,
+        }
+    );
+}
+
+#[test]
+fn raw_render_rejects_zero_sample_rate() {
+    let module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_ONE_ROW]);
+    let mut playback = PlaybackState::start(&module).unwrap();
+
+    assert_eq!(
+        playback
+            .render_raw_stereo_pcm(&module, PLAY_TEST_ZERO_SAMPLE_RATE, PLAY_TEST_RENDER_FRAMES)
+            .unwrap_err(),
+        PlaybackError::InvalidSampleRate {
+            sample_rate: PLAY_TEST_ZERO_SAMPLE_RATE,
+        }
+    );
 }
