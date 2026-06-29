@@ -2,7 +2,7 @@ use eframe::egui;
 use egui::{Color32, Pos2, Rect, Response, Sense, Stroke, Ui, Vec2};
 use rustytracker_core::{EffectCommand, Note, Pattern, PatternCell, SampleData, SampleLoopKind};
 
-use crate::ActiveField;
+use crate::app::ActiveField;
 
 const SYSTEM_FONT_BYTES: &[u8] = include_bytes!("../assets/fonts/J-FLUX.8X8");
 const FONT_GLYPH_COUNT: usize = 256;

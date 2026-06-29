@@ -220,7 +220,7 @@ Tasks:
 - [x] replace generic instrument/sample editor toggles and loop selector with tracker-styled controls
 - [ ] replace generic instrument/sample editor controls with compact tracker-styled controls
 - [x] split CPAL output engine and callback into a focused audio module
-- [ ] split remaining `rustytracker-ui` app/input/editor monolith into focused modules
+- [x] split remaining `rustytracker-ui` app/input/editor monolith into focused modules
 
 Acceptance:
 
