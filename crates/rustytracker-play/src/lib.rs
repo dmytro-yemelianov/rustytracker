@@ -49,6 +49,71 @@ const MILKY_MIXER_TIMER_FREQUENCY: i64 = 250;
 const MILKY_MIXER_BEAT_LENGTH: i64 = MILKY_MIXER_BASE_FREQUENCY / MILKY_MIXER_TIMER_FREQUENCY;
 const MILKY_BPM_TICK_BASE: i64 = 625;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PlaybackMixerMode {
+    #[default]
+    HiFi,
+    MilkyTracker,
+    Amiga,
+    ProTracker,
+}
+
+impl PlaybackMixerMode {
+    pub const ALL: [Self; 4] = [
+        Self::HiFi,
+        Self::MilkyTracker,
+        Self::Amiga,
+        Self::ProTracker,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::HiFi => "HiFi",
+            Self::MilkyTracker => "MilkyTracker",
+            Self::Amiga => "Amiga",
+            Self::ProTracker => "ProTracker",
+        }
+    }
+
+    pub fn cli_name(self) -> &'static str {
+        match self {
+            Self::HiFi => "hifi",
+            Self::MilkyTracker => "milkytracker",
+            Self::Amiga => "amiga",
+            Self::ProTracker => "protracker",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name.trim().to_ascii_lowercase().as_str() {
+            "hifi" | "hi-fi" => Some(Self::HiFi),
+            "milkytracker" | "milky" | "mt" => Some(Self::MilkyTracker),
+            "amiga" => Some(Self::Amiga),
+            "protracker" | "pro-tracker" | "pt" => Some(Self::ProTracker),
+            _ => None,
+        }
+    }
+
+    pub fn uses_pal_clock(self) -> bool {
+        matches!(self, Self::Amiga | Self::ProTracker)
+    }
+
+    fn uses_linear_interpolation(self) -> bool {
+        matches!(self, Self::HiFi | Self::MilkyTracker)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct PlaybackSettings {
+    pub mixer_mode: PlaybackMixerMode,
+}
+
+impl PlaybackSettings {
+    pub fn with_mixer_mode(mixer_mode: PlaybackMixerMode) -> Self {
+        Self { mixer_mode }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SequencerCommand {
     Trigger {
@@ -538,7 +603,7 @@ impl Mixer {
         module: &Module,
         sample_rate: u32,
         channels: &mut [PlaybackChannelState],
-        use_pal_clock: bool,
+        mixer_mode: PlaybackMixerMode,
     ) -> PlaybackResult<RawStereoPcmFrame> {
         let mut mixed_l = 0.0;
         let mut mixed_r = 0.0;
@@ -565,21 +630,22 @@ impl Mixer {
             }
 
             let frequency =
-                period_to_frequency(voice.period, module.header.frequency_table, use_pal_clock);
+                period_to_frequency(voice.period, module.header.frequency_table, mixer_mode);
             let step = frequency / sample_rate as f64;
 
-            let interpolated_val = get_sample_value_linear(
+            let sample_val = get_sample_value(
                 &sample.data,
                 voice.sample_frame,
                 voice.sample_frame_fraction,
                 sample,
+                mixer_mode,
             );
 
             let vol_factor = (voice.volume as f64 / 255.0)
                 * (voice.volume_envelope_val as f64 / 256.0)
                 * (voice.fadeout_volume as f64 / 65536.0);
 
-            let channel_mono_pcm = interpolated_val * vol_factor;
+            let channel_mono_pcm = sample_val * vol_factor;
 
             let mut pan = voice.panning as i32 + voice.panning_envelope_val as i32 - 128;
             pan = pan.clamp(0, 255);
@@ -604,7 +670,7 @@ impl Mixer {
         module: &Module,
         sample_rate: u32,
         channels: &mut [PlaybackChannelState],
-        use_pal_clock: bool,
+        mixer_mode: PlaybackMixerMode,
     ) -> PlaybackResult<RawMonoPcmFrame> {
         let mut mixed = PLAYBACK_MONO_SILENCE;
 
@@ -630,21 +696,22 @@ impl Mixer {
             }
 
             let frequency =
-                period_to_frequency(voice.period, module.header.frequency_table, use_pal_clock);
+                period_to_frequency(voice.period, module.header.frequency_table, mixer_mode);
             let step = frequency / sample_rate as f64;
 
-            let interpolated_val = get_sample_value_linear(
+            let sample_val = get_sample_value(
                 &sample.data,
                 voice.sample_frame,
                 voice.sample_frame_fraction,
                 sample,
+                mixer_mode,
             );
 
             let vol_factor = (voice.volume as f64 / 255.0)
                 * (voice.volume_envelope_val as f64 / 256.0)
                 * (voice.fadeout_volume as f64 / 65536.0);
 
-            let channel_mono_pcm = interpolated_val * vol_factor;
+            let channel_mono_pcm = sample_val * vol_factor;
             mixed += channel_mono_pcm as i32;
 
             voice.advance_sample_position(sample, step);
@@ -706,15 +773,34 @@ pub struct PlaybackState {
     pub(crate) mixer: Mixer,
     tick_samples_fractional_rem: i64,
     initialized: bool,
-    use_pal_clock: bool,
+    settings: PlaybackSettings,
 }
 
 impl PlaybackState {
     pub fn start(module: &Module) -> PlaybackResult<Self> {
-        Self::start_with_config(module, false)
+        Self::start_with_settings(module, PlaybackSettings::default())
     }
 
     pub fn start_with_config(module: &Module, use_pal_clock: bool) -> PlaybackResult<Self> {
+        let mixer_mode = if use_pal_clock {
+            PlaybackMixerMode::Amiga
+        } else {
+            PlaybackMixerMode::HiFi
+        };
+        Self::start_with_mixer_mode(module, mixer_mode)
+    }
+
+    pub fn start_with_mixer_mode(
+        module: &Module,
+        mixer_mode: PlaybackMixerMode,
+    ) -> PlaybackResult<Self> {
+        Self::start_with_settings(module, PlaybackSettings::with_mixer_mode(mixer_mode))
+    }
+
+    pub fn start_with_settings(
+        module: &Module,
+        settings: PlaybackSettings,
+    ) -> PlaybackResult<Self> {
         let sequencer = Sequencer::start_with_config(module)?;
         let mixer = Mixer::new(module.header.channel_count as usize);
 
@@ -723,7 +809,7 @@ impl PlaybackState {
             mixer,
             tick_samples_fractional_rem: 0,
             initialized: false,
-            use_pal_clock,
+            settings,
         };
 
         // Sync initial state of sequencer to mixer
@@ -732,6 +818,10 @@ impl PlaybackState {
         state.mixer.sync_to_channels(&mut state.sequencer.channels);
 
         Ok(state)
+    }
+
+    pub fn settings(&self) -> PlaybackSettings {
+        self.settings
     }
 
     pub fn clock(&self) -> PlaybackClock {
@@ -923,7 +1013,7 @@ impl PlaybackState {
             module,
             sample_rate,
             &mut self.sequencer.channels,
-            self.use_pal_clock,
+            self.settings.mixer_mode,
         )?;
 
         self.tick_samples_fractional_rem -= tick_denominator;
@@ -973,7 +1063,7 @@ impl PlaybackState {
             module,
             sample_rate,
             &mut self.sequencer.channels,
-            self.use_pal_clock,
+            self.settings.mixer_mode,
         )?;
 
         self.tick_samples_fractional_rem -= tick_denominator;
@@ -993,7 +1083,7 @@ fn render_tick_clock(sample_rate: u32, bpm: i64, table: FrequencyTable) -> (i64,
     }
 }
 
-fn period_to_frequency(period: u32, table: FrequencyTable, use_pal_clock: bool) -> f64 {
+fn period_to_frequency(period: u32, table: FrequencyTable, mixer_mode: PlaybackMixerMode) -> f64 {
     if period == 0 {
         return 0.0;
     }
@@ -1001,13 +1091,27 @@ fn period_to_frequency(period: u32, table: FrequencyTable, use_pal_clock: bool) 
     match table {
         FrequencyTable::Linear => 8363.0 * f64::powf(2.0, (4608.0 - period as f64) / 768.0),
         FrequencyTable::Amiga => {
-            let base = if use_pal_clock {
+            let base = if mixer_mode.uses_pal_clock() {
                 AMIGA_PAL_CLOCK_HZ
             } else {
                 AMIGA_NTSC_CLOCK_HZ
             };
             base / period as f64
         }
+    }
+}
+
+fn get_sample_value(
+    data: &SampleData,
+    frame: usize,
+    fraction: u32,
+    sample: &Sample,
+    mixer_mode: PlaybackMixerMode,
+) -> f64 {
+    if mixer_mode.uses_linear_interpolation() {
+        get_sample_value_linear(data, frame, fraction, sample)
+    } else {
+        sample_value_as_f64(data, frame)
     }
 }
 

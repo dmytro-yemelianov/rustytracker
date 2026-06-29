@@ -3,7 +3,7 @@ use crate::tracker_ui;
 use eframe::egui;
 use egui::Ui;
 use rustytracker_core::{InstrumentName, SampleLoopKind, SampleName};
-use rustytracker_play::PlaybackState;
+use rustytracker_play::{PlaybackMixerMode, PlaybackSettings, PlaybackState};
 
 impl RustyTrackerApp {
     pub(crate) fn render_menu_bar(&mut self, ui: &mut Ui) {
@@ -112,7 +112,10 @@ impl RustyTrackerApp {
                 self.audio_engine.play();
                 self.audio_engine.update_module(cloned_module.clone());
                 if !is_playing {
-                    if let Ok(pb) = PlaybackState::start_with_config(&cloned_module, self.is_mod) {
+                    if let Ok(pb) = PlaybackState::start_with_settings(
+                        &cloned_module,
+                        PlaybackSettings::with_mixer_mode(self.mixer_mode),
+                    ) {
                         self.audio_engine.set_playback(Some(pb));
                     }
                 }
@@ -130,6 +133,37 @@ impl RustyTrackerApp {
                 self.audio_engine.stop();
                 self.active_row = 0;
                 self.active_order_index = 0;
+            }
+
+            tracker_ui::show_toolbar_separator(ui, &self.tracker_resources);
+
+            tracker_ui::show_status_label(ui, &self.tracker_resources, "MIX", theme.foreground);
+            let mut selected_mixer_mode = self.mixer_mode;
+            egui::ComboBox::from_id_salt("mixer_mode_combo")
+                .selected_text(selected_mixer_mode.label())
+                .show_ui(ui, |ui| {
+                    for mixer_mode in PlaybackMixerMode::ALL {
+                        ui.selectable_value(
+                            &mut selected_mixer_mode,
+                            mixer_mode,
+                            mixer_mode.label(),
+                        );
+                    }
+                });
+            if selected_mixer_mode != self.mixer_mode {
+                self.mixer_mode = selected_mixer_mode;
+                if is_playing {
+                    let cloned_module = self.editor.module().clone();
+                    self.audio_engine.update_module(cloned_module.clone());
+                    if let Ok(pb) = PlaybackState::start_with_settings(
+                        &cloned_module,
+                        PlaybackSettings::with_mixer_mode(self.mixer_mode),
+                    ) {
+                        self.audio_engine.set_playback(Some(pb));
+                    }
+                    self.active_row = 0;
+                    self.active_order_index = 0;
+                }
             }
 
             tracker_ui::show_toolbar_separator(ui, &self.tracker_resources);

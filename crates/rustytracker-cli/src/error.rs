@@ -12,6 +12,7 @@ pub enum DumpError {
     InvalidArguments,
     InvalidRowCount(String),
     InvalidSampleRate(String),
+    InvalidMixerMode(String),
     UnsupportedFormat(String),
 }
 
@@ -29,6 +30,9 @@ impl fmt::Display for DumpError {
             }
             Self::InvalidSampleRate(value) => {
                 write!(formatter, "invalid export sample rate: {value}")
+            }
+            Self::InvalidMixerMode(value) => {
+                write!(formatter, "invalid export mixer mode: {value}")
             }
             Self::UnsupportedFormat(format) => {
                 write!(formatter, "unsupported dump format: {format}")

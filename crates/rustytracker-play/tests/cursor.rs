@@ -4,12 +4,12 @@ use rustytracker_core::{
 };
 use rustytracker_play::{
     ChannelSampleFrame, PlaybackChannelState, PlaybackClock, PlaybackCursor, PlaybackEnvelopeState,
-    PlaybackError, PlaybackSampleValue, PlaybackState, PlaybackTiming, RawMonoPcmFrame,
-    RawStereoPcmFrame, RowAdvance, TickAdvance, EFFECT_ARPEGGIO_ZERO, EFFECT_PATTERN_BREAK,
-    EFFECT_POSITION_JUMP, EFFECT_SET_SPEED_BPM, EFFECT_TONE_PORTAMENTO, EFFECT_VOLUME_SLIDE,
-    PLAYBACK_FIRST_ORDER_INDEX, PLAYBACK_FIRST_ROW, PLAYBACK_FIRST_TICK, PLAYBACK_MONO_SILENCE,
-    PLAYBACK_ORDER_STEP, PLAYBACK_ROW_STEP, PLAYBACK_STEREO_SILENCE, PLAYBACK_TICK_STEP,
-    SPEED_BPM_THRESHOLD, VIB_TAB,
+    PlaybackError, PlaybackMixerMode, PlaybackSampleValue, PlaybackState, PlaybackTiming,
+    RawMonoPcmFrame, RawStereoPcmFrame, RowAdvance, TickAdvance, EFFECT_ARPEGGIO_ZERO,
+    EFFECT_PATTERN_BREAK, EFFECT_POSITION_JUMP, EFFECT_SET_SPEED_BPM, EFFECT_TONE_PORTAMENTO,
+    EFFECT_VOLUME_SLIDE, PLAYBACK_FIRST_ORDER_INDEX, PLAYBACK_FIRST_ROW, PLAYBACK_FIRST_TICK,
+    PLAYBACK_MONO_SILENCE, PLAYBACK_ORDER_STEP, PLAYBACK_ROW_STEP, PLAYBACK_STEREO_SILENCE,
+    PLAYBACK_TICK_STEP, SPEED_BPM_THRESHOLD, VIB_TAB,
 };
 
 const PLAY_TEST_CHANNELS: u16 = 1;
@@ -932,6 +932,49 @@ fn raw_mono_render_returns_requested_silence_after_sample_end() {
         ]
     );
     assert!(!playback.channels()[PLAY_TEST_CHANNEL_ZERO as usize].active);
+}
+
+#[test]
+fn playback_state_defaults_to_hifi_mixer() {
+    let module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_ONE_ROW]);
+    let playback = PlaybackState::start(&module).unwrap();
+
+    assert_eq!(playback.settings().mixer_mode, PlaybackMixerMode::HiFi);
+}
+
+#[test]
+fn raw_mono_render_mixer_mode_controls_sample_interpolation() {
+    let mut module = module_with_two_channel_cells(
+        PLAY_TEST_ONE_ROW,
+        &[(
+            PLAY_TEST_CHANNEL_ZERO,
+            PLAYBACK_FIRST_ROW,
+            test_cell(
+                PLAY_TEST_CHANNEL_ZERO_NOTE,
+                PLAY_TEST_CHANNEL_ZERO_INSTRUMENT,
+            ),
+        )],
+    );
+    module.samples[PLAY_TEST_FIRST_SAMPLE_INDEX].data = SampleData::pcm16(vec![0, 1000]);
+
+    let mut hifi_playback =
+        PlaybackState::start_with_mixer_mode(&module, PlaybackMixerMode::HiFi).unwrap();
+    let mut protracker_playback =
+        PlaybackState::start_with_mixer_mode(&module, PlaybackMixerMode::ProTracker).unwrap();
+
+    assert_eq!(
+        hifi_playback
+            .render_raw_mono_pcm(&module, 16_726, 2)
+            .unwrap(),
+        vec![0, 499]
+    );
+    assert_eq!(
+        protracker_playback
+            .render_raw_mono_pcm(&module, 16_726, 2)
+            .unwrap(),
+        vec![0, 0]
+    );
 }
 
 #[test]

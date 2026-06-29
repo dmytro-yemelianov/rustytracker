@@ -27,6 +27,7 @@ const FORMAT_FLAG: &str = "--format";
 const JSON_FORMAT: &str = "json";
 const ROWS_FLAG: &str = "--rows";
 const SAMPLE_RATE_FLAG: &str = "--sample-rate";
+const MIXER_FLAG: &str = "--mixer";
 const PLAY_STATE_TEST_ROWS: usize = 3;
 const PLAY_STATE_ZERO_ROWS: usize = 0;
 const PLAY_STATE_TEST_ROWS_TEXT: &str = "3";
@@ -37,9 +38,13 @@ const PLAY_STATE_NON_NUMERIC_ROW_COUNT_ERROR: &str = "invalid play-state row cou
 const PLAY_STATE_MISSING_ROWS_ERROR: &str = "usage: rustytracker";
 const EXPORT_WAV_ZERO_SAMPLE_RATE_TEXT: &str = "0";
 const EXPORT_WAV_INVALID_SAMPLE_RATE_ERROR: &str = "invalid export sample rate: 0";
+const EXPORT_WAV_INVALID_MIXER_MODE_TEXT: &str = "muddy";
+const EXPORT_WAV_INVALID_MIXER_MODE_ERROR: &str = "invalid export mixer mode: muddy";
 const EXPORT_WAV_TEST_SAMPLE_RATE: u32 = 44_100;
 const EXPORT_WAV_EXPECTED_C3_PERIOD_MIN: f64 = 336.0;
 const EXPORT_WAV_EXPECTED_C3_PERIOD_MAX: f64 = 339.0;
+const EXPORT_WAV_EXPECTED_PROTRACKER_C3_PERIOD_MIN: f64 = 339.0;
+const EXPORT_WAV_EXPECTED_PROTRACKER_C3_PERIOD_MAX: f64 = 342.0;
 const PLAY_STATE_EXPECTED_FORMAT: &str = "play_state";
 const PLAY_STATE_EXPECTED_SCHEMA_VERSION: u64 = 1;
 const PLAY_STATE_EXPECTED_CHANNELS: usize = 10;
@@ -314,6 +319,26 @@ fn export_wav_rejects_zero_sample_rate_before_loading_input() {
 }
 
 #[test]
+fn export_wav_rejects_invalid_mixer_mode_before_loading_input() {
+    let error = run_cli(
+        [
+            EXPORT_WAV_COMMAND,
+            "missing.xm",
+            "out.wav",
+            MIXER_FLAG,
+            EXPORT_WAV_INVALID_MIXER_MODE_TEXT,
+        ]
+        .into_iter()
+        .map(String::from),
+    )
+    .unwrap_err();
+
+    assert!(error
+        .to_string()
+        .contains(EXPORT_WAV_INVALID_MIXER_MODE_ERROR));
+}
+
+#[test]
 fn export_wav_uses_milkytracker_mod_pitch_clock() {
     let temp_mod_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
@@ -338,6 +363,42 @@ fn export_wav_uses_milkytracker_mod_pitch_clock() {
 
     assert!(
         (EXPORT_WAV_EXPECTED_C3_PERIOD_MIN..=EXPORT_WAV_EXPECTED_C3_PERIOD_MAX)
+            .contains(&mean_period),
+        "mean period {mean_period}"
+    );
+
+    std::fs::remove_file(temp_mod_path).unwrap();
+    std::fs::remove_file(temp_wav_path).unwrap();
+}
+
+#[test]
+fn export_wav_can_select_protracker_mixer_mode() {
+    let temp_mod_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("temp_loop_pitch_protracker.mod");
+    let temp_wav_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("temp_loop_pitch_protracker.wav");
+    write_looped_sine_mod_file(&temp_mod_path);
+
+    let output = Command::new(env!("CARGO_BIN_EXE_rustytracker"))
+        .arg(EXPORT_WAV_COMMAND)
+        .arg(&temp_mod_path)
+        .arg(&temp_wav_path)
+        .arg(SAMPLE_RATE_FLAG)
+        .arg(EXPORT_WAV_TEST_SAMPLE_RATE.to_string())
+        .arg(MIXER_FLAG)
+        .arg("protracker")
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let left_channel = read_wav_left_channel(&temp_wav_path);
+    let mean_period = mean_positive_zero_crossing_period(&left_channel);
+
+    assert!(
+        (EXPORT_WAV_EXPECTED_PROTRACKER_C3_PERIOD_MIN
+            ..=EXPORT_WAV_EXPECTED_PROTRACKER_C3_PERIOD_MAX)
             .contains(&mean_period),
         "mean period {mean_period}"
     );

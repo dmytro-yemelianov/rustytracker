@@ -1,5 +1,5 @@
 use rustytracker_core::Module;
-use rustytracker_play::PlaybackState;
+use rustytracker_play::{PlaybackMixerMode, PlaybackSettings, PlaybackState};
 use rustytracker_xm::{XM_HEADER_SIGNATURE, XM_HEADER_SIGNATURE_LENGTH};
 use wasm_bindgen::prelude::*;
 
@@ -17,21 +17,30 @@ pub struct RustyTrackerWasmEngine {
 impl RustyTrackerWasmEngine {
     #[wasm_bindgen(constructor)]
     pub fn new(module_bytes: &[u8]) -> Result<RustyTrackerWasmEngine, JsValue> {
-        let (module, format) = if module_bytes.len() >= XM_HEADER_SIGNATURE_LENGTH
+        Self::new_with_mixer(module_bytes, PlaybackMixerMode::HiFi.cli_name())
+    }
+
+    pub fn new_with_mixer(
+        module_bytes: &[u8],
+        mixer_mode: &str,
+    ) -> Result<RustyTrackerWasmEngine, JsValue> {
+        let mixer_mode = PlaybackMixerMode::from_name(mixer_mode)
+            .ok_or_else(|| JsValue::from_str("Invalid mixer mode"))?;
+        let module = if module_bytes.len() >= XM_HEADER_SIGNATURE_LENGTH
             && &module_bytes[..XM_HEADER_SIGNATURE_LENGTH] == XM_HEADER_SIGNATURE
         {
-            let m = rustytracker_xm::parse_xm_module(module_bytes)
-                .map_err(|e| JsValue::from_str(&format!("XM parse err: {e:?}")))?;
-            (m, "xm")
+            rustytracker_xm::parse_xm_module(module_bytes)
+                .map_err(|e| JsValue::from_str(&format!("XM parse err: {e:?}")))?
         } else {
-            let m = rustytracker_mod::parse_mod_module(module_bytes)
-                .map_err(|e| JsValue::from_str(&format!("MOD parse err: {e:?}")))?;
-            (m, "mod")
+            rustytracker_mod::parse_mod_module(module_bytes)
+                .map_err(|e| JsValue::from_str(&format!("MOD parse err: {e:?}")))?
         };
 
-        let use_pal_clock = format == "mod";
-        let playback = PlaybackState::start_with_config(&module, use_pal_clock)
-            .map_err(|e| JsValue::from_str(&format!("Playback start err: {e:?}")))?;
+        let playback = PlaybackState::start_with_settings(
+            &module,
+            PlaybackSettings::with_mixer_mode(mixer_mode),
+        )
+        .map_err(|e| JsValue::from_str(&format!("Playback start err: {e:?}")))?;
 
         Ok(Self { playback, module })
     }

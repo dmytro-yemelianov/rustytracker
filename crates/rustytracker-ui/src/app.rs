@@ -3,7 +3,7 @@ use rustytracker_core::{
     Envelope, Instrument, InstrumentName, Module, Sample, SampleLoopKind, SampleName,
 };
 use rustytracker_edit::ModuleEditor;
-use rustytracker_play::PlaybackState;
+use rustytracker_play::{PlaybackMixerMode, PlaybackSettings, PlaybackState};
 use rustytracker_xm::{XM_HEADER_SIGNATURE, XM_HEADER_SIGNATURE_LENGTH};
 use std::path::Path;
 
@@ -105,7 +105,7 @@ pub struct RustyTrackerApp {
     pub(crate) tracker_resources: tracker_ui::TrackerUiResources,
     pub(crate) ui_settings: TrackerUiSettings,
     pub(crate) edit_mode: bool,
-    pub(crate) is_mod: bool,
+    pub(crate) mixer_mode: PlaybackMixerMode,
 
     // Cursor position
     pub(crate) active_order_index: usize,
@@ -135,7 +135,7 @@ impl RustyTrackerApp {
             tracker_resources,
             ui_settings,
             edit_mode: false,
-            is_mod: false,
+            mixer_mode: PlaybackMixerMode::default(),
             active_order_index: 0,
             active_row: 0,
             active_channel: 0,
@@ -161,18 +161,12 @@ impl RustyTrackerApp {
 
     pub(crate) fn load_module_file(&mut self, path: &Path) {
         if let Ok(bytes) = std::fs::read(path) {
-            let (parsed, is_mod) = if bytes.len() >= XM_HEADER_SIGNATURE_LENGTH
+            let parsed = if bytes.len() >= XM_HEADER_SIGNATURE_LENGTH
                 && &bytes[..XM_HEADER_SIGNATURE_LENGTH] == XM_HEADER_SIGNATURE
             {
-                (
-                    rustytracker_xm::parse_xm_module(&bytes).map_err(|e| format!("{e:?}")),
-                    false,
-                )
+                rustytracker_xm::parse_xm_module(&bytes).map_err(|e| format!("{e:?}"))
             } else {
-                (
-                    rustytracker_mod::parse_mod_module(&bytes).map_err(|e| format!("{e:?}")),
-                    true,
-                )
+                rustytracker_mod::parse_mod_module(&bytes).map_err(|e| format!("{e:?}"))
             };
 
             match parsed {
@@ -181,7 +175,6 @@ impl RustyTrackerApp {
                     self.active_row = 0;
                     self.active_order_index = 0;
                     self.active_channel = 0;
-                    self.is_mod = is_mod;
                     self.audio_engine
                         .update_module(self.editor.module().clone());
                     self.audio_engine.stop();
@@ -195,7 +188,10 @@ impl RustyTrackerApp {
 
     pub(crate) fn export_to_wav_file(&self, path: &Path) {
         let module = self.editor.module();
-        if let Ok(mut playback) = PlaybackState::start_with_config(module, self.is_mod) {
+        if let Ok(mut playback) = PlaybackState::start_with_settings(
+            module,
+            PlaybackSettings::with_mixer_mode(self.mixer_mode),
+        ) {
             if let Ok(wav_bytes) = playback.render_to_wav(module, 44100) {
                 if let Err(e) = std::fs::write(path, wav_bytes) {
                     eprintln!("Failed to write WAV file: {e:?}");

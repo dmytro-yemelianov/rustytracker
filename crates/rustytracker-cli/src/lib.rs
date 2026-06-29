@@ -6,7 +6,10 @@ use rustytracker_core::{
     EffectCommand, Envelope, FrequencyTable, Module, Pattern, PatternCell, Sample, SampleData,
     SampleLoopKind, DEFAULT_INSTRUMENT_NUMBER,
 };
-use rustytracker_play::{PlaybackChannelState, PlaybackRowState, PlaybackState, TickAdvance};
+use rustytracker_play::{
+    PlaybackChannelState, PlaybackMixerMode, PlaybackRowState, PlaybackSettings, PlaybackState,
+    TickAdvance,
+};
 use rustytracker_xm::{XM_HEADER_SIGNATURE, XM_HEADER_SIGNATURE_LENGTH};
 use serde::Serialize;
 
@@ -19,6 +22,7 @@ const PLAY_STATE_FORMAT: &str = "play_state";
 const PLAY_STATE_COMMAND: &str = "play-state";
 const EXPORT_WAV_COMMAND: &str = "export-wav";
 const EXPORT_WAV_SAMPLE_RATE_FLAG: &str = "--sample-rate";
+const EXPORT_WAV_MIXER_FLAG: &str = "--mixer";
 const EXPORT_WAV_MIN_SAMPLE_RATE: u32 = 1;
 const DEFAULT_EXPORT_SAMPLE_RATE: u32 = 44100;
 const FORMAT_FLAG: &str = "--format";
@@ -27,7 +31,8 @@ const ROWS_FLAG: &str = "--rows";
 pub(crate) const USAGE: &str = concat!(
     "usage: rustytracker dump <module.xm|module.mod> --format json\n",
     "       rustytracker play-state <module.xm|module.mod> --rows <count>\n",
-    "       rustytracker export-wav <module.xm|module.mod> <output.wav> [--sample-rate <rate>]"
+    "       rustytracker export-wav <module.xm|module.mod> <output.wav> ",
+    "[--sample-rate <rate>] [--mixer <hifi|milkytracker|amiga|protracker>]"
 );
 const PLAY_STATE_MIN_ROWS: usize = 1;
 const FNV_OFFSET: u64 = 0xcbf29ce484222325;
@@ -297,24 +302,32 @@ where
     let output_path = args.next().ok_or(DumpError::InvalidArguments)?;
 
     let mut sample_rate = DEFAULT_EXPORT_SAMPLE_RATE;
+    let mut mixer_mode = PlaybackMixerMode::default();
 
-    if let Some(arg) = args.next() {
-        if arg == EXPORT_WAV_SAMPLE_RATE_FLAG {
-            let rate_str = args.next().ok_or(DumpError::InvalidArguments)?;
-            sample_rate = parse_export_sample_rate(rate_str)?;
-        } else {
-            return Err(DumpError::InvalidArguments);
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            EXPORT_WAV_SAMPLE_RATE_FLAG => {
+                let rate_str = args.next().ok_or(DumpError::InvalidArguments)?;
+                sample_rate = parse_export_sample_rate(rate_str)?;
+            }
+            EXPORT_WAV_MIXER_FLAG => {
+                let mixer_str = args.next().ok_or(DumpError::InvalidArguments)?;
+                mixer_mode = parse_export_mixer_mode(mixer_str)?;
+            }
+            _ => return Err(DumpError::InvalidArguments),
         }
     }
 
-    if args.next().is_some() {
-        return Err(DumpError::InvalidArguments);
-    }
-
-    export_wav_file(Path::new(&input_path), Path::new(&output_path), sample_rate)?;
+    export_wav_file_with_mixer(
+        Path::new(&input_path),
+        Path::new(&output_path),
+        sample_rate,
+        mixer_mode,
+    )?;
 
     Ok(format!(
-        "Successfully exported WAV to {output_path} (sample rate: {sample_rate} Hz)\n"
+        "Successfully exported WAV to {output_path} (sample rate: {sample_rate} Hz, mixer: {})\n",
+        mixer_mode.cli_name()
     ))
 }
 
@@ -323,8 +336,23 @@ pub fn export_wav_file(
     output_path: &Path,
     sample_rate: u32,
 ) -> Result<(), DumpError> {
+    export_wav_file_with_mixer(
+        input_path,
+        output_path,
+        sample_rate,
+        PlaybackMixerMode::default(),
+    )
+}
+
+pub fn export_wav_file_with_mixer(
+    input_path: &Path,
+    output_path: &Path,
+    sample_rate: u32,
+    mixer_mode: PlaybackMixerMode,
+) -> Result<(), DumpError> {
     let (module, _format) = load_module_from_file(input_path)?;
-    let mut playback = PlaybackState::start(&module)?;
+    let mut playback =
+        PlaybackState::start_with_settings(&module, PlaybackSettings::with_mixer_mode(mixer_mode))?;
     let wav_bytes = playback.render_to_wav(&module, sample_rate)?;
     std::fs::write(output_path, wav_bytes)?;
     Ok(())
@@ -348,6 +376,11 @@ fn parse_export_sample_rate(sample_rate: String) -> Result<u32, DumpError> {
     }
 
     Ok(parsed)
+}
+
+fn parse_export_mixer_mode(mixer_mode: String) -> Result<PlaybackMixerMode, DumpError> {
+    PlaybackMixerMode::from_name(&mixer_mode)
+        .ok_or_else(|| DumpError::InvalidMixerMode(mixer_mode.clone()))
 }
 
 fn validate_requested_rows(requested_rows: usize, source: String) -> Result<usize, DumpError> {
