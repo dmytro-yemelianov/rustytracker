@@ -31,11 +31,565 @@ impl Selection {
     }
 }
 
-/// Undo/Redo stack for snapshot-based state restoration.
+/// Reversible editor commands for pattern and module modifications.
+#[derive(Debug, Clone, PartialEq)]
+pub enum EditCommand {
+    SetNote {
+        pattern_idx: usize,
+        channel: u16,
+        row: u16,
+        old_note: Note,
+        new_note: Note,
+    },
+    SetInstrument {
+        pattern_idx: usize,
+        channel: u16,
+        row: u16,
+        old_instrument: u8,
+        new_instrument: u8,
+    },
+    SetEffect {
+        pattern_idx: usize,
+        channel: u16,
+        row: u16,
+        slot: u8,
+        old_effect: EffectCommand,
+        new_effect: EffectCommand,
+    },
+    ClearCell {
+        pattern_idx: usize,
+        channel: u16,
+        row: u16,
+        old_cell: PatternCell,
+        new_cell: PatternCell,
+    },
+    InsertOrder {
+        index: usize,
+        pattern_idx: u8,
+    },
+    DeleteOrder {
+        index: usize,
+        old_pattern_idx: u8,
+        was_only_one: bool,
+    },
+    SetOrder {
+        index: usize,
+        old_pattern_idx: u8,
+        new_pattern_idx: u8,
+    },
+    MoveOrder {
+        from_idx: usize,
+        to_idx: usize,
+    },
+    TransposeSelection {
+        pattern_idx: usize,
+        selection: Selection,
+        semitones: i8,
+        old_cells: Vec<(u16, u16, PatternCell)>,
+    },
+    RemapInstrumentSelection {
+        pattern_idx: usize,
+        selection: Selection,
+        from_ins: u8,
+        to_ins: u8,
+        old_cells: Vec<(u16, u16, PatternCell)>,
+    },
+    ClearSelection {
+        pattern_idx: usize,
+        selection: Selection,
+        clear_notes: bool,
+        clear_instruments: bool,
+        clear_effects: bool,
+        old_cells: Vec<(u16, u16, PatternCell)>,
+    },
+    InsertRow {
+        pattern_idx: usize,
+        row_idx: u16,
+        discarded_row_cells: Vec<PatternCell>,
+    },
+    DeleteRow {
+        pattern_idx: usize,
+        row_idx: u16,
+        deleted_row_cells: Vec<PatternCell>,
+    },
+    ReplaceModule {
+        old_module: Box<Module>,
+        new_module: Box<Module>,
+    },
+    EditInstrumentAndSample {
+        instrument_index: usize,
+        sample_index: Option<usize>,
+        old_instrument: Box<Instrument>,
+        old_sample: Option<Box<Sample>>,
+        new_instrument: Box<Instrument>,
+        new_sample: Option<Box<Sample>>,
+    },
+}
+
+impl EditCommand {
+    pub fn undo(&self, module: &mut Module) -> CoreResult<()> {
+        match self {
+            EditCommand::SetNote {
+                pattern_idx,
+                channel,
+                row,
+                old_note,
+                ..
+            } => {
+                let pattern = module
+                    .patterns
+                    .get_mut(*pattern_idx)
+                    .ok_or(CoreError::PatternNumberOverflow)?;
+                let mut cell = pattern.cell(*channel, *row)?.clone();
+                cell.note = *old_note;
+                pattern.set_cell(*channel, *row, cell)?;
+            }
+            EditCommand::SetInstrument {
+                pattern_idx,
+                channel,
+                row,
+                old_instrument,
+                ..
+            } => {
+                let pattern = module
+                    .patterns
+                    .get_mut(*pattern_idx)
+                    .ok_or(CoreError::PatternNumberOverflow)?;
+                let mut cell = pattern.cell(*channel, *row)?.clone();
+                cell.instrument = *old_instrument;
+                pattern.set_cell(*channel, *row, cell)?;
+            }
+            EditCommand::SetEffect {
+                pattern_idx,
+                channel,
+                row,
+                slot,
+                old_effect,
+                ..
+            } => {
+                let pattern = module
+                    .patterns
+                    .get_mut(*pattern_idx)
+                    .ok_or(CoreError::PatternNumberOverflow)?;
+                let mut cell = pattern.cell(*channel, *row)?.clone();
+                if usize::from(*slot) >= cell.effects.len() {
+                    return Err(CoreError::InvalidEffectSlot {
+                        slot: *slot,
+                        slots: cell.effects.len() as u8,
+                    });
+                }
+                cell.effects[usize::from(*slot)] = *old_effect;
+                pattern.set_cell(*channel, *row, cell)?;
+            }
+            EditCommand::ClearCell {
+                pattern_idx,
+                channel,
+                row,
+                old_cell,
+                ..
+            } => {
+                let pattern = module
+                    .patterns
+                    .get_mut(*pattern_idx)
+                    .ok_or(CoreError::PatternNumberOverflow)?;
+                pattern.set_cell(*channel, *row, old_cell.clone())?;
+            }
+            EditCommand::InsertOrder { index, .. } => {
+                let len = module.orders.len();
+                if *index < len {
+                    if len > 1 {
+                        module.orders.remove(*index);
+                    } else {
+                        module.orders[0] = 0;
+                    }
+                }
+            }
+            EditCommand::DeleteOrder {
+                index,
+                old_pattern_idx,
+                was_only_one,
+            } => {
+                if *was_only_one {
+                    if !module.orders.is_empty() {
+                        module.orders[0] = *old_pattern_idx;
+                    }
+                } else {
+                    module.orders.insert(*index, *old_pattern_idx);
+                }
+            }
+            EditCommand::SetOrder {
+                index,
+                old_pattern_idx,
+                ..
+            } => {
+                let len = module.orders.len();
+                if *index < len {
+                    module.orders[*index] = *old_pattern_idx;
+                }
+            }
+            EditCommand::MoveOrder { from_idx, to_idx } => {
+                let len = module.orders.len();
+                if *from_idx < len && *to_idx < len {
+                    let item = module.orders.remove(*to_idx);
+                    module.orders.insert(*from_idx, item);
+                }
+            }
+            EditCommand::TransposeSelection {
+                pattern_idx,
+                old_cells,
+                ..
+            } => {
+                let pattern = module
+                    .patterns
+                    .get_mut(*pattern_idx)
+                    .ok_or(CoreError::PatternNumberOverflow)?;
+                for &(channel, row, ref cell) in old_cells {
+                    pattern.set_cell(channel, row, cell.clone())?;
+                }
+            }
+            EditCommand::RemapInstrumentSelection {
+                pattern_idx,
+                old_cells,
+                ..
+            } => {
+                let pattern = module
+                    .patterns
+                    .get_mut(*pattern_idx)
+                    .ok_or(CoreError::PatternNumberOverflow)?;
+                for &(channel, row, ref cell) in old_cells {
+                    pattern.set_cell(channel, row, cell.clone())?;
+                }
+            }
+            EditCommand::ClearSelection {
+                pattern_idx,
+                old_cells,
+                ..
+            } => {
+                let pattern = module
+                    .patterns
+                    .get_mut(*pattern_idx)
+                    .ok_or(CoreError::PatternNumberOverflow)?;
+                for &(channel, row, ref cell) in old_cells {
+                    pattern.set_cell(channel, row, cell.clone())?;
+                }
+            }
+            EditCommand::InsertRow {
+                pattern_idx,
+                row_idx,
+                discarded_row_cells,
+            } => {
+                let pattern = module
+                    .patterns
+                    .get_mut(*pattern_idx)
+                    .ok_or(CoreError::PatternNumberOverflow)?;
+                let rows = pattern.rows();
+                let chs = pattern.channels();
+                for row in *row_idx..rows - 1 {
+                    for ch in 0..chs {
+                        let cell_below = pattern.cell(ch, row + 1)?.clone();
+                        pattern.set_cell(ch, row, cell_below)?;
+                    }
+                }
+                for ch in 0..chs {
+                    pattern.set_cell(ch, rows - 1, discarded_row_cells[ch as usize].clone())?;
+                }
+            }
+            EditCommand::DeleteRow {
+                pattern_idx,
+                row_idx,
+                deleted_row_cells,
+            } => {
+                let pattern = module
+                    .patterns
+                    .get_mut(*pattern_idx)
+                    .ok_or(CoreError::PatternNumberOverflow)?;
+                let rows = pattern.rows();
+                let chs = pattern.channels();
+                for row in (*row_idx + 1..rows).rev() {
+                    for ch in 0..chs {
+                        let cell_above = pattern.cell(ch, row - 1)?.clone();
+                        pattern.set_cell(ch, row, cell_above)?;
+                    }
+                }
+                for ch in 0..chs {
+                    pattern.set_cell(ch, *row_idx, deleted_row_cells[ch as usize].clone())?;
+                }
+            }
+            EditCommand::ReplaceModule { old_module, .. } => {
+                *module = *old_module.clone();
+            }
+            EditCommand::EditInstrumentAndSample {
+                instrument_index,
+                sample_index,
+                old_instrument,
+                old_sample,
+                ..
+            } => {
+                module.instruments[*instrument_index] = *old_instrument.clone();
+                if let (Some(idx), Some(sample)) = (sample_index, old_sample) {
+                    module.samples[*idx] = *sample.clone();
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn redo(&self, module: &mut Module) -> CoreResult<()> {
+        match self {
+            EditCommand::SetNote {
+                pattern_idx,
+                channel,
+                row,
+                new_note,
+                ..
+            } => {
+                let pattern = module
+                    .patterns
+                    .get_mut(*pattern_idx)
+                    .ok_or(CoreError::PatternNumberOverflow)?;
+                let mut cell = pattern.cell(*channel, *row)?.clone();
+                cell.note = *new_note;
+                pattern.set_cell(*channel, *row, cell)?;
+            }
+            EditCommand::SetInstrument {
+                pattern_idx,
+                channel,
+                row,
+                new_instrument,
+                ..
+            } => {
+                let pattern = module
+                    .patterns
+                    .get_mut(*pattern_idx)
+                    .ok_or(CoreError::PatternNumberOverflow)?;
+                let mut cell = pattern.cell(*channel, *row)?.clone();
+                cell.instrument = *new_instrument;
+                pattern.set_cell(*channel, *row, cell)?;
+            }
+            EditCommand::SetEffect {
+                pattern_idx,
+                channel,
+                row,
+                slot,
+                new_effect,
+                ..
+            } => {
+                let pattern = module
+                    .patterns
+                    .get_mut(*pattern_idx)
+                    .ok_or(CoreError::PatternNumberOverflow)?;
+                let mut cell = pattern.cell(*channel, *row)?.clone();
+                if usize::from(*slot) >= cell.effects.len() {
+                    return Err(CoreError::InvalidEffectSlot {
+                        slot: *slot,
+                        slots: cell.effects.len() as u8,
+                    });
+                }
+                cell.effects[usize::from(*slot)] = *new_effect;
+                pattern.set_cell(*channel, *row, cell)?;
+            }
+            EditCommand::ClearCell {
+                pattern_idx,
+                channel,
+                row,
+                new_cell,
+                ..
+            } => {
+                let pattern = module
+                    .patterns
+                    .get_mut(*pattern_idx)
+                    .ok_or(CoreError::PatternNumberOverflow)?;
+                pattern.set_cell(*channel, *row, new_cell.clone())?;
+            }
+            EditCommand::InsertOrder { index, pattern_idx } => {
+                module.orders.insert(*index, *pattern_idx);
+            }
+            EditCommand::DeleteOrder { index, was_only_one, .. } => {
+                if *was_only_one {
+                    if !module.orders.is_empty() {
+                        module.orders[0] = 0;
+                    }
+                } else {
+                    let len = module.orders.len();
+                    if *index < len {
+                        module.orders.remove(*index);
+                    }
+                }
+            }
+            EditCommand::SetOrder {
+                index,
+                new_pattern_idx,
+                ..
+            } => {
+                let len = module.orders.len();
+                if *index < len {
+                    module.orders[*index] = *new_pattern_idx;
+                }
+            }
+            EditCommand::MoveOrder { from_idx, to_idx } => {
+                let len = module.orders.len();
+                if *from_idx < len && *to_idx < len {
+                    let item = module.orders.remove(*from_idx);
+                    module.orders.insert(*to_idx, item);
+                }
+            }
+            EditCommand::TransposeSelection {
+                pattern_idx,
+                selection,
+                semitones,
+                ..
+            } => {
+                let pattern = module
+                    .patterns
+                    .get_mut(*pattern_idx)
+                    .ok_or(CoreError::PatternNumberOverflow)?;
+                for channel in selection.start_channel..=selection.end_channel {
+                    for row in selection.start_row..=selection.end_row {
+                        if let Ok(cell) = pattern.cell(channel, row) {
+                            if let Note::Key(raw_val) = cell.note {
+                                let new_note = transpose_raw_note(raw_val, *semitones);
+                                let mut updated_cell = cell.clone();
+                                updated_cell.note = Note::Key(new_note);
+                                pattern.set_cell(channel, row, updated_cell)?;
+                            }
+                        }
+                    }
+                }
+            }
+            EditCommand::RemapInstrumentSelection {
+                pattern_idx,
+                selection,
+                from_ins,
+                to_ins,
+                ..
+            } => {
+                let pattern = module
+                    .patterns
+                    .get_mut(*pattern_idx)
+                    .ok_or(CoreError::PatternNumberOverflow)?;
+                for channel in selection.start_channel..=selection.end_channel {
+                    for row in selection.start_row..=selection.end_row {
+                        if let Ok(cell) = pattern.cell(channel, row) {
+                            if cell.instrument == *from_ins {
+                                let mut updated_cell = cell.clone();
+                                updated_cell.instrument = *to_ins;
+                                pattern.set_cell(channel, row, updated_cell)?;
+                            }
+                        }
+                    }
+                }
+            }
+            EditCommand::ClearSelection {
+                pattern_idx,
+                selection,
+                clear_notes,
+                clear_instruments,
+                clear_effects,
+                ..
+            } => {
+                let pattern = module
+                    .patterns
+                    .get_mut(*pattern_idx)
+                    .ok_or(CoreError::PatternNumberOverflow)?;
+                for channel in selection.start_channel..=selection.end_channel {
+                    for row in selection.start_row..=selection.end_row {
+                        if let Ok(cell) = pattern.cell(channel, row) {
+                            let mut updated_cell = cell.clone();
+                            if *clear_notes {
+                                updated_cell.note = Note::Empty;
+                            }
+                            if *clear_instruments {
+                                updated_cell.instrument = 0;
+                            }
+                            if *clear_effects {
+                                for eff in &mut updated_cell.effects {
+                                    *eff = EffectCommand::default();
+                                }
+                            }
+                            pattern.set_cell(channel, row, updated_cell)?;
+                        }
+                    }
+                }
+            }
+            EditCommand::InsertRow {
+                pattern_idx,
+                row_idx,
+                ..
+            } => {
+                let pattern = module
+                    .patterns
+                    .get_mut(*pattern_idx)
+                    .ok_or(CoreError::PatternNumberOverflow)?;
+                let rows = pattern.rows();
+                let chs = pattern.channels();
+                let slots = pattern.effect_slots();
+                for row in (*row_idx + 1..rows).rev() {
+                    for ch in 0..chs {
+                        let cell_above = pattern.cell(ch, row - 1)?.clone();
+                        pattern.set_cell(ch, row, cell_above)?;
+                    }
+                }
+                for ch in 0..chs {
+                    let empty_cell = PatternCell {
+                        note: Note::Empty,
+                        instrument: 0,
+                        effects: vec![EffectCommand::default(); usize::from(slots)],
+                    };
+                    pattern.set_cell(ch, *row_idx, empty_cell)?;
+                }
+            }
+            EditCommand::DeleteRow {
+                pattern_idx,
+                row_idx,
+                ..
+            } => {
+                let pattern = module
+                    .patterns
+                    .get_mut(*pattern_idx)
+                    .ok_or(CoreError::PatternNumberOverflow)?;
+                let rows = pattern.rows();
+                let chs = pattern.channels();
+                let slots = pattern.effect_slots();
+                for row in *row_idx..rows - 1 {
+                    for ch in 0..chs {
+                        let cell_below = pattern.cell(ch, row + 1)?.clone();
+                        pattern.set_cell(ch, row, cell_below)?;
+                    }
+                }
+                for ch in 0..chs {
+                    let empty_cell = PatternCell {
+                        note: Note::Empty,
+                        instrument: 0,
+                        effects: vec![EffectCommand::default(); usize::from(slots)],
+                    };
+                    pattern.set_cell(ch, rows - 1, empty_cell)?;
+                }
+            }
+            EditCommand::ReplaceModule { new_module, .. } => {
+                *module = *new_module.clone();
+            }
+            EditCommand::EditInstrumentAndSample {
+                instrument_index,
+                sample_index,
+                new_instrument,
+                new_sample,
+                ..
+            } => {
+                module.instruments[*instrument_index] = *new_instrument.clone();
+                if let (Some(idx), Some(sample)) = (sample_index, new_sample) {
+                    module.samples[*idx] = *sample.clone();
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Undo/Redo stack for command-pattern (delta edits) state restoration.
 #[derive(Debug, Clone)]
 pub struct UndoHistory {
-    undo_stack: VecDeque<Module>,
-    redo_stack: VecDeque<Module>,
+    undo_stack: VecDeque<EditCommand>,
+    redo_stack: VecDeque<EditCommand>,
     limit: usize,
 }
 
@@ -48,8 +602,8 @@ impl UndoHistory {
         }
     }
 
-    pub fn save_state(&mut self, state: &Module) {
-        self.undo_stack.push_back(state.clone());
+    pub fn push_command(&mut self, command: EditCommand) {
+        self.undo_stack.push_back(command);
         if self.undo_stack.len() > self.limit {
             self.undo_stack.pop_front();
         }
@@ -57,26 +611,32 @@ impl UndoHistory {
     }
 
     pub fn undo(&mut self, current: &mut Module) -> bool {
-        if let Some(prev) = self.undo_stack.pop_back() {
-            self.redo_stack.push_back(current.clone());
-            if self.redo_stack.len() > self.limit {
-                self.redo_stack.pop_front();
+        if let Some(cmd) = self.undo_stack.pop_back() {
+            if cmd.undo(current).is_ok() {
+                self.redo_stack.push_back(cmd);
+                if self.redo_stack.len() > self.limit {
+                    self.redo_stack.pop_front();
+                }
+                true
+            } else {
+                false
             }
-            *current = prev;
-            true
         } else {
             false
         }
     }
 
     pub fn redo(&mut self, current: &mut Module) -> bool {
-        if let Some(next) = self.redo_stack.pop_back() {
-            self.undo_stack.push_back(current.clone());
-            if self.undo_stack.len() > self.limit {
-                self.undo_stack.pop_front();
+        if let Some(cmd) = self.redo_stack.pop_back() {
+            if cmd.redo(current).is_ok() {
+                self.undo_stack.push_back(cmd);
+                if self.undo_stack.len() > self.limit {
+                    self.undo_stack.pop_front();
+                }
+                true
+            } else {
+                false
             }
-            *current = next;
-            true
         } else {
             false
         }
@@ -122,8 +682,12 @@ impl ModuleEditor {
     /// Replace the module as a single undoable transaction when a caller edits a full snapshot.
     pub fn replace_module_with_undo(&mut self, module: Module) {
         if self.module != module {
-            self.begin_transaction();
+            let cmd = EditCommand::ReplaceModule {
+                old_module: Box::new(self.module.clone()),
+                new_module: Box::new(module.clone()),
+            };
             self.module = module;
+            self.history.push_command(cmd);
         }
     }
 
@@ -154,7 +718,8 @@ impl ModuleEditor {
             }
         }
 
-        self.begin_transaction();
+        let old_instrument = Box::new(self.module.instruments[instrument_index].clone());
+        let old_sample = sample_index.map(|index| Box::new(self.module.samples[index].clone()));
 
         let Module {
             instruments,
@@ -165,6 +730,19 @@ impl ModuleEditor {
         let sample = sample_index.map(|index| &mut samples[index]);
         edit(instrument, sample);
 
+        let new_instrument = Box::new(self.module.instruments[instrument_index].clone());
+        let new_sample = sample_index.map(|index| Box::new(self.module.samples[index].clone()));
+
+        let cmd = EditCommand::EditInstrumentAndSample {
+            instrument_index,
+            sample_index,
+            old_instrument,
+            old_sample,
+            new_instrument,
+            new_sample,
+        };
+        self.history.push_command(cmd);
+
         Ok(())
     }
 
@@ -172,10 +750,9 @@ impl ModuleEditor {
         self.module
     }
 
-    /// Commit the current module state to the undo history stack before making a change.
-    pub fn begin_transaction(&mut self) {
-        self.history.save_state(&self.module);
-    }
+    /// Stub to satisfy legacy callers. Commands are now auto-recorded on every mutation.
+    #[deprecated(since = "0.2.0", note = "Commands are now auto-recorded, begin_transaction is no longer needed.")]
+    pub fn begin_transaction(&mut self) {}
 
     pub fn undo(&mut self) -> bool {
         self.history.undo(&mut self.module)
@@ -202,21 +779,32 @@ impl ModuleEditor {
         row: u16,
         note: Note,
     ) -> CoreResult<()> {
-        let mut cell = self
+        let pattern = self
             .module
             .patterns
             .get(pattern_idx)
-            .ok_or(CoreError::PatternNumberOverflow)?
-            .cell(channel, row)?
-            .clone();
+            .ok_or(CoreError::PatternNumberOverflow)?;
+        let mut cell = pattern.cell(channel, row)?.clone();
+        let old_note = cell.note;
         cell.note = note;
-        self.begin_transaction();
+
+        let cmd = EditCommand::SetNote {
+            pattern_idx,
+            channel,
+            row,
+            old_note,
+            new_note: note,
+        };
+
         let pattern = self
             .module
             .patterns
             .get_mut(pattern_idx)
             .ok_or(CoreError::PatternNumberOverflow)?;
-        pattern.set_cell(channel, row, cell)
+        pattern.set_cell(channel, row, cell)?;
+
+        self.history.push_command(cmd);
+        Ok(())
     }
 
     pub fn set_instrument(
@@ -226,21 +814,32 @@ impl ModuleEditor {
         row: u16,
         instrument: u8,
     ) -> CoreResult<()> {
-        let mut cell = self
+        let pattern = self
             .module
             .patterns
             .get(pattern_idx)
-            .ok_or(CoreError::PatternNumberOverflow)?
-            .cell(channel, row)?
-            .clone();
+            .ok_or(CoreError::PatternNumberOverflow)?;
+        let mut cell = pattern.cell(channel, row)?.clone();
+        let old_instrument = cell.instrument;
         cell.instrument = instrument;
-        self.begin_transaction();
+
+        let cmd = EditCommand::SetInstrument {
+            pattern_idx,
+            channel,
+            row,
+            old_instrument,
+            new_instrument: instrument,
+        };
+
         let pattern = self
             .module
             .patterns
             .get_mut(pattern_idx)
             .ok_or(CoreError::PatternNumberOverflow)?;
-        pattern.set_cell(channel, row, cell)
+        pattern.set_cell(channel, row, cell)?;
+
+        self.history.push_command(cmd);
+        Ok(())
     }
 
     pub fn set_effect(
@@ -251,27 +850,39 @@ impl ModuleEditor {
         slot: u8,
         command: EffectCommand,
     ) -> CoreResult<()> {
-        let mut cell = self
+        let pattern = self
             .module
             .patterns
             .get(pattern_idx)
-            .ok_or(CoreError::PatternNumberOverflow)?
-            .cell(channel, row)?
-            .clone();
+            .ok_or(CoreError::PatternNumberOverflow)?;
+        let mut cell = pattern.cell(channel, row)?.clone();
         if usize::from(slot) >= cell.effects.len() {
             return Err(CoreError::InvalidEffectSlot {
                 slot,
                 slots: cell.effects.len() as u8,
             });
         }
+        let old_effect = cell.effects[usize::from(slot)];
         cell.effects[usize::from(slot)] = command;
-        self.begin_transaction();
+
+        let cmd = EditCommand::SetEffect {
+            pattern_idx,
+            channel,
+            row,
+            slot,
+            old_effect,
+            new_effect: command,
+        };
+
         let pattern = self
             .module
             .patterns
             .get_mut(pattern_idx)
             .ok_or(CoreError::PatternNumberOverflow)?;
-        pattern.set_cell(channel, row, cell)
+        pattern.set_cell(channel, row, cell)?;
+
+        self.history.push_command(cmd);
+        Ok(())
     }
 
     pub fn clear_cell(&mut self, pattern_idx: usize, channel: u16, row: u16) -> CoreResult<()> {
@@ -280,20 +891,31 @@ impl ModuleEditor {
             .patterns
             .get(pattern_idx)
             .ok_or(CoreError::PatternNumberOverflow)?;
-        pattern.cell(channel, row)?;
+        let old_cell = pattern.cell(channel, row)?.clone();
         let effect_slots = pattern.effect_slots();
         let clean_cell = PatternCell {
             note: Note::Empty,
             instrument: 0,
             effects: vec![EffectCommand::default(); usize::from(effect_slots)],
         };
-        self.begin_transaction();
+
+        let cmd = EditCommand::ClearCell {
+            pattern_idx,
+            channel,
+            row,
+            old_cell,
+            new_cell: clean_cell.clone(),
+        };
+
         let pattern = self
             .module
             .patterns
             .get_mut(pattern_idx)
             .ok_or(CoreError::PatternNumberOverflow)?;
-        pattern.set_cell(channel, row, clean_cell)
+        pattern.set_cell(channel, row, clean_cell)?;
+
+        self.history.push_command(cmd);
+        Ok(())
     }
 
     // --- Order List Editing ---
@@ -313,8 +935,14 @@ impl ModuleEditor {
                 index,
                 len: self.module.orders.len(),
             })?;
-        self.begin_transaction();
+
+        let cmd = EditCommand::InsertOrder {
+            index: index + 1,
+            pattern_idx: pattern,
+        };
+
         self.module.orders.insert(index + 1, pattern);
+        self.history.push_command(cmd);
         Ok(())
     }
 
@@ -325,12 +953,23 @@ impl ModuleEditor {
                 len: self.module.orders.len(),
             });
         }
-        self.begin_transaction();
-        if self.module.orders.len() > 1 {
+
+        let old_pattern_idx = self.module.orders[index];
+        let was_only_one = self.module.orders.len() == 1;
+
+        let cmd = EditCommand::DeleteOrder {
+            index,
+            old_pattern_idx,
+            was_only_one,
+        };
+
+        if !was_only_one {
             self.module.orders.remove(index);
         } else {
             self.module.orders[0] = 0;
         }
+
+        self.history.push_command(cmd);
         Ok(())
     }
 
@@ -339,8 +978,16 @@ impl ModuleEditor {
         if index >= len {
             return Err(CoreError::InvalidOrderIndex { index, len });
         }
-        self.begin_transaction();
+
+        let old_pattern_idx = self.module.orders[index];
+        let cmd = EditCommand::SetOrder {
+            index,
+            old_pattern_idx,
+            new_pattern_idx: pattern_idx,
+        };
+
         self.module.orders[index] = pattern_idx;
+        self.history.push_command(cmd);
         Ok(())
     }
 
@@ -352,9 +999,15 @@ impl ModuleEditor {
                 len,
             });
         }
-        self.begin_transaction();
+
+        let cmd = EditCommand::MoveOrder {
+            from_idx,
+            to_idx,
+        };
+
         let item = self.module.orders.remove(from_idx);
         self.module.orders.insert(to_idx, item);
+        self.history.push_command(cmd);
         Ok(())
     }
 
@@ -367,11 +1020,28 @@ impl ModuleEditor {
         selection: Selection,
         semitones: i8,
     ) -> CoreResult<()> {
-        self.module
+        let pattern = self
+            .module
             .patterns
             .get(pattern_idx)
             .ok_or(CoreError::PatternNumberOverflow)?;
-        self.begin_transaction();
+
+        let mut old_cells = Vec::new();
+        for channel in selection.start_channel..=selection.end_channel {
+            for row in selection.start_row..=selection.end_row {
+                if let Ok(cell) = pattern.cell(channel, row) {
+                    old_cells.push((channel, row, cell.clone()));
+                }
+            }
+        }
+
+        let cmd = EditCommand::TransposeSelection {
+            pattern_idx,
+            selection,
+            semitones,
+            old_cells,
+        };
+
         let pattern = self
             .module
             .patterns
@@ -390,6 +1060,8 @@ impl ModuleEditor {
                 }
             }
         }
+
+        self.history.push_command(cmd);
         Ok(())
     }
 
@@ -401,11 +1073,29 @@ impl ModuleEditor {
         from_ins: u8,
         to_ins: u8,
     ) -> CoreResult<()> {
-        self.module
+        let pattern = self
+            .module
             .patterns
             .get(pattern_idx)
             .ok_or(CoreError::PatternNumberOverflow)?;
-        self.begin_transaction();
+
+        let mut old_cells = Vec::new();
+        for channel in selection.start_channel..=selection.end_channel {
+            for row in selection.start_row..=selection.end_row {
+                if let Ok(cell) = pattern.cell(channel, row) {
+                    old_cells.push((channel, row, cell.clone()));
+                }
+            }
+        }
+
+        let cmd = EditCommand::RemapInstrumentSelection {
+            pattern_idx,
+            selection,
+            from_ins,
+            to_ins,
+            old_cells,
+        };
+
         let pattern = self
             .module
             .patterns
@@ -423,6 +1113,8 @@ impl ModuleEditor {
                 }
             }
         }
+
+        self.history.push_command(cmd);
         Ok(())
     }
 
@@ -435,11 +1127,30 @@ impl ModuleEditor {
         clear_instruments: bool,
         clear_effects: bool,
     ) -> CoreResult<()> {
-        self.module
+        let pattern = self
+            .module
             .patterns
             .get(pattern_idx)
             .ok_or(CoreError::PatternNumberOverflow)?;
-        self.begin_transaction();
+
+        let mut old_cells = Vec::new();
+        for channel in selection.start_channel..=selection.end_channel {
+            for row in selection.start_row..=selection.end_row {
+                if let Ok(cell) = pattern.cell(channel, row) {
+                    old_cells.push((channel, row, cell.clone()));
+                }
+            }
+        }
+
+        let cmd = EditCommand::ClearSelection {
+            pattern_idx,
+            selection,
+            clear_notes,
+            clear_instruments,
+            clear_effects,
+            old_cells,
+        };
+
         let pattern = self
             .module
             .patterns
@@ -465,6 +1176,8 @@ impl ModuleEditor {
                 }
             }
         }
+
+        self.history.push_command(cmd);
         Ok(())
     }
 
@@ -485,14 +1198,24 @@ impl ModuleEditor {
             return Err(CoreError::InvalidRow { row: row_idx, rows });
         }
 
-        self.begin_transaction();
+        let mut discarded_row_cells = Vec::new();
+        for ch in 0..chs {
+            discarded_row_cells.push(pattern.cell(ch, rows - 1)?.clone());
+        }
+
+        let cmd = EditCommand::InsertRow {
+            pattern_idx,
+            row_idx,
+            discarded_row_cells,
+        };
+
         let pattern = self
             .module
             .patterns
             .get_mut(pattern_idx)
             .ok_or(CoreError::PatternNumberOverflow)?;
 
-        // We shift cells down starting from the end
+        // Shift cells down
         for row in (row_idx + 1..rows).rev() {
             for ch in 0..chs {
                 let cell_above = pattern.cell(ch, row - 1)?.clone();
@@ -500,7 +1223,7 @@ impl ModuleEditor {
             }
         }
 
-        // Insert clean empty cell at target row_idx
+        // Insert clean empty cell
         for ch in 0..chs {
             let empty_cell = PatternCell {
                 note: Note::Empty,
@@ -510,6 +1233,7 @@ impl ModuleEditor {
             pattern.set_cell(ch, row_idx, empty_cell)?;
         }
 
+        self.history.push_command(cmd);
         Ok(())
     }
 
@@ -528,7 +1252,17 @@ impl ModuleEditor {
             return Err(CoreError::InvalidRow { row: row_idx, rows });
         }
 
-        self.begin_transaction();
+        let mut deleted_row_cells = Vec::new();
+        for ch in 0..chs {
+            deleted_row_cells.push(pattern.cell(ch, row_idx)?.clone());
+        }
+
+        let cmd = EditCommand::DeleteRow {
+            pattern_idx,
+            row_idx,
+            deleted_row_cells,
+        };
+
         let pattern = self
             .module
             .patterns
@@ -553,6 +1287,7 @@ impl ModuleEditor {
             pattern.set_cell(ch, rows - 1, empty_cell)?;
         }
 
+        self.history.push_command(cmd);
         Ok(())
     }
 }
