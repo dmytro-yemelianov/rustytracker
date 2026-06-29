@@ -15,3 +15,4 @@ rustytracker-mod = { path = "../rustytracker-mod" }
 eframe = "0.27"
 rfd = "0.14"
 cpal = "0.15"
+rtrb = "0.3.4"

@@ -1,23 +1,48 @@
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use rustytracker_core::Module;
 use rustytracker_play::PlaybackState;
 
-const FALLBACK_SAMPLE_RATE: u32 = 44_100;
 const PCM16_MIN: i32 = -32_768;
 const PCM16_MAX: i32 = 32_767;
 const PCM16_NORMALIZATION: f32 = 32_768.0;
 
-pub(crate) struct AudioEngineState {
-    pub(crate) playback: Option<PlaybackState>,
-    pub(crate) module: Option<Module>,
-    pub(crate) is_playing: bool,
+pub(crate) enum AudioCommand {
+    Play,
+    Pause,
+    Stop,
+    UpdateModule(Module),
+    SetPlayback(Option<PlaybackState>),
+}
+
+pub(crate) struct AudioStatus {
+    pub(crate) is_playing: AtomicBool,
+    pub(crate) order_index: AtomicUsize,
+    pub(crate) row: AtomicU32,
+}
+
+impl AudioStatus {
+    pub(crate) fn new() -> Self {
+        Self {
+            is_playing: AtomicBool::new(false),
+            order_index: AtomicUsize::new(0),
+            row: AtomicU32::new(0),
+        }
+    }
+}
+
+struct AudioThreadState {
+    playback: Option<PlaybackState>,
+    module: Option<Module>,
+    is_playing: bool,
     sample_rate: u32,
 }
 
 pub(crate) struct AudioPlaybackEngine {
-    pub(crate) state: Arc<Mutex<AudioEngineState>>,
+    pub(crate) producer: Mutex<rtrb::Producer<AudioCommand>>,
+    pub(crate) status: Arc<AudioStatus>,
     _stream: Option<cpal::Stream>,
 }
 
@@ -28,8 +53,10 @@ impl AudioPlaybackEngine {
             Some(d) => d,
             None => {
                 eprintln!("No default audio output device found!");
+                let (producer, _) = rtrb::RingBuffer::new(1);
                 return Self {
-                    state: Arc::new(Mutex::new(AudioEngineState::silent(FALLBACK_SAMPLE_RATE))),
+                    producer: Mutex::new(producer),
+                    status: Arc::new(AudioStatus::new()),
                     _stream: None,
                 };
             }
@@ -39,44 +66,71 @@ impl AudioPlaybackEngine {
             Ok(c) => c,
             Err(e) => {
                 eprintln!("Failed to get default output config: {e}");
+                let (producer, _) = rtrb::RingBuffer::new(1);
                 return Self {
-                    state: Arc::new(Mutex::new(AudioEngineState::silent(FALLBACK_SAMPLE_RATE))),
+                    producer: Mutex::new(producer),
+                    status: Arc::new(AudioStatus::new()),
                     _stream: None,
                 };
             }
         };
 
         let sample_rate = config.sample_rate().0;
-        let state = Arc::new(Mutex::new(AudioEngineState::silent(sample_rate)));
+        let (producer, consumer) = rtrb::RingBuffer::new(256);
+        let status = Arc::new(AudioStatus::new());
 
-        let state_clone = Arc::clone(&state);
+        let status_clone = Arc::clone(&status);
         let err_fn = |err| eprintln!("an error occurred on stream: {err}");
 
+        let mut consumer_opt = Some(consumer);
+        let mut local_state_opt = Some(AudioThreadState {
+            playback: None,
+            module: None,
+            is_playing: false,
+            sample_rate,
+        });
+
+        let status_inner_clone = Arc::clone(&status_clone);
         let stream = match config.sample_format() {
-            cpal::SampleFormat::F32 => device.build_output_stream(
-                &config.into(),
-                move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                    write_audio(data, &state_clone);
-                },
-                err_fn,
-                None,
-            ),
-            cpal::SampleFormat::I16 => device.build_output_stream(
-                &config.into(),
-                move |data: &mut [i16], _: &cpal::OutputCallbackInfo| {
-                    write_audio(data, &state_clone);
-                },
-                err_fn,
-                None,
-            ),
-            cpal::SampleFormat::U16 => device.build_output_stream(
-                &config.into(),
-                move |data: &mut [u16], _: &cpal::OutputCallbackInfo| {
-                    write_audio(data, &state_clone);
-                },
-                err_fn,
-                None,
-            ),
+            cpal::SampleFormat::F32 => {
+                let mut consumer = consumer_opt.take().unwrap();
+                let mut local_state = local_state_opt.take().unwrap();
+                let status_inner = Arc::clone(&status_inner_clone);
+                device.build_output_stream(
+                    &config.into(),
+                    move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                        write_audio(data, &mut consumer, &status_inner, &mut local_state);
+                    },
+                    err_fn,
+                    None,
+                )
+            }
+            cpal::SampleFormat::I16 => {
+                let mut consumer = consumer_opt.take().unwrap();
+                let mut local_state = local_state_opt.take().unwrap();
+                let status_inner = Arc::clone(&status_inner_clone);
+                device.build_output_stream(
+                    &config.into(),
+                    move |data: &mut [i16], _: &cpal::OutputCallbackInfo| {
+                        write_audio(data, &mut consumer, &status_inner, &mut local_state);
+                    },
+                    err_fn,
+                    None,
+                )
+            }
+            cpal::SampleFormat::U16 => {
+                let mut consumer = consumer_opt.take().unwrap();
+                let mut local_state = local_state_opt.take().unwrap();
+                let status_inner = Arc::clone(&status_inner_clone);
+                device.build_output_stream(
+                    &config.into(),
+                    move |data: &mut [u16], _: &cpal::OutputCallbackInfo| {
+                        write_audio(data, &mut consumer, &status_inner, &mut local_state);
+                    },
+                    err_fn,
+                    None,
+                )
+            }
             _ => Err(cpal::BuildStreamError::DeviceNotAvailable),
         };
 
@@ -92,65 +146,107 @@ impl AudioPlaybackEngine {
         };
 
         Self {
-            state,
+            producer: Mutex::new(producer),
+            status,
             _stream: stream,
         }
     }
-}
 
-impl AudioEngineState {
-    fn silent(sample_rate: u32) -> Self {
-        Self {
-            playback: None,
-            module: None,
-            is_playing: false,
-            sample_rate,
+    pub(crate) fn update_module(&self, module: Module) {
+        if let Ok(mut prod) = self.producer.lock() {
+            let _ = prod.push(AudioCommand::UpdateModule(module));
         }
+    }
+
+    pub(crate) fn play(&self) {
+        if let Ok(mut prod) = self.producer.lock() {
+            let _ = prod.push(AudioCommand::Play);
+        }
+    }
+
+    pub(crate) fn pause(&self) {
+        if let Ok(mut prod) = self.producer.lock() {
+            let _ = prod.push(AudioCommand::Pause);
+        }
+    }
+
+    pub(crate) fn stop(&self) {
+        if let Ok(mut prod) = self.producer.lock() {
+            let _ = prod.push(AudioCommand::Stop);
+        }
+    }
+
+    pub(crate) fn set_playback(&self, playback: Option<PlaybackState>) {
+        if let Ok(mut prod) = self.producer.lock() {
+            let _ = prod.push(AudioCommand::SetPlayback(playback));
+        }
+    }
+
+    pub(crate) fn is_playing(&self) -> bool {
+        self.status.is_playing.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn get_position(&self) -> (usize, u16) {
+        let order_index = self.status.order_index.load(Ordering::Relaxed);
+        let row = self.status.row.load(Ordering::Relaxed) as u16;
+        (order_index, row)
     }
 }
 
-fn write_audio<T>(output: &mut [T], state_lock: &Arc<Mutex<AudioEngineState>>)
-where
+fn write_audio<T>(
+    output: &mut [T],
+    consumer: &mut rtrb::Consumer<AudioCommand>,
+    status: &Arc<AudioStatus>,
+    local_state: &mut AudioThreadState,
+) where
     T: cpal::Sample + cpal::FromSample<f32>,
 {
-    let mut state_guard = match state_lock.lock() {
-        Ok(s) => s,
-        Err(_) => {
-            write_silence(output);
-            return;
+    while let Ok(cmd) = consumer.pop() {
+        match cmd {
+            AudioCommand::Play => {
+                local_state.is_playing = true;
+            }
+            AudioCommand::Pause => {
+                local_state.is_playing = false;
+            }
+            AudioCommand::Stop => {
+                local_state.is_playing = false;
+                local_state.playback = None;
+            }
+            AudioCommand::UpdateModule(module) => {
+                local_state.module = Some(module);
+            }
+            AudioCommand::SetPlayback(playback) => {
+                local_state.playback = playback;
+            }
         }
-    };
+    }
 
-    let state = &mut *state_guard;
-    if !state.is_playing {
+    if !local_state.is_playing {
         write_silence(output);
+        status.is_playing.store(false, Ordering::Relaxed);
         return;
     }
 
-    let AudioEngineState {
-        playback,
-        module,
-        sample_rate,
-        ..
-    } = state;
-
-    let playback = match playback {
+    let playback = match &mut local_state.playback {
         Some(pb) => pb,
         None => {
             write_silence(output);
+            status.is_playing.store(false, Ordering::Relaxed);
             return;
         }
     };
 
-    let module = match module {
+    let module = match &local_state.module {
         Some(m) => m,
         None => {
             write_silence(output);
+            status.is_playing.store(false, Ordering::Relaxed);
             return;
         }
     };
 
-    let sample_rate = *sample_rate;
+    let sample_rate = local_state.sample_rate;
     let mut song_ended = false;
 
     for frame in output.chunks_mut(2) {
@@ -182,8 +278,18 @@ where
     }
 
     if song_ended {
-        state.is_playing = false;
-        state.playback = None;
+        local_state.is_playing = false;
+        local_state.playback = None;
+    }
+
+    status.is_playing.store(local_state.is_playing, Ordering::Relaxed);
+    if local_state.is_playing {
+        if let Some(pb) = &local_state.playback {
+            if let Ok(pos) = pb.clock().position(module) {
+                status.order_index.store(pos.order_index, Ordering::Relaxed);
+                status.row.store(pos.row as u32, Ordering::Relaxed);
+            }
+        }
     }
 }
 
