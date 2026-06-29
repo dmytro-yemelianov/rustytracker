@@ -2,7 +2,7 @@ use crate::app::{InstrumentEditorEdits, RustyTrackerApp, ViewMode};
 use crate::tracker_ui;
 use eframe::egui;
 use egui::Ui;
-use rustytracker_core::{InstrumentName, SampleLoopKind, SampleName};
+use rustytracker_core::{InstrumentName, Note, NoteName, SampleLoopKind, SampleName};
 use rustytracker_play::{PlaybackMixerMode, PlaybackSettings, PlaybackState};
 
 impl RustyTrackerApp {
@@ -131,6 +131,7 @@ impl RustyTrackerApp {
             .clicked()
             {
                 self.audio_engine.stop();
+                self.audio_engine.preview_note_off();
                 self.active_row = 0;
                 self.active_order_index = 0;
             }
@@ -227,6 +228,7 @@ impl RustyTrackerApp {
             )
             .clicked()
             {
+                self.audio_engine.preview_note_off();
                 self.view_mode = ViewMode::PatternEditor;
             }
             if tracker_ui::show_toolbar_button(
@@ -238,6 +240,7 @@ impl RustyTrackerApp {
             )
             .clicked()
             {
+                self.audio_engine.preview_note_off();
                 self.view_mode = ViewMode::InstrumentEditor;
             }
 
@@ -366,6 +369,10 @@ impl RustyTrackerApp {
                 );
                 if response.clicked() {
                     self.selected_instrument = ins_num;
+                    if let Ok(Note::Key(value)) = Note::key(4, NoteName::C) {
+                        self.audio_engine
+                            .preview_note_on(ins_num, value, self.mixer_mode);
+                    }
                 }
             }
         });
