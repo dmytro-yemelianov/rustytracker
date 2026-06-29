@@ -738,7 +738,7 @@ fn roundtrips_nonzero_core_sample_indexes_as_xm_local_slots() {
         volume: XM_WRITER_TEST_SAMPLE_VOLUME_255,
         panning: XM_WRITER_TEST_SAMPLE_PANNING,
         volume_fadeout: XM_WRITER_TEST_VOLUME_FADEOUT,
-        data: SampleData::Pcm8(XM_WRITER_TEST_SAMPLE_VALUES_8.to_vec()),
+        data: SampleData::pcm8(XM_WRITER_TEST_SAMPLE_VALUES_8.to_vec()),
         ..Sample::default()
     };
 
@@ -779,7 +779,7 @@ fn writes_8_bit_sample_payloads_with_delta_encoding() {
     module.samples[XM_WRITER_FIRST_SAMPLE_INDEX].loop_start = XM_WRITER_TEST_SAMPLE_LOOP_START;
     module.samples[XM_WRITER_FIRST_SAMPLE_INDEX].loop_length = XM_WRITER_TEST_SAMPLE_LOOP_LENGTH;
     module.samples[XM_WRITER_FIRST_SAMPLE_INDEX].data =
-        SampleData::Pcm8(XM_WRITER_TEST_SAMPLE_VALUES_8.to_vec());
+        SampleData::pcm8(XM_WRITER_TEST_SAMPLE_VALUES_8.to_vec());
 
     let bytes = write_header_patterns_and_instruments(&module);
     let section = parse_written_instruments(&bytes);
@@ -805,7 +805,7 @@ fn writes_16_bit_sample_payloads_with_delta_encoding() {
     module.samples[XM_WRITER_FIRST_SAMPLE_INDEX].loop_start = XM_WRITER_TEST_SAMPLE_LOOP_START;
     module.samples[XM_WRITER_FIRST_SAMPLE_INDEX].loop_length = XM_WRITER_TEST_SAMPLE_LOOP_LENGTH;
     module.samples[XM_WRITER_FIRST_SAMPLE_INDEX].data =
-        SampleData::Pcm16(XM_WRITER_TEST_SAMPLE_VALUES_16.to_vec());
+        SampleData::pcm16(XM_WRITER_TEST_SAMPLE_VALUES_16.to_vec());
 
     let bytes = write_header_patterns_and_instruments(&module);
     let section = parse_written_instruments(&bytes);
@@ -842,7 +842,7 @@ fn rejects_16_bit_sample_loop_offsets_that_do_not_fit_xm_u32_fields() {
     let mut module = module_with_one_named_empty_sample();
     module.samples[XM_WRITER_FIRST_SAMPLE_INDEX].loop_start = XM_WRITER_OVERLONG_SAMPLE_LOOP_START;
     module.samples[XM_WRITER_FIRST_SAMPLE_INDEX].data =
-        SampleData::Pcm16(XM_WRITER_TEST_SAMPLE_VALUES_16.to_vec());
+        SampleData::pcm16(XM_WRITER_TEST_SAMPLE_VALUES_16.to_vec());
 
     assert_eq!(
         write_xm_instruments(&module).unwrap_err(),

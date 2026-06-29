@@ -1802,8 +1802,8 @@ fn convert_samples_to_core(instruments: &[XmInstrument]) -> Vec<Sample> {
                 finetune: sample.finetune,
                 relative_note: sample.relative_note,
                 data: match &sample.decoded_data {
-                    XmSampleData::Pcm8(values) => CoreSampleData::Pcm8(values.clone()),
-                    XmSampleData::Pcm16(values) => CoreSampleData::Pcm16(values.clone()),
+                    XmSampleData::Pcm8(values) => CoreSampleData::pcm8(values.clone()),
+                    XmSampleData::Pcm16(values) => CoreSampleData::pcm16(values.clone()),
                 },
             };
         }

@@ -295,7 +295,7 @@ pub fn parse_mod_module(bytes: &[u8]) -> Result<Module, ModParseError> {
             for j in 0..sample.length as usize {
                 data_vec[j] = sample_bytes[j] as i8;
             }
-            sample.data = SampleData::Pcm8(data_vec);
+            sample.data = SampleData::pcm8(data_vec);
         }
     }
 
@@ -537,7 +537,7 @@ pub fn write_mod_module(module: &Module) -> Result<Vec<u8>, ModWriteError> {
         if let Some((sample_index, sample)) = mod_instrument_sample(module, i)? {
             let sample_bytes = match &sample.data {
                 SampleData::Pcm8(data) => {
-                    let mut data = data.clone();
+                    let mut data = (**data).clone();
                     if !data.len().is_multiple_of(2) {
                         data.push(0);
                     }

@@ -170,8 +170,9 @@ impl RustyTrackerApp {
     }
 
     fn commit_edit_to_audio(&mut self) {
+        let cloned_module = self.editor.module().clone();
         if let Ok(mut state) = self.audio_engine.state.lock() {
-            state.module = Some(self.editor.module().clone());
+            state.module = Some(cloned_module);
         }
     }
 
@@ -351,13 +352,13 @@ impl RustyTrackerApp {
             )
             .clicked()
             {
+                let cloned_module = self.editor.module().clone();
+                let playback_state = PlaybackState::start_with_config(&cloned_module, self.is_mod).ok();
                 if let Ok(mut state) = self.audio_engine.state.lock() {
                     state.is_playing = true;
-                    state.module = Some(self.editor.module().clone());
+                    state.module = Some(cloned_module);
                     if state.playback.is_none() {
-                        state.playback =
-                            PlaybackState::start_with_config(self.editor.module(), self.is_mod)
-                                .ok();
+                        state.playback = playback_state;
                     }
                 }
             }
@@ -641,8 +642,9 @@ impl RustyTrackerApp {
                     self.active_order_index = 0;
                     self.active_channel = 0;
                     self.is_mod = is_mod;
+                    let cloned_module = self.editor.module().clone();
                     if let Ok(mut state) = self.audio_engine.state.lock() {
-                        state.module = Some(self.editor.module().clone());
+                        state.module = Some(cloned_module);
                         state.playback = None;
                         state.is_playing = false;
                     }

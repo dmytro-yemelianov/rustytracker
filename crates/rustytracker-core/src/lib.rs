@@ -451,11 +451,19 @@ impl Instrument {
 pub enum SampleData {
     #[default]
     Empty,
-    Pcm8(Vec<i8>),
-    Pcm16(Vec<i16>),
+    Pcm8(std::sync::Arc<Vec<i8>>),
+    Pcm16(std::sync::Arc<Vec<i16>>),
 }
 
 impl SampleData {
+    pub fn pcm8(v: Vec<i8>) -> Self {
+        Self::Pcm8(std::sync::Arc::new(v))
+    }
+
+    pub fn pcm16(v: Vec<i16>) -> Self {
+        Self::Pcm16(std::sync::Arc::new(v))
+    }
+
     pub fn frame_count(&self) -> usize {
         match self {
             Self::Empty => 0,
@@ -464,6 +472,7 @@ impl SampleData {
         }
     }
 }
+
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Sample {

@@ -147,7 +147,7 @@ fn rejects_mod_samples_that_exceed_header_length_field() {
     let sample_len = 131_072;
     module.samples[0] = Sample {
         length: sample_len as u32,
-        data: SampleData::Pcm8(vec![0; sample_len]),
+        data: SampleData::pcm8(vec![0; sample_len]),
         ..Sample::default()
     };
 
@@ -167,11 +167,11 @@ fn mod_writer_exports_samples_through_instrument_slots() {
     module.header.channel_count = 4;
     module.instruments[1].sample_slots[0] = Some(16);
     module.samples[1] = Sample {
-        data: SampleData::Pcm8(vec![1, 1, 1, 1]),
+        data: SampleData::pcm8(vec![1, 1, 1, 1]),
         ..Sample::default()
     };
     module.samples[16] = Sample {
-        data: SampleData::Pcm8(vec![9, 8, 7, 6]),
+        data: SampleData::pcm8(vec![9, 8, 7, 6]),
         volume: 128,
         finetune: -16,
         ..Sample::default()
@@ -182,7 +182,7 @@ fn mod_writer_exports_samples_through_instrument_slots() {
 
     assert_eq!(reparsed.samples[1].volume, 128);
     assert_eq!(reparsed.samples[1].finetune, -16);
-    assert_eq!(reparsed.samples[1].data, SampleData::Pcm8(vec![9, 8, 7, 6]));
+    assert_eq!(reparsed.samples[1].data, SampleData::pcm8(vec![9, 8, 7, 6]));
 }
 
 #[test]
@@ -333,7 +333,7 @@ fn test_31_instrument_4_channel_parsing() {
     // Check signed 8-bit PCM data loading
     match &module.samples[0].data {
         SampleData::Pcm8(data) => {
-            assert_eq!(data, &[1, 2, 3, 4, -4, -3, -2, -1]);
+            assert_eq!(&**data, &[1, 2, 3, 4, -4, -3, -2, -1]);
         }
         other => panic!("expected PCM8, got {other:?}"),
     }

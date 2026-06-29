@@ -1262,9 +1262,9 @@ mod tests {
 
     #[test]
     fn waveform_sample_value_normalizes_pcm_data() {
-        assert_eq!(waveform_sample_value(&SampleData::Pcm8(vec![64]), 0), 0.5);
+        assert_eq!(waveform_sample_value(&SampleData::pcm8(vec![64]), 0), 0.5);
         assert_eq!(
-            waveform_sample_value(&SampleData::Pcm16(vec![-16384]), 0),
+            waveform_sample_value(&SampleData::pcm16(vec![-16384]), 0),
             -0.5
         );
         assert_eq!(waveform_sample_value(&SampleData::Empty, 0), 0.0);

@@ -449,13 +449,13 @@ fn decoded_sample_checksum(samples: &[rustytracker_core::Sample]) -> u64 {
         match &sample.data {
             SampleData::Empty => {}
             SampleData::Pcm8(values) => {
-                for value in values {
+                for value in values.iter() {
                     checksum ^= *value as u8 as u64;
                     checksum = checksum.wrapping_mul(FNV_PRIME);
                 }
             }
             SampleData::Pcm16(values) => {
-                for value in values {
+                for value in values.iter() {
                     for byte in value.to_le_bytes() {
                         checksum ^= byte as u64;
                         checksum = checksum.wrapping_mul(FNV_PRIME);

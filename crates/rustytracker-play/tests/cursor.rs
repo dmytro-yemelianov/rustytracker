@@ -550,7 +550,7 @@ fn sample_step_reads_pcm8_frames_and_advances_position() {
             ),
         )],
     );
-    module.samples[PLAY_TEST_FIRST_SAMPLE_INDEX].data = SampleData::Pcm8(vec![
+    module.samples[PLAY_TEST_FIRST_SAMPLE_INDEX].data = SampleData::pcm8(vec![
         PLAY_TEST_PCM8_FIRST_VALUE,
         PLAY_TEST_PCM8_SECOND_VALUE,
     ]);
@@ -609,7 +609,7 @@ fn sample_step_reads_pcm16_frames_without_interpolation() {
             ),
         )],
     );
-    module.samples[PLAY_TEST_FIRST_SAMPLE_INDEX].data = SampleData::Pcm16(vec![
+    module.samples[PLAY_TEST_FIRST_SAMPLE_INDEX].data = SampleData::pcm16(vec![
         PLAY_TEST_PCM16_FIRST_VALUE,
         PLAY_TEST_PCM16_SECOND_VALUE,
     ]);
@@ -693,11 +693,11 @@ fn raw_mono_render_sums_pcm8_and_pcm16_steps_by_channel() {
         PLAY_TEST_SECOND_INSTRUMENT_INDEX,
         PLAY_TEST_SECOND_SAMPLE_INDEX,
     );
-    module.samples[PLAY_TEST_FIRST_SAMPLE_INDEX].data = SampleData::Pcm8(vec![
+    module.samples[PLAY_TEST_FIRST_SAMPLE_INDEX].data = SampleData::pcm8(vec![
         PLAY_TEST_PCM8_FIRST_VALUE,
         PLAY_TEST_PCM8_SECOND_VALUE,
     ]);
-    module.samples[PLAY_TEST_SECOND_SAMPLE_INDEX].data = SampleData::Pcm16(vec![
+    module.samples[PLAY_TEST_SECOND_SAMPLE_INDEX].data = SampleData::pcm16(vec![
         PLAY_TEST_PCM16_HIGH_VALUE,
         PLAY_TEST_PCM16_FIRST_VALUE,
     ]);
@@ -727,7 +727,7 @@ fn raw_mono_render_returns_requested_silence_after_sample_end() {
         )],
     );
     module.samples[PLAY_TEST_FIRST_SAMPLE_INDEX].data =
-        SampleData::Pcm8(vec![PLAY_TEST_PCM8_FIRST_VALUE]);
+        SampleData::pcm8(vec![PLAY_TEST_PCM8_FIRST_VALUE]);
     let mut playback = PlaybackState::start(&module).unwrap();
 
     assert_eq!(
@@ -1651,7 +1651,7 @@ fn test_effect_sample_offset() {
     map_instrument_to_sample(&mut module, 0, 0);
 
     // Give sample 1000 frames
-    module.samples[0].data = SampleData::Pcm8(vec![0; 1000]);
+    module.samples[0].data = SampleData::pcm8(vec![0; 1000]);
 
     let mut playback = PlaybackState::start(&module).unwrap();
 
@@ -1685,7 +1685,7 @@ fn test_forward_loop() {
     map_instrument_to_sample(&mut module, 0, 0);
 
     // Give sample 6 frames, loop_start = 2, loop_length = 3 (loop_end = 5)
-    module.samples[0].data = SampleData::Pcm8(vec![10, 11, 12, 13, 14, 15]);
+    module.samples[0].data = SampleData::pcm8(vec![10, 11, 12, 13, 14, 15]);
     module.samples[0].loop_start = 2;
     module.samples[0].loop_length = 3;
     module.samples[0].loop_kind = SampleLoopKind::Forward;
@@ -1717,7 +1717,7 @@ fn test_ping_pong_loop() {
     map_instrument_to_sample(&mut module, 0, 0);
 
     // Give sample 6 frames, loop_start = 2, loop_length = 3 (loop_end = 5)
-    module.samples[0].data = SampleData::Pcm8(vec![10, 11, 12, 13, 14, 15]);
+    module.samples[0].data = SampleData::pcm8(vec![10, 11, 12, 13, 14, 15]);
     module.samples[0].loop_start = 2;
     module.samples[0].loop_length = 3;
     module.samples[0].loop_kind = SampleLoopKind::PingPong;
@@ -1757,7 +1757,7 @@ fn test_volume_envelope_and_fadeout() {
     map_instrument_to_sample(&mut module, 0, 0);
 
     // Set sample data
-    module.samples[0].data = SampleData::Pcm8(vec![0; 100]);
+    module.samples[0].data = SampleData::pcm8(vec![0; 100]);
 
     // Setup volume envelope:
     // Point 0: frame 0, value 256
@@ -1933,8 +1933,8 @@ fn test_raw_stereo_render_with_panning() {
         PLAY_TEST_SECOND_SAMPLE_INDEX,
     );
 
-    module.samples[PLAY_TEST_FIRST_SAMPLE_INDEX].data = SampleData::Pcm16(vec![1000]);
-    module.samples[PLAY_TEST_SECOND_SAMPLE_INDEX].data = SampleData::Pcm16(vec![1000]);
+    module.samples[PLAY_TEST_FIRST_SAMPLE_INDEX].data = SampleData::pcm16(vec![1000]);
+    module.samples[PLAY_TEST_SECOND_SAMPLE_INDEX].data = SampleData::pcm16(vec![1000]);
 
     module.samples[PLAY_TEST_FIRST_SAMPLE_INDEX].panning = 64;
     module.samples[PLAY_TEST_SECOND_SAMPLE_INDEX].panning = 192;
@@ -1967,7 +1967,7 @@ fn test_render_to_wav() {
         PLAY_TEST_FIRST_INSTRUMENT_INDEX,
         PLAY_TEST_FIRST_SAMPLE_INDEX,
     );
-    module.samples[PLAY_TEST_FIRST_SAMPLE_INDEX].data = SampleData::Pcm16(vec![100; 100]);
+    module.samples[PLAY_TEST_FIRST_SAMPLE_INDEX].data = SampleData::pcm16(vec![100; 100]);
 
     let mut playback = PlaybackState::start(&module).unwrap();
     let wav_bytes = playback.render_to_wav(&module, 44100).unwrap();

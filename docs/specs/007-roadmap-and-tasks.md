@@ -229,7 +229,28 @@ Acceptance:
 - pattern/editor surfaces use fixed tracker metrics, semantic colors, and
   deterministic hit testing
 
+## Milestone 8: iOS Native App & Database Integration
+
+Goal: Create a native iOS SwiftUI client powered by the Rust core engine and a persistent database.
+
+Status: Proposed.
+
+Tasks:
+
+- [ ] Add UniFFI bridge crate to generate Swift bindings for `rustytracker-core` and `rustytracker-play`.
+- [ ] Configure database schema using GRDB.swift or SwiftData to catalog imported modules, playlists, and history.
+- [ ] Create real-time audio thread implementation using `AVAudioSourceNode` feeding from Rust's playback engine.
+- [ ] Implement iOS file document picker integration to copy modules from files/iCloud into sandbox.
+- [ ] Wire up background audio task handling with `AVAudioSession` and `MPRemoteCommandCenter`.
+
+Acceptance:
+
+- Modules parse their metadata through Rust FFI on import and populate the iOS SQLite database.
+- The iOS audio callback runs lock-free and plays `.xm` and `.mod` files smoothly in the background.
+
 ## Immediate Backlog
 
 1. Connect the UI to a real-time CPAL sound card output thread using `rustytracker-play`'s PCM frame generation.
 2. Keep adding focused XM/MOD edge cases and writer features when playback or future compatibility work exposes a concrete gap.
+3. Implement the iOS platform bridge and SQLite/SwiftData integration as described in [013-ios-database-implementation.md](file:///Users/dmytro/Documents/github/rustytracker/docs/specs/013-ios-database-implementation.md).
+
