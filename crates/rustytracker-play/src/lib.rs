@@ -53,7 +53,7 @@ const MILKY_BPM_TICK_BASE: i64 = 625;
 pub enum PlaybackMixerMode {
     #[default]
     HiFi,
-    MilkyTracker,
+    RustySynth,
     Amiga,
     ProTracker,
 }
@@ -61,7 +61,7 @@ pub enum PlaybackMixerMode {
 impl PlaybackMixerMode {
     pub const ALL: [Self; 4] = [
         Self::HiFi,
-        Self::MilkyTracker,
+        Self::RustySynth,
         Self::Amiga,
         Self::ProTracker,
     ];
@@ -69,7 +69,7 @@ impl PlaybackMixerMode {
     pub fn label(self) -> &'static str {
         match self {
             Self::HiFi => "HiFi",
-            Self::MilkyTracker => "MilkyTracker",
+            Self::RustySynth => "RustySynth",
             Self::Amiga => "Amiga",
             Self::ProTracker => "ProTracker",
         }
@@ -78,7 +78,7 @@ impl PlaybackMixerMode {
     pub fn cli_name(self) -> &'static str {
         match self {
             Self::HiFi => "hifi",
-            Self::MilkyTracker => "milkytracker",
+            Self::RustySynth => "rustysynth",
             Self::Amiga => "amiga",
             Self::ProTracker => "protracker",
         }
@@ -87,7 +87,7 @@ impl PlaybackMixerMode {
     pub fn from_name(name: &str) -> Option<Self> {
         match name.trim().to_ascii_lowercase().as_str() {
             "hifi" | "hi-fi" => Some(Self::HiFi),
-            "milkytracker" | "milky" | "mt" => Some(Self::MilkyTracker),
+            "rustysynth" | "rusty" | "rs" => Some(Self::RustySynth),
             "amiga" => Some(Self::Amiga),
             "protracker" | "pro-tracker" | "pt" => Some(Self::ProTracker),
             _ => None,
@@ -99,7 +99,7 @@ impl PlaybackMixerMode {
     }
 
     fn uses_linear_interpolation(self) -> bool {
-        matches!(self, Self::HiFi | Self::MilkyTracker)
+        matches!(self, Self::HiFi | Self::RustySynth)
     }
 }
 
