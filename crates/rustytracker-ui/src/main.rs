@@ -147,11 +147,7 @@ impl RustyTrackerApp {
         let ui_settings = TrackerUiSettings {
             palette: tracker_resources.palette(),
         };
-        {
-            if let Ok(mut state) = audio_engine.state.lock() {
-                state.module = Some(editor.module().clone());
-            }
-        }
+        audio_engine.update_module(editor.module().clone());
         Self {
             editor,
             audio_engine,
@@ -170,22 +166,14 @@ impl RustyTrackerApp {
     }
 
     fn commit_edit_to_audio(&mut self) {
-        let cloned_module = self.editor.module().clone();
-        if let Ok(mut state) = self.audio_engine.state.lock() {
-            state.module = Some(cloned_module);
-        }
+        self.audio_engine.update_module(self.editor.module().clone());
     }
 
     fn sync_playhead_position(&mut self) {
-        if let Ok(state) = self.audio_engine.state.lock() {
-            if state.is_playing {
-                if let (Some(playback), Some(module)) = (&state.playback, &state.module) {
-                    if let Ok(pos) = playback.clock().position(module) {
-                        self.active_order_index = pos.order_index;
-                        self.active_row = pos.row;
-                    }
-                }
-            }
+        if self.audio_engine.is_playing() {
+            let (order_index, row) = self.audio_engine.get_position();
+            self.active_order_index = order_index;
+            self.active_row = row;
         }
     }
 }
@@ -227,13 +215,7 @@ impl eframe::App for RustyTrackerApp {
         self.handle_keyboard_input(ctx);
 
         // Keep requesting repaint if audio is playing to scroll playhead smoothly
-        let is_playing = {
-            if let Ok(state) = self.audio_engine.state.lock() {
-                state.is_playing
-            } else {
-                false
-            }
-        };
+        let is_playing = self.audio_engine.is_playing();
 
         if is_playing {
             ctx.request_repaint();
@@ -321,13 +303,7 @@ impl RustyTrackerApp {
         let theme = self.tracker_resources.theme();
 
         ui.horizontal(|ui| {
-            let is_playing = {
-                if let Ok(state) = self.audio_engine.state.lock() {
-                    state.is_playing
-                } else {
-                    false
-                }
-            };
+            let is_playing = self.audio_engine.is_playing();
 
             if is_playing {
                 if tracker_ui::show_toolbar_button(
@@ -339,9 +315,7 @@ impl RustyTrackerApp {
                 )
                 .clicked()
                 {
-                    if let Ok(mut state) = self.audio_engine.state.lock() {
-                        state.is_playing = false;
-                    }
+                    self.audio_engine.pause();
                 }
             } else if tracker_ui::show_toolbar_button(
                 ui,
@@ -353,12 +327,11 @@ impl RustyTrackerApp {
             .clicked()
             {
                 let cloned_module = self.editor.module().clone();
-                let playback_state = PlaybackState::start_with_config(&cloned_module, self.is_mod).ok();
-                if let Ok(mut state) = self.audio_engine.state.lock() {
-                    state.is_playing = true;
-                    state.module = Some(cloned_module);
-                    if state.playback.is_none() {
-                        state.playback = playback_state;
+                self.audio_engine.play();
+                self.audio_engine.update_module(cloned_module.clone());
+                if !is_playing {
+                    if let Ok(pb) = PlaybackState::start_with_config(&cloned_module, self.is_mod) {
+                        self.audio_engine.set_playback(Some(pb));
                     }
                 }
             }
@@ -372,10 +345,7 @@ impl RustyTrackerApp {
             )
             .clicked()
             {
-                if let Ok(mut state) = self.audio_engine.state.lock() {
-                    state.is_playing = false;
-                    state.playback = None;
-                }
+                self.audio_engine.stop();
                 self.active_row = 0;
                 self.active_order_index = 0;
             }
@@ -545,9 +515,7 @@ impl RustyTrackerApp {
                 );
                 if response.clicked() {
                     self.active_order_index = i;
-                    if let Ok(mut state) = self.audio_engine.state.lock() {
-                        state.playback = None; // Reset playback position
-                    }
+                    self.audio_engine.set_playback(None);
                 }
             }
         });
@@ -642,12 +610,8 @@ impl RustyTrackerApp {
                     self.active_order_index = 0;
                     self.active_channel = 0;
                     self.is_mod = is_mod;
-                    let cloned_module = self.editor.module().clone();
-                    if let Ok(mut state) = self.audio_engine.state.lock() {
-                        state.module = Some(cloned_module);
-                        state.playback = None;
-                        state.is_playing = false;
-                    }
+                    self.audio_engine.update_module(self.editor.module().clone());
+                    self.audio_engine.stop();
                 }
                 Err(err) => {
                     eprintln!("Failed to parse module: {err}");
