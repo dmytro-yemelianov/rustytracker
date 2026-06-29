@@ -29,12 +29,12 @@ pub use effects::{
     EFFECT_VOLUME, EFFECT_VOLUME_SLIDE, VIB_TAB,
 };
 pub use envelope::PlaybackEnvelopeState;
-pub use preview::PreviewVoice;
 use error::validate_sample_rate;
 pub use error::{PlaybackError, PlaybackResult, PLAYBACK_MIN_SAMPLE_RATE};
 pub use flow::{
     EFFECT_PATTERN_BREAK, EFFECT_POSITION_JUMP, EFFECT_SET_SPEED_BPM, SPEED_BPM_THRESHOLD,
 };
+pub use preview::PreviewVoice;
 pub use timing::{
     PlaybackTiming, PLAYBACK_MIN_BPM, PLAYBACK_MIN_TICK_SPEED, PLAYBACK_XM_TICK_NANOS_AT_ONE_BPM,
 };
@@ -61,12 +61,7 @@ pub enum PlaybackMixerMode {
 }
 
 impl PlaybackMixerMode {
-    pub const ALL: [Self; 4] = [
-        Self::HiFi,
-        Self::RustySynth,
-        Self::Amiga,
-        Self::ProTracker,
-    ];
+    pub const ALL: [Self; 4] = [Self::HiFi, Self::RustySynth, Self::Amiga, Self::ProTracker];
 
     pub fn label(self) -> &'static str {
         match self {

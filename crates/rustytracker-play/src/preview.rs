@@ -57,9 +57,10 @@ impl PreviewVoice {
         self.channels[0].apply_cell(module, &cell)?;
 
         if self.channels[0].active {
-            if let (Some(sample_index), Some(instrument_index)) =
-                (self.channels[0].sample_index, self.channels[0].instrument_index)
-            {
+            if let (Some(sample_index), Some(instrument_index)) = (
+                self.channels[0].sample_index,
+                self.channels[0].instrument_index,
+            ) {
                 self.mixer.handle_commands(&[SequencerCommand::Trigger {
                     channel: PREVIEW_CHANNEL,
                     sample_index,

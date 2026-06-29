@@ -44,8 +44,11 @@ impl RustyTrackerApp {
             for key in NOTE_KEYS {
                 if input.key_pressed(key) {
                     if let Some(value) = self.note_value_for_key(key) {
-                        self.audio_engine
-                            .preview_note_on(self.selected_instrument, value, self.mixer_mode);
+                        self.audio_engine.preview_note_on(
+                            self.selected_instrument,
+                            value,
+                            self.mixer_mode,
+                        );
                         self.preview_key = Some(key);
                     }
                 }
