@@ -277,6 +277,8 @@ pub struct PlaybackChannelState {
     pub panning_envelope_state: PlaybackEnvelopeState,
     pub volume_envelope_val: u16,
     pub panning_envelope_val: u16,
+    pub triggered: Option<Option<usize>>,
+    pub stopped: bool,
 }
 
 impl PlaybackChannelState {
@@ -314,6 +316,8 @@ impl PlaybackChannelState {
             panning_envelope_state: PlaybackEnvelopeState::new(),
             volume_envelope_val: 256,
             panning_envelope_val: 128,
+            triggered: None,
+            stopped: false,
         }
     }
 
@@ -663,6 +667,8 @@ impl PlaybackChannelState {
         self.panning_envelope_state.reset();
         self.volume_envelope_val = 256;
         self.panning_envelope_val = 128;
+        self.triggered = Some(start_offset);
+        self.stopped = false;
 
         let Some(instrument_index) = self.instrument_index else {
             self.active = false;
@@ -722,6 +728,7 @@ impl PlaybackChannelState {
         self.sample_index = None;
         self.sample_frame = PLAYBACK_SAMPLE_START_FRAME;
         self.sample_frame_fraction = 0;
+        self.stopped = true;
     }
 
     fn stop_sample(&mut self) {
@@ -729,6 +736,7 @@ impl PlaybackChannelState {
         self.sample_index = None;
         self.sample_frame = PLAYBACK_SAMPLE_START_FRAME;
         self.sample_frame_fraction = 0;
+        self.stopped = true;
     }
 
     fn step_sample(&mut self, module: &Module) -> PlaybackResult<Option<ChannelSampleFrame>> {
@@ -1165,22 +1173,43 @@ impl PlaybackClock {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PlaybackState {
-    clock: PlaybackClock,
-    channels: Vec<PlaybackChannelState>,
-    tick_samples_fractional_rem: i64,
-    song_ended: bool,
-    initialized: bool,
-    use_pal_clock: bool,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SequencerCommand {
+    Trigger {
+        channel: u16,
+        sample_index: usize,
+        instrument_index: usize,
+        note: Note,
+        instrument: u8,
+        volume: u8,
+        panning: u8,
+        period: u32,
+        offset: Option<usize>,
+    },
+    Update {
+        channel: u16,
+        volume: u8,
+        panning: u8,
+        period: u32,
+        volume_envelope_val: u16,
+        panning_envelope_val: u16,
+        fadeout_volume: u32,
+        keyon: bool,
+    },
+    Stop {
+        channel: u16,
+    },
 }
 
-impl PlaybackState {
-    pub fn start(module: &Module) -> PlaybackResult<Self> {
-        Self::start_with_config(module, false)
-    }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Sequencer {
+    pub clock: PlaybackClock,
+    pub channels: Vec<PlaybackChannelState>,
+    pub song_ended: bool,
+}
 
-    pub fn start_with_config(module: &Module, use_pal_clock: bool) -> PlaybackResult<Self> {
+impl Sequencer {
+    pub fn start_with_config(module: &Module) -> PlaybackResult<Self> {
         let clock = PlaybackClock::start(module)?;
         let row_state = clock.row_state(module)?;
         let channels = row_state
@@ -1188,38 +1217,26 @@ impl PlaybackState {
             .iter()
             .map(|channel| PlaybackChannelState::empty(channel.channel))
             .collect();
-        let mut state = Self {
+        let mut seq = Self {
             clock,
             channels,
-            tick_samples_fractional_rem: 0,
             song_ended: false,
-            initialized: false,
-            use_pal_clock,
         };
-        state.apply_row_state(module, &row_state)?;
-        Ok(state)
+        seq.apply_row_state(module, &row_state)?;
+        Ok(seq)
     }
 
-    pub fn clock(&self) -> PlaybackClock {
-        self.clock
-    }
-
-    pub fn channels(&self) -> &[PlaybackChannelState] {
-        &self.channels
-    }
-
-    pub fn song_ended(&self) -> bool {
-        self.song_ended
-    }
-
-    pub fn row_state(&self, module: &Module) -> PlaybackResult<PlaybackRowState> {
-        self.clock.row_state(module)
-    }
-
-    pub fn advance_tick(&mut self, module: &Module) -> PlaybackResult<TickAdvance> {
+    pub fn advance_tick(&mut self, module: &Module) -> PlaybackResult<(TickAdvance, Vec<SequencerCommand>)> {
         if self.song_ended {
-            return Ok(TickAdvance::SongEnd);
+            return Ok((TickAdvance::SongEnd, Vec::new()));
         }
+
+        // Reset transient flags
+        for ch in &mut self.channels {
+            ch.triggered = None;
+            ch.stopped = false;
+        }
+
         let advance = self.clock.advance_tick(module)?;
         match advance {
             TickAdvance::NextRow | TickAdvance::NextOrder => self.trigger_current_row(module)?,
@@ -1233,18 +1250,592 @@ impl PlaybackState {
                 self.song_ended = true;
             }
         }
+
+        // Generate commands
+        let mut commands = Vec::new();
+        for channel in &self.channels {
+            if channel.stopped {
+                commands.push(SequencerCommand::Stop { channel: channel.channel });
+            } else if let Some(offset) = channel.triggered {
+                if let (Some(sample_index), Some(instrument_index)) = (channel.sample_index, channel.instrument_index) {
+                    commands.push(SequencerCommand::Trigger {
+                        channel: channel.channel,
+                        sample_index,
+                        instrument_index,
+                        note: channel.note,
+                        instrument: channel.instrument,
+                        volume: channel.volume,
+                        panning: channel.panning,
+                        period: channel.period,
+                        offset,
+                    });
+                }
+            } else if channel.active {
+                commands.push(SequencerCommand::Update {
+                    channel: channel.channel,
+                    volume: channel.volume,
+                    panning: channel.panning,
+                    period: channel.period,
+                    volume_envelope_val: channel.volume_envelope_val,
+                    panning_envelope_val: channel.panning_envelope_val,
+                    fadeout_volume: channel.fadeout_volume,
+                    keyon: channel.keyon,
+                });
+            }
+        }
+
+        Ok((advance, commands))
+    }
+
+    pub fn generate_initial_commands(&self) -> Vec<SequencerCommand> {
+        let mut commands = Vec::new();
+        for channel in &self.channels {
+            if channel.active {
+                if let (Some(sample_index), Some(instrument_index)) = (channel.sample_index, channel.instrument_index) {
+                    commands.push(SequencerCommand::Trigger {
+                        channel: channel.channel,
+                        sample_index,
+                        instrument_index,
+                        note: channel.note,
+                        instrument: channel.instrument,
+                        volume: channel.volume,
+                        panning: channel.panning,
+                        period: channel.period,
+                        offset: if channel.sample_frame > 0 { Some(channel.sample_frame) } else { None },
+                    });
+                }
+            }
+        }
+        commands
+    }
+
+    fn trigger_current_row(&mut self, module: &Module) -> PlaybackResult<()> {
+        let row_state = self.clock.row_state(module)?;
+        self.apply_row_state(module, &row_state)
+    }
+
+    fn apply_row_state(&mut self, module: &Module, row_state: &PlaybackRowState) -> PlaybackResult<()> {
+        let mut requested_order = None;
+        let mut requested_row = None;
+
+        for channel in &row_state.channels {
+            for effect in &channel.cell.effects {
+                if effect.effect == EFFECT_SET_SPEED_BPM {
+                    if effect.operand == 0 {
+                        self.song_ended = true;
+                    } else if effect.operand < SPEED_BPM_THRESHOLD {
+                        self.clock.set_tick_speed(u16::from(effect.operand))?;
+                    } else {
+                        self.clock.set_bpm(u16::from(effect.operand))?;
+                    }
+                } else if effect.effect == EFFECT_POSITION_JUMP {
+                    requested_order = Some(usize::from(effect.operand));
+                } else if effect.effect == EFFECT_PATTERN_BREAK {
+                    let bcd = effect.operand;
+                    let row = u16::from(bcd >> 4) * 10 + u16::from(bcd & 0x0f);
+                    requested_row = Some(row);
+                }
+            }
+        }
+
+        if requested_order.is_some() || requested_row.is_some() {
+            let current_pos = self.clock.position(module)?;
+            let target_order = match requested_order {
+                Some(order) => order,
+                None => {
+                    let next_order = current_pos.order_index + 1;
+                    if next_order >= module.orders.len() {
+                        usize::from(module.header.restart_position)
+                    } else {
+                        next_order
+                    }
+                }
+            };
+            let target_row = requested_row.unwrap_or_default();
+            self.clock.set_jump_target(PlaybackPosition {
+                order_index: target_order,
+                pattern_index: 0,
+                row: target_row,
+            });
+        }
+
+        for channel in &row_state.channels {
+            let ch_state = &mut self.channels[usize::from(channel.channel)];
+            ch_state.apply_cell(module, &channel.cell)?;
+            ch_state.process_tick_effects(module, 0);
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MixerVoice {
+    pub channel: u16,
+    pub active: bool,
+    pub sample_index: Option<usize>,
+    pub sample_frame: usize,
+    pub sample_frame_fraction: u32,
+    pub volume: u8,
+    pub panning: u8,
+    pub period: u32,
+    pub volume_envelope_val: u16,
+    pub panning_envelope_val: u16,
+    pub fadeout_volume: u32,
+    pub keyon: bool,
+    pub sample_backward: bool,
+}
+
+impl MixerVoice {
+    pub fn empty(channel: u16) -> Self {
+        Self {
+            channel,
+            active: false,
+            sample_index: None,
+            sample_frame: PLAYBACK_SAMPLE_START_FRAME,
+            sample_frame_fraction: 0,
+            volume: PLAYBACK_EMPTY_VOLUME,
+            panning: SAMPLE_DEFAULT_PANNING,
+            period: 0,
+            volume_envelope_val: 256,
+            panning_envelope_val: 128,
+            fadeout_volume: 65536,
+            keyon: true,
+            sample_backward: false,
+        }
+    }
+
+    pub fn stop_sample(&mut self) {
+        self.active = false;
+        self.sample_index = None;
+        self.sample_frame = PLAYBACK_SAMPLE_START_FRAME;
+        self.sample_frame_fraction = 0;
+    }
+
+    fn advance_sample_position(&mut self, sample: &Sample, step: f64) {
+        let frame_count = sample.data.frame_count();
+        if frame_count == 0 {
+            self.stop_sample();
+            return;
+        }
+
+        let current_pos =
+            self.sample_frame as f64 + (self.sample_frame_fraction as f64 / u32::MAX as f64);
+
+        let has_loop = sample.loop_length > 0 && sample.loop_kind != SampleLoopKind::None;
+        if has_loop {
+            let loop_start = sample.loop_start as f64;
+            let loop_length = sample.loop_length as f64;
+            let loop_end = loop_start + loop_length;
+
+            match sample.loop_kind {
+                SampleLoopKind::Forward => {
+                    let mut next_pos = current_pos + step;
+                    if next_pos >= loop_end {
+                        let over = next_pos - loop_end;
+                        let wraps = (over / loop_length).floor();
+                        next_pos = loop_start + over - wraps * loop_length;
+                    }
+                    next_pos = next_pos.clamp(loop_start, loop_end - 0.000001);
+                    self.sample_frame = next_pos as usize;
+                    self.sample_frame_fraction =
+                        ((next_pos - next_pos.floor()) * u32::MAX as f64) as u32;
+                }
+                SampleLoopKind::PingPong => {
+                    if self.sample_backward {
+                        let mut next_pos = current_pos - step;
+                        if next_pos <= loop_start {
+                            self.sample_backward = false;
+                            let under = loop_start - next_pos;
+                            let wraps = (under / loop_length).floor() as i32;
+                            let rem = under - (wraps as f64) * loop_length;
+                            if wraps % 2 == 0 {
+                                next_pos = loop_start + rem;
+                            } else {
+                                self.sample_backward = true;
+                                next_pos = loop_end - rem;
+                            }
+                        }
+                        next_pos = next_pos.clamp(loop_start, loop_end - 0.000001);
+                        self.sample_frame = next_pos as usize;
+                        self.sample_frame_fraction =
+                            ((next_pos - next_pos.floor()) * u32::MAX as f64) as u32;
+                    } else {
+                        let mut next_pos = current_pos + step;
+                        if next_pos >= loop_end {
+                            self.sample_backward = true;
+                            let over = next_pos - loop_end;
+                            let wraps = (over / loop_length).floor() as i32;
+                            let rem = over - (wraps as f64) * loop_length;
+                            if wraps % 2 == 0 {
+                                next_pos = loop_end - rem;
+                            } else {
+                                self.sample_backward = false;
+                                next_pos = loop_start + rem;
+                            }
+                        }
+                        next_pos = next_pos.clamp(loop_start, loop_end - 0.000001);
+                        self.sample_frame = next_pos as usize;
+                        self.sample_frame_fraction =
+                            ((next_pos - next_pos.floor()) * u32::MAX as f64) as u32;
+                    }
+                }
+                SampleLoopKind::None => unreachable!(),
+            }
+        } else {
+            let next_pos = current_pos + step;
+            if next_pos >= frame_count as f64 {
+                self.stop_sample();
+            } else {
+                self.sample_frame = next_pos as usize;
+                self.sample_frame_fraction =
+                    ((next_pos - next_pos.floor()) * u32::MAX as f64) as u32;
+            }
+        }
+    }
+
+    fn advance_sample_frame(&mut self, sample: &Sample) {
+        let frame_count = sample.data.frame_count();
+        if frame_count == 0 {
+            self.stop_sample();
+            return;
+        }
+
+        let has_loop = sample.loop_length > 0 && sample.loop_kind != SampleLoopKind::None;
+
+        if has_loop {
+            let loop_start = sample.loop_start as usize;
+            let loop_length = sample.loop_length as usize;
+            let loop_end = loop_start + loop_length;
+
+            match sample.loop_kind {
+                SampleLoopKind::Forward => {
+                    let next_frame = self.sample_frame.saturating_add(PLAYBACK_SAMPLE_FRAME_STEP);
+                    if next_frame >= loop_end {
+                        self.sample_frame = loop_start + (next_frame - loop_end) % loop_length;
+                    } else {
+                        self.sample_frame = next_frame;
+                    }
+                }
+                SampleLoopKind::PingPong => {
+                    if self.sample_backward {
+                        if self.sample_frame <= loop_start {
+                            self.sample_backward = false;
+                            self.sample_frame = (loop_start + 1).min(loop_end - 1);
+                        } else {
+                            self.sample_frame =
+                                self.sample_frame.saturating_sub(PLAYBACK_SAMPLE_FRAME_STEP);
+                        }
+                    } else {
+                        let next_frame =
+                            self.sample_frame.saturating_add(PLAYBACK_SAMPLE_FRAME_STEP);
+                        if next_frame >= loop_end {
+                            self.sample_backward = true;
+                            self.sample_frame =
+                                (loop_end as i32 - 2).max(loop_start as i32) as usize;
+                        } else {
+                            self.sample_frame = next_frame;
+                        }
+                    }
+                }
+                SampleLoopKind::None => unreachable!(),
+            }
+        } else {
+            let next_frame = self.sample_frame.saturating_add(PLAYBACK_SAMPLE_FRAME_STEP);
+            if next_frame >= frame_count {
+                self.stop_sample();
+            } else {
+                self.sample_frame = next_frame;
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Mixer {
+    pub voices: Vec<MixerVoice>,
+}
+
+impl Mixer {
+    pub fn new(channel_count: usize) -> Self {
+        let voices = (0..channel_count)
+            .map(|ch| MixerVoice::empty(ch as u16))
+            .collect();
+        Self { voices }
+    }
+
+    pub fn handle_commands(&mut self, commands: &[SequencerCommand]) {
+        for cmd in commands {
+            match *cmd {
+                SequencerCommand::Trigger {
+                    channel,
+                    sample_index,
+                    instrument_index: _,
+                    note: _,
+                    instrument: _,
+                    volume,
+                    panning,
+                    period,
+                    offset,
+                } => {
+                    let voice = &mut self.voices[channel as usize];
+                    voice.active = true;
+                    voice.sample_index = Some(sample_index);
+                    voice.volume = volume;
+                    voice.panning = panning;
+                    voice.period = period;
+                    voice.volume_envelope_val = 256;
+                    voice.panning_envelope_val = 128;
+                    voice.fadeout_volume = 65536;
+                    voice.keyon = true;
+                    voice.sample_backward = false;
+                    if let Some(offset_val) = offset {
+                        voice.sample_frame = offset_val;
+                        voice.sample_frame_fraction = 0;
+                    } else {
+                        voice.sample_frame = PLAYBACK_SAMPLE_START_FRAME;
+                        voice.sample_frame_fraction = 0;
+                    }
+                }
+                SequencerCommand::Update {
+                    channel,
+                    volume,
+                    panning,
+                    period,
+                    volume_envelope_val,
+                    panning_envelope_val,
+                    fadeout_volume,
+                    keyon,
+                } => {
+                    let voice = &mut self.voices[channel as usize];
+                    voice.volume = volume;
+                    voice.panning = panning;
+                    voice.period = period;
+                    voice.volume_envelope_val = volume_envelope_val;
+                    voice.panning_envelope_val = panning_envelope_val;
+                    voice.fadeout_volume = fadeout_volume;
+                    voice.keyon = keyon;
+                }
+                SequencerCommand::Stop { channel } => {
+                    let voice = &mut self.voices[channel as usize];
+                    voice.stop_sample();
+                }
+            }
+        }
+    }
+
+    pub fn render_stereo_frame(
+        &mut self,
+        module: &Module,
+        sample_rate: u32,
+        channels: &mut [PlaybackChannelState],
+        use_pal_clock: bool,
+    ) -> PlaybackResult<RawStereoPcmFrame> {
+        let mut mixed_l = 0.0;
+        let mut mixed_r = 0.0;
+
+        for voice in &mut self.voices {
+            if voice.active {
+                if let Some(sample_index) = voice.sample_index {
+                    if let Some(sample) = module.samples.get(sample_index) {
+                        let frame_count = sample.data.frame_count();
+                        if frame_count > 0 {
+                            let frequency = period_to_frequency(
+                                voice.period,
+                                module.header.frequency_table,
+                                use_pal_clock,
+                            );
+                            let step = frequency / sample_rate as f64;
+
+                            let interpolated_val = get_sample_value_linear(
+                                &sample.data,
+                                voice.sample_frame,
+                                voice.sample_frame_fraction,
+                                sample,
+                            );
+
+                            let vol_factor = (voice.volume as f64 / 255.0)
+                                * (voice.volume_envelope_val as f64 / 256.0)
+                                * (voice.fadeout_volume as f64 / 65536.0);
+
+                            let channel_mono_pcm = interpolated_val * vol_factor;
+
+                            let mut pan =
+                                voice.panning as i32 + voice.panning_envelope_val as i32 - 128;
+                            pan = pan.clamp(0, 255);
+
+                            let right_gain = pan as f64 / 255.0;
+                            let left_gain = 1.0 - right_gain;
+
+                            mixed_l += channel_mono_pcm * left_gain;
+                            mixed_r += channel_mono_pcm * right_gain;
+
+                            voice.advance_sample_position(sample, step);
+                        }
+                    }
+                }
+            }
+        }
+
+        self.sync_to_channels(channels);
+        Ok((mixed_l as i32, mixed_r as i32))
+    }
+
+    pub fn render_mono_frame(
+        &mut self,
+        module: &Module,
+        sample_rate: u32,
+        channels: &mut [PlaybackChannelState],
+        use_pal_clock: bool,
+    ) -> PlaybackResult<RawMonoPcmFrame> {
+        let mut mixed = PLAYBACK_MONO_SILENCE;
+
+        for voice in &mut self.voices {
+            if voice.active {
+                if let Some(sample_index) = voice.sample_index {
+                    if let Some(sample) = module.samples.get(sample_index) {
+                        let frame_count = sample.data.frame_count();
+                        if frame_count > 0 {
+                            let frequency = period_to_frequency(
+                                voice.period,
+                                module.header.frequency_table,
+                                use_pal_clock,
+                            );
+                            let step = frequency / sample_rate as f64;
+
+                            let interpolated_val = get_sample_value_linear(
+                                &sample.data,
+                                voice.sample_frame,
+                                voice.sample_frame_fraction,
+                                sample,
+                            );
+
+                            let vol_factor = (voice.volume as f64 / 255.0)
+                                * (voice.volume_envelope_val as f64 / 256.0)
+                                * (voice.fadeout_volume as f64 / 65536.0);
+
+                            let channel_mono_pcm = interpolated_val * vol_factor;
+                            mixed += channel_mono_pcm as i32;
+
+                            voice.advance_sample_position(sample, step);
+                        }
+                    }
+                }
+            }
+        }
+
+        self.sync_to_channels(channels);
+        Ok(mixed)
+    }
+
+    pub fn step_samples(
+        &mut self,
+        module: &Module,
+        channels: &mut [PlaybackChannelState],
+    ) -> PlaybackResult<Vec<ChannelSampleFrame>> {
+        let mut frames = Vec::new();
+        for voice in &mut self.voices {
+            if !voice.active {
+                continue;
+            }
+            let Some(sample_index) = voice.sample_index else {
+                voice.stop_sample();
+                continue;
+            };
+            let Some(sample) = module.samples.get(sample_index) else {
+                let ch = &channels[voice.channel as usize];
+                return Err(PlaybackError::MissingSample {
+                    channel: voice.channel,
+                    instrument_index: ch.instrument_index.unwrap_or(0),
+                    sample_index,
+                });
+            };
+            let Some(value) = sample_value_at_frame(&sample.data, voice.sample_frame) else {
+                voice.stop_sample();
+                continue;
+            };
+
+            let sample_frame = voice.sample_frame;
+            voice.advance_sample_frame(sample);
+            frames.push(ChannelSampleFrame {
+                channel: voice.channel,
+                sample_index,
+                sample_frame,
+                value,
+            });
+        }
+        self.sync_to_channels(channels);
+        Ok(frames)
+    }
+
+    pub fn sync_to_channels(&self, channels: &mut [PlaybackChannelState]) {
+        for voice in &self.voices {
+            if let Some(ch) = channels.get_mut(voice.channel as usize) {
+                ch.active = voice.active;
+                ch.sample_index = voice.sample_index;
+                ch.sample_frame = voice.sample_frame;
+                ch.sample_frame_fraction = voice.sample_frame_fraction;
+                ch.sample_backward = voice.sample_backward;
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaybackState {
+    pub sequencer: Sequencer,
+    pub mixer: Mixer,
+    pub tick_samples_fractional_rem: i64,
+    pub initialized: bool,
+    pub use_pal_clock: bool,
+}
+
+impl PlaybackState {
+    pub fn start(module: &Module) -> PlaybackResult<Self> {
+        Self::start_with_config(module, false)
+    }
+
+    pub fn start_with_config(module: &Module, use_pal_clock: bool) -> PlaybackResult<Self> {
+        let sequencer = Sequencer::start_with_config(module)?;
+        let mixer = Mixer::new(sequencer.channels.len());
+        let initial_commands = sequencer.generate_initial_commands();
+        let mut state = Self {
+            sequencer,
+            mixer,
+            tick_samples_fractional_rem: 0,
+            initialized: false,
+            use_pal_clock,
+        };
+        state.mixer.handle_commands(&initial_commands);
+        state.mixer.sync_to_channels(&mut state.sequencer.channels);
+        Ok(state)
+    }
+
+    pub fn clock(&self) -> PlaybackClock {
+        self.sequencer.clock
+    }
+
+    pub fn channels(&self) -> &[PlaybackChannelState] {
+        &self.sequencer.channels
+    }
+
+    pub fn song_ended(&self) -> bool {
+        self.sequencer.song_ended
+    }
+
+    pub fn row_state(&self, module: &Module) -> PlaybackResult<PlaybackRowState> {
+        self.sequencer.clock.row_state(module)
+    }
+
+    pub fn advance_tick(&mut self, module: &Module) -> PlaybackResult<TickAdvance> {
+        let (advance, commands) = self.sequencer.advance_tick(module)?;
+        self.mixer.handle_commands(&commands);
+        self.mixer.sync_to_channels(&mut self.sequencer.channels);
         Ok(advance)
     }
 
     pub fn step_samples(&mut self, module: &Module) -> PlaybackResult<Vec<ChannelSampleFrame>> {
-        let mut frames = Vec::new();
-        for channel in &mut self.channels {
-            if let Some(frame) = channel.step_sample(module)? {
-                frames.push(frame);
-            }
-        }
-
-        Ok(frames)
+        self.mixer.step_samples(module, &mut self.sequencer.channels)
     }
 
     pub fn render_raw_mono_pcm(
@@ -1267,7 +1858,6 @@ impl PlaybackState {
         for frame in output {
             *frame = self.render_raw_mono_frame(module, sample_rate)?;
         }
-
         Ok(())
     }
 
@@ -1291,7 +1881,6 @@ impl PlaybackState {
         for frame in output {
             *frame = self.render_raw_stereo_frame(module, sample_rate)?;
         }
-
         Ok(())
     }
 
@@ -1374,7 +1963,7 @@ impl PlaybackState {
         module: &Module,
         sample_rate: u32,
     ) -> PlaybackResult<RawStereoPcmFrame> {
-        let mut current_bpm = self.clock.timing().bpm() as i64;
+        let mut current_bpm = self.sequencer.clock.timing().bpm() as i64;
 
         if !self.initialized {
             self.tick_samples_fractional_rem = 5 * sample_rate as i64;
@@ -1382,17 +1971,16 @@ impl PlaybackState {
         }
 
         while self.tick_samples_fractional_rem <= 0 {
-            if self.song_ended {
+            if self.sequencer.song_ended {
                 return Ok(PLAYBACK_STEREO_SILENCE);
             }
 
             match self.advance_tick(module)? {
                 TickAdvance::SongEnd => {
-                    self.song_ended = true;
                     return Ok(PLAYBACK_STEREO_SILENCE);
                 }
                 _ => {
-                    let new_bpm = self.clock.timing().bpm() as i64;
+                    let new_bpm = self.sequencer.clock.timing().bpm() as i64;
                     if new_bpm != current_bpm {
                         let old_denom = 2 * current_bpm;
                         let new_denom = 2 * new_bpm;
@@ -1405,53 +1993,15 @@ impl PlaybackState {
             }
         }
 
-        let mut mixed_l = 0.0;
-        let mut mixed_r = 0.0;
-        for channel in &mut self.channels {
-            if channel.active {
-                if let Some(sample_index) = channel.sample_index {
-                    if let Some(sample) = module.samples.get(sample_index) {
-                        let frame_count = sample.data.frame_count();
-                        if frame_count > 0 {
-                            let frequency = period_to_frequency(
-                                channel.period,
-                                module.header.frequency_table,
-                                self.use_pal_clock,
-                            );
-                            let step = frequency / sample_rate as f64;
-
-                            let interpolated_val = get_sample_value_linear(
-                                &sample.data,
-                                channel.sample_frame,
-                                channel.sample_frame_fraction,
-                                sample,
-                            );
-
-                            let vol_factor = (channel.volume as f64 / 255.0)
-                                * (channel.volume_envelope_val as f64 / 256.0)
-                                * (channel.fadeout_volume as f64 / 65536.0);
-
-                            let channel_mono_pcm = interpolated_val * vol_factor;
-
-                            let mut pan =
-                                channel.panning as i32 + channel.panning_envelope_val as i32 - 128;
-                            pan = pan.clamp(0, 255);
-
-                            let right_gain = pan as f64 / 255.0;
-                            let left_gain = 1.0 - right_gain;
-
-                            mixed_l += channel_mono_pcm * left_gain;
-                            mixed_r += channel_mono_pcm * right_gain;
-
-                            channel.advance_sample_position(sample, step);
-                        }
-                    }
-                }
-            }
-        }
+        let frame = self.mixer.render_stereo_frame(
+            module,
+            sample_rate,
+            &mut self.sequencer.channels,
+            self.use_pal_clock,
+        )?;
 
         self.tick_samples_fractional_rem -= 2 * current_bpm;
-        Ok((mixed_l as i32, mixed_r as i32))
+        Ok(frame)
     }
 
     pub fn render_raw_mono_frame(
@@ -1459,7 +2009,7 @@ impl PlaybackState {
         module: &Module,
         sample_rate: u32,
     ) -> PlaybackResult<RawMonoPcmFrame> {
-        let mut current_bpm = self.clock.timing().bpm() as i64;
+        let mut current_bpm = self.sequencer.clock.timing().bpm() as i64;
 
         if !self.initialized {
             self.tick_samples_fractional_rem = 5 * sample_rate as i64;
@@ -1467,17 +2017,16 @@ impl PlaybackState {
         }
 
         while self.tick_samples_fractional_rem <= 0 {
-            if self.song_ended {
+            if self.sequencer.song_ended {
                 return Ok(PLAYBACK_MONO_SILENCE);
             }
 
             match self.advance_tick(module)? {
                 TickAdvance::SongEnd => {
-                    self.song_ended = true;
                     return Ok(PLAYBACK_MONO_SILENCE);
                 }
                 _ => {
-                    let new_bpm = self.clock.timing().bpm() as i64;
+                    let new_bpm = self.sequencer.clock.timing().bpm() as i64;
                     if new_bpm != current_bpm {
                         let old_denom = 2 * current_bpm;
                         let new_denom = 2 * new_bpm;
@@ -1490,109 +2039,15 @@ impl PlaybackState {
             }
         }
 
-        let mut mixed = PLAYBACK_MONO_SILENCE;
-        for channel in &mut self.channels {
-            if channel.active {
-                if let Some(sample_index) = channel.sample_index {
-                    if let Some(sample) = module.samples.get(sample_index) {
-                        let frame_count = sample.data.frame_count();
-                        if frame_count > 0 {
-                            let frequency = period_to_frequency(
-                                channel.period,
-                                module.header.frequency_table,
-                                self.use_pal_clock,
-                            );
-                            let step = frequency / sample_rate as f64;
-
-                            let interpolated_val = get_sample_value_linear(
-                                &sample.data,
-                                channel.sample_frame,
-                                channel.sample_frame_fraction,
-                                sample,
-                            );
-
-                            let vol_factor = (channel.volume as f64 / 255.0)
-                                * (channel.volume_envelope_val as f64 / 256.0)
-                                * (channel.fadeout_volume as f64 / 65536.0);
-
-                            let channel_mono_pcm = interpolated_val * vol_factor;
-                            mixed += channel_mono_pcm as i32;
-
-                            channel.advance_sample_position(sample, step);
-                        }
-                    }
-                }
-            }
-        }
+        let frame = self.mixer.render_mono_frame(
+            module,
+            sample_rate,
+            &mut self.sequencer.channels,
+            self.use_pal_clock,
+        )?;
 
         self.tick_samples_fractional_rem -= 2 * current_bpm;
-        Ok(mixed)
-    }
-
-    fn trigger_current_row(&mut self, module: &Module) -> PlaybackResult<()> {
-        let row_state = self.clock.row_state(module)?;
-        self.apply_row_state(module, &row_state)
-    }
-
-    fn apply_row_state(
-        &mut self,
-        module: &Module,
-        row_state: &PlaybackRowState,
-    ) -> PlaybackResult<()> {
-        let mut requested_order = None;
-        let mut requested_row = None;
-
-        for channel in &row_state.channels {
-            for effect in &channel.cell.effects {
-                if effect.effect == EFFECT_SET_SPEED_BPM {
-                    if effect.operand == 0 {
-                        self.song_ended = true;
-                    } else if effect.operand < SPEED_BPM_THRESHOLD {
-                        self.clock.set_tick_speed(u16::from(effect.operand))?;
-                    } else {
-                        self.clock.set_bpm(u16::from(effect.operand))?;
-                    }
-                } else if effect.effect == EFFECT_POSITION_JUMP {
-                    requested_order = Some(usize::from(effect.operand));
-                } else if effect.effect == EFFECT_PATTERN_BREAK {
-                    let bcd = effect.operand;
-                    let row = u16::from(bcd >> 4) * 10 + u16::from(bcd & 0x0f);
-                    requested_row = Some(row);
-                }
-            }
-        }
-
-        if requested_order.is_some() || requested_row.is_some() {
-            let current_pos = self.clock.position(module)?;
-
-            let target_order = match requested_order {
-                Some(order) => order,
-                None => {
-                    let next_order = current_pos.order_index + 1;
-                    if next_order >= module.orders.len() {
-                        usize::from(module.header.restart_position)
-                    } else {
-                        next_order
-                    }
-                }
-            };
-
-            let target_row = requested_row.unwrap_or_default();
-
-            self.clock.set_jump_target(PlaybackPosition {
-                order_index: target_order,
-                pattern_index: 0,
-                row: target_row,
-            });
-        }
-
-        for channel in &row_state.channels {
-            let ch_state = &mut self.channels[usize::from(channel.channel)];
-            ch_state.apply_cell(module, &channel.cell)?;
-            ch_state.process_tick_effects(module, 0);
-        }
-
-        Ok(())
+        Ok(frame)
     }
 }
 
