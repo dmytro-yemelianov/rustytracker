@@ -323,9 +323,8 @@ pub fn export_wav_file(
     output_path: &Path,
     sample_rate: u32,
 ) -> Result<(), DumpError> {
-    let (module, format) = load_module_from_file(input_path)?;
-    let use_pal_clock = format == "mod";
-    let mut playback = PlaybackState::start_with_config(&module, use_pal_clock)?;
+    let (module, _format) = load_module_from_file(input_path)?;
+    let mut playback = PlaybackState::start(&module)?;
     let wav_bytes = playback.render_to_wav(&module, sample_rate)?;
     std::fs::write(output_path, wav_bytes)?;
     Ok(())

@@ -328,8 +328,10 @@ impl MixerVoice {
                         let over = next_pos - loop_end;
                         let wraps = (over / loop_length).floor();
                         next_pos = loop_start + over - wraps * loop_length;
+                        next_pos = next_pos.clamp(loop_start, loop_end - 0.000001);
+                    } else {
+                        next_pos = next_pos.min(loop_end - 0.000001);
                     }
-                    next_pos = next_pos.clamp(loop_start, loop_end - 0.000001);
                     self.sample_frame = next_pos as usize;
                     self.sample_frame_fraction =
                         ((next_pos - next_pos.floor()) * u32::MAX as f64) as u32;
@@ -366,8 +368,10 @@ impl MixerVoice {
                                 self.sample_backward = false;
                                 next_pos = loop_start + rem;
                             }
+                            next_pos = next_pos.clamp(loop_start, loop_end - 0.000001);
+                        } else {
+                            next_pos = next_pos.min(loop_end - 0.000001);
                         }
-                        next_pos = next_pos.clamp(loop_start, loop_end - 0.000001);
                         self.sample_frame = next_pos as usize;
                         self.sample_frame_fraction =
                             ((next_pos - next_pos.floor()) * u32::MAX as f64) as u32;

@@ -37,6 +37,9 @@ const PLAY_STATE_NON_NUMERIC_ROW_COUNT_ERROR: &str = "invalid play-state row cou
 const PLAY_STATE_MISSING_ROWS_ERROR: &str = "usage: rustytracker";
 const EXPORT_WAV_ZERO_SAMPLE_RATE_TEXT: &str = "0";
 const EXPORT_WAV_INVALID_SAMPLE_RATE_ERROR: &str = "invalid export sample rate: 0";
+const EXPORT_WAV_TEST_SAMPLE_RATE: u32 = 44_100;
+const EXPORT_WAV_EXPECTED_C3_PERIOD_MIN: f64 = 336.0;
+const EXPORT_WAV_EXPECTED_C3_PERIOD_MAX: f64 = 339.0;
 const PLAY_STATE_EXPECTED_FORMAT: &str = "play_state";
 const PLAY_STATE_EXPECTED_SCHEMA_VERSION: u64 = 1;
 const PLAY_STATE_EXPECTED_CHANNELS: usize = 10;
@@ -311,6 +314,39 @@ fn export_wav_rejects_zero_sample_rate_before_loading_input() {
 }
 
 #[test]
+fn export_wav_uses_milkytracker_mod_pitch_clock() {
+    let temp_mod_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("temp_loop_pitch.mod");
+    let temp_wav_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("temp_loop_pitch.wav");
+    write_looped_sine_mod_file(&temp_mod_path);
+
+    let output = Command::new(env!("CARGO_BIN_EXE_rustytracker"))
+        .arg(EXPORT_WAV_COMMAND)
+        .arg(&temp_mod_path)
+        .arg(&temp_wav_path)
+        .arg(SAMPLE_RATE_FLAG)
+        .arg(EXPORT_WAV_TEST_SAMPLE_RATE.to_string())
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let left_channel = read_wav_left_channel(&temp_wav_path);
+    let mean_period = mean_positive_zero_crossing_period(&left_channel);
+
+    assert!(
+        (EXPORT_WAV_EXPECTED_C3_PERIOD_MIN..=EXPORT_WAV_EXPECTED_C3_PERIOD_MAX)
+            .contains(&mean_period),
+        "mean period {mean_period}"
+    );
+
+    std::fs::remove_file(temp_mod_path).unwrap();
+    std::fs::remove_file(temp_wav_path).unwrap();
+}
+
+#[test]
 fn schema_file_is_valid_json() {
     let schema = read_cli_fixture("../schema/module-dump.schema.json");
     serde_json::from_str::<serde_json::Value>(&schema).unwrap();
@@ -401,6 +437,73 @@ fn write_temp_mod_file(path: &Path) {
     bytes[20 + 15 * 30] = 1; // Song length
     bytes[20 + 15 * 30 + 2] = 0; // First pattern in order list is 0
     std::fs::write(path, bytes).unwrap();
+}
+
+fn write_looped_sine_mod_file(path: &Path) {
+    const SAMPLE_LEN: usize = 64;
+    const MOD_HEADER_LEN: usize = 20 + 15 * 30 + 2 + 128;
+    const MOD_PATTERN_LEN: usize = 64 * 4 * 4;
+    const C3_PERIOD: u16 = 428;
+
+    let mut bytes = vec![0u8; MOD_HEADER_LEN + MOD_PATTERN_LEN + SAMPLE_LEN];
+    bytes[0..11].copy_from_slice(b"CLI C3 LOOP");
+
+    let sample_header = 20;
+    bytes[sample_header..sample_header + 6].copy_from_slice(b"sine64");
+    bytes[sample_header + 22..sample_header + 24]
+        .copy_from_slice(&((SAMPLE_LEN / 2) as u16).to_be_bytes());
+    bytes[sample_header + 25] = 64;
+    bytes[sample_header + 28..sample_header + 30]
+        .copy_from_slice(&((SAMPLE_LEN / 2) as u16).to_be_bytes());
+
+    bytes[20 + 15 * 30] = 1;
+    bytes[20 + 15 * 30 + 2] = 0;
+
+    let pattern_offset = MOD_HEADER_LEN;
+    bytes[pattern_offset] = ((C3_PERIOD >> 8) & 0x0f) as u8;
+    bytes[pattern_offset + 1] = (C3_PERIOD & 0xff) as u8;
+    bytes[pattern_offset + 2] = 0x10;
+
+    let sample_offset = MOD_HEADER_LEN + MOD_PATTERN_LEN;
+    for index in 0..SAMPLE_LEN {
+        let phase = index as f64 * std::f64::consts::TAU / SAMPLE_LEN as f64;
+        bytes[sample_offset + index] = (phase.sin() * 100.0).round() as i8 as u8;
+    }
+
+    std::fs::write(path, bytes).unwrap();
+}
+
+fn read_wav_left_channel(path: &Path) -> Vec<i16> {
+    let bytes = std::fs::read(path).unwrap();
+    assert_eq!(&bytes[0..4], b"RIFF");
+    assert_eq!(&bytes[8..12], b"WAVE");
+    assert_eq!(&bytes[36..40], b"data");
+    let data_size = u32::from_le_bytes(bytes[40..44].try_into().unwrap()) as usize;
+    let data = &bytes[44..44 + data_size];
+    data.chunks_exact(4)
+        .map(|frame| i16::from_le_bytes([frame[0], frame[1]]))
+        .collect()
+}
+
+fn mean_positive_zero_crossing_period(samples: &[i16]) -> f64 {
+    let first_nonzero = samples.iter().position(|sample| *sample != 0).unwrap();
+    let start = first_nonzero + 2_000;
+    let end = (start + EXPORT_WAV_TEST_SAMPLE_RATE as usize * 2).min(samples.len());
+    let crossings: Vec<usize> = samples[start..end]
+        .windows(2)
+        .enumerate()
+        .filter_map(|(index, pair)| {
+            if pair[0] < 0 && pair[1] >= 0 {
+                Some(start + index)
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert!(crossings.len() > 2);
+
+    let total: usize = crossings.windows(2).map(|pair| pair[1] - pair[0]).sum();
+    total as f64 / (crossings.len() - 1) as f64
 }
 
 fn read_cli_fixture(path: impl AsRef<Path>) -> String {

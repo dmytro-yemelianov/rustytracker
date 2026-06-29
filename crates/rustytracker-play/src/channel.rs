@@ -504,8 +504,10 @@ impl PlaybackChannelState {
                         let over = next_pos - loop_end;
                         let wraps = (over / loop_length).floor();
                         next_pos = loop_start + over - wraps * loop_length;
+                        next_pos = next_pos.clamp(loop_start, loop_end - SAMPLE_LOOP_END_EPSILON);
+                    } else {
+                        next_pos = next_pos.min(loop_end - SAMPLE_LOOP_END_EPSILON);
                     }
-                    next_pos = next_pos.clamp(loop_start, loop_end - SAMPLE_LOOP_END_EPSILON);
                     self.sample_frame = next_pos as usize;
                     self.sample_frame_fraction =
                         ((next_pos - next_pos.floor()) * u32::MAX as f64) as u32;
@@ -542,8 +544,11 @@ impl PlaybackChannelState {
                                 self.sample_backward = false;
                                 next_pos = loop_start + rem;
                             }
+                            next_pos =
+                                next_pos.clamp(loop_start, loop_end - SAMPLE_LOOP_END_EPSILON);
+                        } else {
+                            next_pos = next_pos.min(loop_end - SAMPLE_LOOP_END_EPSILON);
                         }
-                        next_pos = next_pos.clamp(loop_start, loop_end - SAMPLE_LOOP_END_EPSILON);
                         self.sample_frame = next_pos as usize;
                         self.sample_frame_fraction =
                             ((next_pos - next_pos.floor()) * u32::MAX as f64) as u32;

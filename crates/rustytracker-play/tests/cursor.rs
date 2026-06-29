@@ -935,6 +935,34 @@ fn raw_mono_render_returns_requested_silence_after_sample_end() {
 }
 
 #[test]
+fn raw_mono_render_plays_pre_loop_frames_before_looping() {
+    for loop_kind in [SampleLoopKind::Forward, SampleLoopKind::PingPong] {
+        let mut module = module_with_two_channel_cells(
+            PLAY_TEST_ONE_ROW,
+            &[(
+                PLAY_TEST_CHANNEL_ZERO,
+                PLAYBACK_FIRST_ROW,
+                test_cell(
+                    PLAY_TEST_CHANNEL_ZERO_NOTE,
+                    PLAY_TEST_CHANNEL_ZERO_INSTRUMENT,
+                ),
+            )],
+        );
+        module.samples[PLAY_TEST_FIRST_SAMPLE_INDEX].data =
+            SampleData::pcm16(vec![1000, 2000, 3000, 4000, 5000]);
+        module.samples[PLAY_TEST_FIRST_SAMPLE_INDEX].loop_start = 3;
+        module.samples[PLAY_TEST_FIRST_SAMPLE_INDEX].loop_length = 2;
+        module.samples[PLAY_TEST_FIRST_SAMPLE_INDEX].loop_kind = loop_kind;
+        let mut playback = PlaybackState::start(&module).unwrap();
+
+        assert_eq!(
+            playback.render_raw_mono_pcm(&module, 8363, 5).unwrap(),
+            vec![1000, 2000, 3000, 4000, 5000]
+        );
+    }
+}
+
+#[test]
 fn raw_mono_render_advances_ticks_and_rows_based_on_sample_rate() {
     let mut module =
         module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_TWO_ROWS]);
