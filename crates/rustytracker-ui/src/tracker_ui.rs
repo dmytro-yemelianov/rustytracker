@@ -1,5 +1,5 @@
 use eframe::egui;
-use egui::{Color32, Pos2, Rect, Response, Sense, Stroke, Ui, Vec2};
+use egui::{Color32, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui, Vec2};
 use rustytracker_core::{EffectCommand, Note, Pattern, PatternCell, SampleData, SampleLoopKind};
 
 use crate::app::ActiveField;
@@ -339,8 +339,12 @@ pub fn show_list_row(
         ui.painter().rect_filled(rect, 0.0, background);
 
         if selected {
-            ui.painter()
-                .rect_stroke(rect, 0.0, Stroke::new(CURSOR_BORDER_WIDTH, accent));
+            ui.painter().rect_stroke(
+                rect,
+                0.0,
+                Stroke::new(CURSOR_BORDER_WIDTH, accent),
+                StrokeKind::Inside,
+            );
         }
 
         let text_color = if selected { accent } else { theme.foreground };
@@ -395,8 +399,12 @@ pub fn show_toolbar_button(
         };
 
         ui.painter().rect_filled(rect, 0.0, background);
-        ui.painter()
-            .rect_stroke(rect, 0.0, Stroke::new(CURSOR_BORDER_WIDTH, stroke_color));
+        ui.painter().rect_stroke(
+            rect,
+            0.0,
+            Stroke::new(CURSOR_BORDER_WIDTH, stroke_color),
+            StrokeKind::Inside,
+        );
         draw_text(
             ui.painter(),
             egui::pos2(
@@ -425,8 +433,12 @@ pub fn show_status_label(ui: &mut Ui, resources: &TrackerUiResources, text: &str
     if ui.is_rect_visible(rect) {
         ui.painter()
             .rect_filled(rect, 0.0, theme.pattern_background);
-        ui.painter()
-            .rect_stroke(rect, 0.0, Stroke::new(CURSOR_BORDER_WIDTH, theme.border));
+        ui.painter().rect_stroke(
+            rect,
+            0.0,
+            Stroke::new(CURSOR_BORDER_WIDTH, theme.border),
+            StrokeKind::Inside,
+        );
         draw_text(
             ui.painter(),
             egui::pos2(
@@ -466,12 +478,12 @@ pub fn show_panel(
     add_contents: impl FnOnce(&mut Ui),
 ) {
     let theme = resources.theme();
-    egui::Frame::none()
+    egui::Frame::NONE
         .fill(theme.pattern_background)
         .stroke(Stroke::new(CURSOR_BORDER_WIDTH, theme.border))
         .inner_margin(egui::Margin::symmetric(
-            PANEL_HORIZONTAL_PADDING,
-            PANEL_VERTICAL_PADDING,
+            PANEL_HORIZONTAL_PADDING as i8,
+            PANEL_VERTICAL_PADDING as i8,
         ))
         .show(ui, |ui| {
             show_panel_title(ui, resources, title);
@@ -515,7 +527,12 @@ pub fn show_waveform(ui: &mut Ui, resources: &TrackerUiResources, view: Waveform
 
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 0.0, theme.pattern_background);
-    painter.rect_stroke(rect, 0.0, Stroke::new(CURSOR_BORDER_WIDTH, theme.border));
+    painter.rect_stroke(
+        rect,
+        0.0,
+        Stroke::new(CURSOR_BORDER_WIDTH, theme.border),
+        StrokeKind::Inside,
+    );
 
     let mid_y = rect.center().y;
     painter.line_segment(
@@ -630,7 +647,12 @@ pub fn show_pattern_editor(
             let painter = ui.painter_at(rect);
 
             painter.rect_filled(rect, 0.0, theme.pattern_background);
-            painter.rect_stroke(rect, 0.0, Stroke::new(CURSOR_BORDER_WIDTH, theme.border));
+            painter.rect_stroke(
+                rect,
+                0.0,
+                Stroke::new(CURSOR_BORDER_WIDTH, theme.border),
+                StrokeKind::Inside,
+            );
 
             draw_headers(&painter, rect, viewport, paint, channels);
             draw_visible_rows(&painter, rect, viewport, paint, pattern, view);
@@ -757,6 +779,7 @@ fn draw_visible_rows(
                     cursor_rect,
                     0.0,
                     Stroke::new(CURSOR_BORDER_WIDTH, theme.pattern_note),
+                    StrokeKind::Inside,
                 );
             }
 

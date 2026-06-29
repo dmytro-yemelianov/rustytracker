@@ -1,6 +1,6 @@
 use rustytracker_core::{
-    EffectCommand, Envelope, EnvelopePoint, Module, Note, Pattern, PatternCell, SampleData,
-    SampleLoopKind, DEFAULT_EFFECT_SLOTS,
+    EffectCommand, Envelope, EnvelopePoint, FrequencyTable, Module, Note, Pattern, PatternCell,
+    SampleData, SampleLoopKind, DEFAULT_EFFECT_SLOTS,
 };
 use rustytracker_play::{
     ChannelSampleFrame, PlaybackChannelState, PlaybackClock, PlaybackCursor, PlaybackEnvelopeState,
@@ -16,6 +16,8 @@ const PLAY_TEST_CHANNELS: u16 = 1;
 const PLAY_TEST_TWO_CHANNELS: u16 = 2;
 const PLAY_TEST_CHANNEL_ZERO: u16 = 0;
 const PLAY_TEST_CHANNEL_ONE: u16 = 1;
+const PLAY_TEST_CHANNEL_TWO: u16 = 2;
+const PLAY_TEST_CHANNEL_THREE: u16 = 3;
 const PLAY_TEST_PATTERN_ZERO: u8 = 0;
 const PLAY_TEST_PATTERN_ONE: u8 = 1;
 const PLAY_TEST_FIRST_PATTERN_INDEX: usize = 0;
@@ -39,6 +41,7 @@ const PLAY_TEST_FAST_TICK_NANOS: u64 = 10_000_000;
 const PLAY_TEST_FAST_ROW_NANOS: u64 =
     PLAY_TEST_FAST_TICK_NANOS * PLAY_TEST_THREE_TICKS_PER_ROW as u64;
 const PLAY_TEST_CHANNEL_ZERO_NOTE: u8 = 49;
+const PLAY_TEST_CHANNEL_ZERO_AMIGA_PERIOD: u32 = 1712;
 const PLAY_TEST_CHANNEL_ONE_NOTE: u8 = 50;
 const PLAY_TEST_ROW_ONE_NOTE: u8 = 51;
 const PLAY_TEST_CHANNEL_ZERO_INSTRUMENT: u8 = 1;
@@ -432,6 +435,73 @@ fn playback_state_triggers_initial_note_instrument_sample() {
     assert_eq!(channel.sample_frame, PLAY_TEST_SAMPLE_START_FRAME);
     assert_eq!(channel.volume, PLAY_TEST_SAMPLE_VOLUME);
     assert_eq!(channel.panning, PLAY_TEST_SAMPLE_PANNING);
+}
+
+#[test]
+fn playback_state_uses_amiga_period_table_for_mod_notes() {
+    let mut module = module_with_two_channel_cells(
+        PLAY_TEST_ONE_ROW,
+        &[(
+            PLAY_TEST_CHANNEL_ZERO,
+            PLAYBACK_FIRST_ROW,
+            test_cell(
+                PLAY_TEST_CHANNEL_ZERO_NOTE,
+                PLAY_TEST_CHANNEL_ZERO_INSTRUMENT,
+            ),
+        )],
+    );
+    module.header.frequency_table = FrequencyTable::Amiga;
+
+    let playback = PlaybackState::start(&module).unwrap();
+    let channel = &playback.channels()[PLAY_TEST_CHANNEL_ZERO as usize];
+
+    assert_eq!(channel.base_period, PLAY_TEST_CHANNEL_ZERO_AMIGA_PERIOD);
+    assert_eq!(channel.period, PLAY_TEST_CHANNEL_ZERO_AMIGA_PERIOD);
+}
+
+#[test]
+fn playback_state_uses_amiga_channel_panning_for_mod_notes() {
+    let mut module = Module::empty_with_channels(4).unwrap();
+    module.header.frequency_table = FrequencyTable::Amiga;
+    module.orders = vec![PLAY_TEST_PATTERN_ZERO];
+    let mut pattern = Pattern::new(PLAY_TEST_ONE_ROW, 4, DEFAULT_EFFECT_SLOTS);
+    for channel in [
+        PLAY_TEST_CHANNEL_ZERO,
+        PLAY_TEST_CHANNEL_ONE,
+        PLAY_TEST_CHANNEL_TWO,
+        PLAY_TEST_CHANNEL_THREE,
+    ] {
+        pattern
+            .set_cell(
+                channel,
+                PLAYBACK_FIRST_ROW,
+                test_cell(
+                    PLAY_TEST_CHANNEL_ZERO_NOTE,
+                    PLAY_TEST_CHANNEL_ZERO_INSTRUMENT,
+                ),
+            )
+            .unwrap();
+    }
+    module.patterns = vec![pattern];
+
+    let playback = PlaybackState::start(&module).unwrap();
+
+    assert_eq!(
+        playback.channels()[PLAY_TEST_CHANNEL_ZERO as usize].panning,
+        0
+    );
+    assert_eq!(
+        playback.channels()[PLAY_TEST_CHANNEL_ONE as usize].panning,
+        255
+    );
+    assert_eq!(
+        playback.channels()[PLAY_TEST_CHANNEL_TWO as usize].panning,
+        255
+    );
+    assert_eq!(
+        playback.channels()[PLAY_TEST_CHANNEL_THREE as usize].panning,
+        0
+    );
 }
 
 #[test]
@@ -2240,6 +2310,26 @@ fn test_render_to_wav() {
     let file_size = u32::from_le_bytes(wav_bytes[4..8].try_into().unwrap());
     assert_eq!(file_size, data_size + 36);
     assert_eq!(wav_bytes.len(), data_size as usize + 44);
+    assert_eq!(
+        data_size / 4,
+        (44100 * 5 * PLAY_TEST_DEFAULT_TICK_SPEED as u32) / (2 * PLAY_TEST_DEFAULT_BPM as u32) + 1
+    );
+}
+
+#[test]
+fn render_to_wav_uses_milkytracker_amiga_tick_clock() {
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_ONE_ROW]);
+    module.header.frequency_table = FrequencyTable::Amiga;
+    let mut playback = PlaybackState::start(&module).unwrap();
+    let wav_bytes = playback.render_to_wav(&module, 44100).unwrap();
+
+    let data_size = u32::from_le_bytes(wav_bytes[40..44].try_into().unwrap());
+    let expected_tick_frames = (44100 / 250) * 5;
+    assert_eq!(
+        data_size / 4,
+        expected_tick_frames * PLAY_TEST_DEFAULT_TICK_SPEED as u32 + 1
+    );
 }
 
 #[test]

@@ -42,6 +42,12 @@ pub type RawStereoPcmFrame = (i32, i32);
 
 pub const PLAYBACK_MONO_SILENCE: RawMonoPcmFrame = 0;
 pub const PLAYBACK_STEREO_SILENCE: RawStereoPcmFrame = (0, 0);
+const AMIGA_PAL_CLOCK_HZ: f64 = 14_187_580.0;
+const AMIGA_NTSC_CLOCK_HZ: f64 = 14_317_056.0;
+const MILKY_MIXER_BASE_FREQUENCY: i64 = 48_000;
+const MILKY_MIXER_TIMER_FREQUENCY: i64 = 250;
+const MILKY_MIXER_BEAT_LENGTH: i64 = MILKY_MIXER_BASE_FREQUENCY / MILKY_MIXER_TIMER_FREQUENCY;
+const MILKY_BPM_TICK_BASE: i64 = 625;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SequencerCommand {
@@ -814,32 +820,23 @@ impl PlaybackState {
             .write_all(&header_bytes)
             .expect("writing to memory buffer should not fail");
 
-        let mut total_samples_written: u32 = 0;
-        let buffer_frames = 1024;
-        let mut frames = vec![PLAYBACK_STEREO_SILENCE; buffer_frames];
-        let mut bytes = Vec::with_capacity(buffer_frames * 4);
+        let mut total_frames_written: u32 = 0;
 
         while !self.song_ended() {
-            self.render_raw_stereo_into(module, sample_rate, &mut frames)?;
+            let (left_i32, right_i32) = self.render_raw_stereo_frame(module, sample_rate)?;
+            let left_i16 = left_i32.clamp(-32768, 32767) as i16;
+            let right_i16 = right_i32.clamp(-32768, 32767) as i16;
 
-            bytes.clear();
-            for &(left_i32, right_i32) in &frames {
-                let left_i16 = left_i32.clamp(-32768, 32767) as i16;
-                let right_i16 = right_i32.clamp(-32768, 32767) as i16;
-                bytes.extend_from_slice(&left_i16.to_le_bytes());
-                bytes.extend_from_slice(&right_i16.to_le_bytes());
-                total_samples_written += 1;
-            }
             buffer
-                .write_all(&bytes)
+                .write_all(&left_i16.to_le_bytes())
                 .expect("writing to memory buffer should not fail");
-
-            if self.song_ended() {
-                break;
-            }
+            buffer
+                .write_all(&right_i16.to_le_bytes())
+                .expect("writing to memory buffer should not fail");
+            total_frames_written += 1;
 
             // Safety limit (1 hour of audio max)
-            if total_samples_written > sample_rate * 3600 {
+            if total_frames_written > sample_rate * 3600 {
                 break;
             }
         }
@@ -848,7 +845,7 @@ impl PlaybackState {
             .seek(SeekFrom::Start(0))
             .expect("seeking in memory buffer should not fail");
 
-        let data_size = total_samples_written * 4;
+        let data_size = total_frames_written * 4;
         let file_size = data_size + 36;
         let byte_rate = sample_rate * 4;
         let block_align: u16 = 4;
@@ -885,9 +882,11 @@ impl PlaybackState {
         sample_rate: u32,
     ) -> PlaybackResult<RawStereoPcmFrame> {
         let mut current_bpm = self.sequencer.clock.timing().bpm() as i64;
+        let (tick_numerator, mut tick_denominator) =
+            render_tick_clock(sample_rate, current_bpm, module.header.frequency_table);
 
         if !self.initialized {
-            self.tick_samples_fractional_rem = 5 * sample_rate as i64;
+            self.tick_samples_fractional_rem = tick_numerator;
             self.initialized = true;
         }
 
@@ -903,13 +902,15 @@ impl PlaybackState {
                 _ => {
                     let new_bpm = self.sequencer.clock.timing().bpm() as i64;
                     if new_bpm != current_bpm {
-                        let old_denom = 2 * current_bpm;
-                        let new_denom = 2 * new_bpm;
+                        let old_denom = tick_denominator;
+                        let (_, new_denom) =
+                            render_tick_clock(sample_rate, new_bpm, module.header.frequency_table);
                         self.tick_samples_fractional_rem =
                             (self.tick_samples_fractional_rem * new_denom) / old_denom;
                         current_bpm = new_bpm;
+                        tick_denominator = new_denom;
                     }
-                    self.tick_samples_fractional_rem += 5 * sample_rate as i64;
+                    self.tick_samples_fractional_rem += tick_numerator;
                 }
             }
         }
@@ -921,7 +922,7 @@ impl PlaybackState {
             self.use_pal_clock,
         )?;
 
-        self.tick_samples_fractional_rem -= 2 * current_bpm;
+        self.tick_samples_fractional_rem -= tick_denominator;
         Ok(frame)
     }
 
@@ -931,9 +932,11 @@ impl PlaybackState {
         sample_rate: u32,
     ) -> PlaybackResult<RawMonoPcmFrame> {
         let mut current_bpm = self.sequencer.clock.timing().bpm() as i64;
+        let (tick_numerator, mut tick_denominator) =
+            render_tick_clock(sample_rate, current_bpm, module.header.frequency_table);
 
         if !self.initialized {
-            self.tick_samples_fractional_rem = 5 * sample_rate as i64;
+            self.tick_samples_fractional_rem = tick_numerator;
             self.initialized = true;
         }
 
@@ -949,13 +952,15 @@ impl PlaybackState {
                 _ => {
                     let new_bpm = self.sequencer.clock.timing().bpm() as i64;
                     if new_bpm != current_bpm {
-                        let old_denom = 2 * current_bpm;
-                        let new_denom = 2 * new_bpm;
+                        let old_denom = tick_denominator;
+                        let (_, new_denom) =
+                            render_tick_clock(sample_rate, new_bpm, module.header.frequency_table);
                         self.tick_samples_fractional_rem =
                             (self.tick_samples_fractional_rem * new_denom) / old_denom;
                         current_bpm = new_bpm;
+                        tick_denominator = new_denom;
                     }
-                    self.tick_samples_fractional_rem += 5 * sample_rate as i64;
+                    self.tick_samples_fractional_rem += tick_numerator;
                 }
             }
         }
@@ -967,12 +972,23 @@ impl PlaybackState {
             self.use_pal_clock,
         )?;
 
-        self.tick_samples_fractional_rem -= 2 * current_bpm;
+        self.tick_samples_fractional_rem -= tick_denominator;
         Ok(frame)
     }
 }
 
 // Helpers
+fn render_tick_clock(sample_rate: u32, bpm: i64, table: FrequencyTable) -> (i64, i64) {
+    match table {
+        FrequencyTable::Linear => (5 * sample_rate as i64, 2 * bpm),
+        FrequencyTable::Amiga => {
+            let beat_packet_size =
+                (MILKY_MIXER_BEAT_LENGTH * sample_rate as i64) / MILKY_MIXER_BASE_FREQUENCY;
+            (beat_packet_size * MILKY_BPM_TICK_BASE, bpm)
+        }
+    }
+}
+
 fn period_to_frequency(period: u32, table: FrequencyTable, use_pal_clock: bool) -> f64 {
     if period == 0 {
         return 0.0;
@@ -981,7 +997,11 @@ fn period_to_frequency(period: u32, table: FrequencyTable, use_pal_clock: bool) 
     match table {
         FrequencyTable::Linear => 8363.0 * f64::powf(2.0, (4608.0 - period as f64) / 768.0),
         FrequencyTable::Amiga => {
-            let base = if use_pal_clock { 3546895.0 } else { 3579364.0 };
+            let base = if use_pal_clock {
+                AMIGA_PAL_CLOCK_HZ
+            } else {
+                AMIGA_NTSC_CLOCK_HZ
+            };
             base / period as f64
         }
     }

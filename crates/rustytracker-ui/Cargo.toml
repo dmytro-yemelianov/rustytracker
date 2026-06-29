@@ -12,7 +12,7 @@ rustytracker-play = { path = "../rustytracker-play" }
 rustytracker-edit = { path = "../rustytracker-edit" }
 rustytracker-xm = { path = "../rustytracker-xm" }
 rustytracker-mod = { path = "../rustytracker-mod" }
-eframe = "0.27"
-rfd = "0.14"
+eframe = "0.31.1"
+rfd = "0.17.2"
 cpal = "0.15"
 rtrb = "0.3.4"

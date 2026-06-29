@@ -9,7 +9,7 @@ use crate::envelope::{
 use crate::error::{PlaybackError, PlaybackResult};
 use crate::RawMonoPcmFrame;
 use rustytracker_core::{
-    EffectCommand, Module, Note, PatternCell, Sample, SampleData, SampleLoopKind,
+    EffectCommand, FrequencyTable, Module, Note, PatternCell, Sample, SampleData, SampleLoopKind,
     DEFAULT_EFFECT_SLOTS, DEFAULT_INSTRUMENT_NUMBER, FIRST_XM_NOTE_VALUE, SAMPLE_DEFAULT_PANNING,
 };
 
@@ -21,6 +21,123 @@ pub const PLAYBACK_PCM8_TO_I16_SHIFT: u32 = 8;
 const XM_LINEAR_PERIOD_BASE: i32 = 7680;
 const XM_LINEAR_PERIOD_NOTE_SHIFT: u32 = 6;
 const XM_LINEAR_FINETUNE_DIVISOR: i32 = 2;
+const AMIGA_NOTE_MIN: i32 = 1;
+const AMIGA_NOTE_MAX: i32 = 120;
+const AMIGA_FINETUNE_CENTER: i32 = 128;
+const AMIGA_FINETUNE_MIN: i32 = 0;
+const AMIGA_FINETUNE_MAX: i32 = 255;
+const AMIGA_FINETUNE_TABLE_SHIFT: u32 = 4;
+const AMIGA_LOG_PERIOD_INTERP_CENTER: i32 = 8;
+const AMIGA_LOG_PERIOD_INTERP_DENOMINATOR: i32 = 15;
+const AMIGA_PANNING_LEFT: u8 = 0;
+const AMIGA_PANNING_RIGHT: u8 = 255;
+const AMIGA_LOG_PERIOD_TABLE: [i32; 105] = [
+    907 * 32,
+    900 * 32,
+    894 * 32,
+    887 * 32,
+    881 * 32,
+    875 * 32,
+    868 * 32,
+    862 * 32,
+    856 * 32,
+    850 * 32,
+    844 * 32,
+    838 * 32,
+    832 * 32,
+    826 * 32,
+    820 * 32,
+    814 * 32,
+    808 * 32,
+    802 * 32,
+    796 * 32,
+    791 * 32,
+    785 * 32,
+    779 * 32,
+    774 * 32,
+    768 * 32,
+    762 * 32,
+    757 * 32,
+    752 * 32,
+    746 * 32,
+    741 * 32,
+    736 * 32,
+    730 * 32,
+    725 * 32,
+    720 * 32,
+    715 * 32,
+    709 * 32,
+    704 * 32,
+    699 * 32,
+    694 * 32,
+    689 * 32,
+    684 * 32,
+    678 * 32,
+    675 * 32,
+    670 * 32,
+    665 * 32,
+    660 * 32,
+    655 * 32,
+    651 * 32,
+    646 * 32,
+    640 * 32,
+    636 * 32,
+    632 * 32,
+    628 * 32,
+    623 * 32,
+    619 * 32,
+    614 * 32,
+    610 * 32,
+    604 * 32,
+    601 * 32,
+    597 * 32,
+    592 * 32,
+    588 * 32,
+    584 * 32,
+    580 * 32,
+    575 * 32,
+    570 * 32,
+    567 * 32,
+    563 * 32,
+    559 * 32,
+    555 * 32,
+    551 * 32,
+    547 * 32,
+    543 * 32,
+    538 * 32,
+    535 * 32,
+    532 * 32,
+    528 * 32,
+    524 * 32,
+    520 * 32,
+    516 * 32,
+    513 * 32,
+    508 * 32,
+    505 * 32,
+    502 * 32,
+    498 * 32,
+    494 * 32,
+    491 * 32,
+    487 * 32,
+    484 * 32,
+    480 * 32,
+    477 * 32,
+    474 * 32,
+    470 * 32,
+    467 * 32,
+    463 * 32,
+    460 * 32,
+    457 * 32,
+    453 * 32,
+    450 * 32,
+    447 * 32,
+    443 * 32,
+    440 * 32,
+    437 * 32,
+    434 * 32,
+    431 * 32,
+    428 * 32,
+];
 const PLAYBACK_EMPTY_SAMPLE_FRACTION: u32 = 0;
 const PLAYBACK_EMPTY_SAMPLE_FRAME: usize = PLAYBACK_SAMPLE_START_FRAME;
 const SAMPLE_LOOP_END_EPSILON: f64 = 0.000001;
@@ -212,7 +329,11 @@ impl PlaybackChannelState {
             });
         };
 
-        Ok(Some(sample_period_for_note(note, sample)))
+        Ok(Some(sample_period_for_note(
+            note,
+            sample,
+            module.header.frequency_table,
+        )))
     }
 
     fn set_instrument(&mut self, module: &Module, instrument: u8) -> PlaybackResult<()> {
@@ -282,9 +403,10 @@ impl PlaybackChannelState {
         self.active = true;
         self.sample_index = Some(sample_index);
         self.volume = sample.volume;
-        self.panning = sample.panning;
+        self.panning =
+            panning_for_triggered_sample(module.header.frequency_table, self.channel, sample);
 
-        let period = sample_period_for_note(note, sample);
+        let period = sample_period_for_note(note, sample, module.header.frequency_table);
         self.base_period = period;
         self.period = period;
 
@@ -510,12 +632,46 @@ fn note_sample_map_index(note: u8) -> Option<usize> {
     note.checked_sub(FIRST_XM_NOTE_VALUE).map(usize::from)
 }
 
-fn sample_period_for_note(note: u8, sample: &Sample) -> u32 {
+fn sample_period_for_note(note: u8, sample: &Sample, table: FrequencyTable) -> u32 {
+    match table {
+        FrequencyTable::Linear => linear_period_for_note(note, sample),
+        FrequencyTable::Amiga => amiga_log_period_for_note(note, sample),
+    }
+}
+
+fn linear_period_for_note(note: u8, sample: &Sample) -> u32 {
     let note_val = i32::from(note) + i32::from(sample.relative_note);
     let period = XM_LINEAR_PERIOD_BASE
         - ((note_val - 1) << XM_LINEAR_PERIOD_NOTE_SHIFT)
         - (i32::from(sample.finetune) / XM_LINEAR_FINETUNE_DIVISOR);
     period.max(0) as u32
+}
+
+fn panning_for_triggered_sample(table: FrequencyTable, channel: u16, sample: &Sample) -> u8 {
+    match table {
+        FrequencyTable::Linear => sample.panning,
+        FrequencyTable::Amiga => match channel & 3 {
+            0 | 3 => AMIGA_PANNING_LEFT,
+            1 | 2 => AMIGA_PANNING_RIGHT,
+            _ => unreachable!(),
+        },
+    }
+}
+
+fn amiga_log_period_for_note(note: u8, sample: &Sample) -> u32 {
+    let note_val =
+        (i32::from(note) + i32::from(sample.relative_note)).clamp(AMIGA_NOTE_MIN, AMIGA_NOTE_MAX);
+    let finetune = (i32::from(sample.finetune) + AMIGA_FINETUNE_CENTER)
+        .clamp(AMIGA_FINETUNE_MIN, AMIGA_FINETUNE_MAX);
+    let octave = (note_val - 1) / 12;
+    let semitone = ((note_val - 1) % 12) << 3;
+    let table_index = ((finetune >> AMIGA_FINETUNE_TABLE_SHIFT) + semitone) as usize;
+    let v1 = AMIGA_LOG_PERIOD_TABLE[table_index];
+    let v2 = AMIGA_LOG_PERIOD_TABLE[table_index + 1];
+    let t = (finetune >> AMIGA_FINETUNE_TABLE_SHIFT) - AMIGA_LOG_PERIOD_INTERP_CENTER;
+    let interpolated = v1 + (t * (v2 - v1)) / AMIGA_LOG_PERIOD_INTERP_DENOMINATOR;
+
+    (interpolated >> octave).max(1) as u32
 }
 
 fn sample_value_at_frame(data: &SampleData, frame: usize) -> Option<PlaybackSampleValue> {

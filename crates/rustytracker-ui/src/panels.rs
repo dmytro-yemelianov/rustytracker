@@ -521,7 +521,7 @@ impl RustyTrackerApp {
                     ui.horizontal(|ui| {
                         ui.label("Loop Mode:");
                         let prev_mode = loop_mode;
-                        egui::ComboBox::from_id_source("loop_mode_combo")
+                        egui::ComboBox::from_id_salt("loop_mode_combo")
                             .selected_text(match loop_mode {
                                 SampleLoopKind::None => "No Loop",
                                 SampleLoopKind::Forward => "Forward",
