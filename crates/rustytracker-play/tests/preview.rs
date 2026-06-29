@@ -145,3 +145,30 @@ fn preview_voice_honors_mixer_mode() {
         "HiFi (interpolated) and Amiga (stepped) fetch should differ on a ramp sample"
     );
 }
+
+#[test]
+fn preview_voice_note_with_no_mapped_sample_is_silent_without_error() {
+    // The instrument resolves, but the played note maps to no sample.
+    let mut module = module_with_preview_sample(SampleData::pcm16(vec![10_000; 64]));
+    let map_len = module.instruments[0].note_sample_map.len();
+    module.instruments[0].note_sample_map = vec![None; map_len];
+
+    let mut voice = PreviewVoice::new();
+    // note_on succeeds (instrument is valid) but leaves the voice inactive,
+    // and rendering stays silent — never an error or panic.
+    voice
+        .note_on(
+            &module,
+            PREVIEW_TEST_INSTRUMENT,
+            PREVIEW_TEST_NOTE,
+            PlaybackSettings::default(),
+        )
+        .unwrap();
+    assert!(!voice.is_active());
+    assert_eq!(
+        voice
+            .render_stereo_frame(&module, PREVIEW_TEST_SAMPLE_RATE)
+            .unwrap(),
+        (0, 0)
+    );
+}

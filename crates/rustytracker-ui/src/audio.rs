@@ -311,6 +311,12 @@ fn write_audio<T>(
             }
         };
 
+        // When the preview voice is inactive its contribution is exactly 0.0,
+        // and `module_l`/`module_r` are already in [-1.0, 1.0] (from
+        // `normalize_pcm16_sample`), so `+ 0.0` and `clamp` are no-ops: a
+        // preview-silent frame stays bit-identical to plain module output.
+        // This is what keeps HiFi rendering byte-identical — do not change the
+        // sum/clamp without preserving that property.
         let left = (module_l + preview_l).clamp(-1.0, 1.0);
         let right = (module_r + preview_r).clamp(-1.0, 1.0);
 
