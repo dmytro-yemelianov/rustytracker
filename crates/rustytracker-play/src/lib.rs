@@ -8,6 +8,7 @@ mod effects;
 mod envelope;
 mod error;
 mod flow;
+mod preview;
 mod timing;
 
 pub use channel::{
@@ -28,6 +29,7 @@ pub use effects::{
     EFFECT_VOLUME, EFFECT_VOLUME_SLIDE, VIB_TAB,
 };
 pub use envelope::PlaybackEnvelopeState;
+pub use preview::PreviewVoice;
 use error::validate_sample_rate;
 pub use error::{PlaybackError, PlaybackResult, PLAYBACK_MIN_SAMPLE_RATE};
 pub use flow::{
