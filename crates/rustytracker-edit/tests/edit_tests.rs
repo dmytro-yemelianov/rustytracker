@@ -399,3 +399,23 @@ fn test_pattern_insert_delete_row() {
         note_d4
     );
 }
+
+
+#[test]
+fn test_undo_limit() {
+    let module = Module::empty();
+    let mut editor = ModuleEditor::new(module);
+
+    // Perform 70 edits
+    for i in 0..70 {
+        editor.set_order_pattern(0, (i % 10) as u8).unwrap();
+    }
+
+    // We should be able to undo 64 times
+    for _ in 0..64 {
+        assert!(editor.undo());
+    }
+
+    // The 65th undo should fail (since limit is 64)
+    assert!(!editor.undo());
+}
