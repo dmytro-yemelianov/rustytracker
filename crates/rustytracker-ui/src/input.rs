@@ -40,6 +40,23 @@ impl RustyTrackerApp {
                 self.edit_mode = !self.edit_mode;
             }
 
+            // Live sample preview (jam) — runs in both edit and non-edit mode.
+            for key in NOTE_KEYS {
+                if input.key_pressed(key) {
+                    if let Some(value) = self.note_value_for_key(key) {
+                        self.audio_engine
+                            .preview_note_on(self.selected_instrument, value, self.mixer_mode);
+                        self.preview_key = Some(key);
+                    }
+                }
+            }
+            if let Some(active) = self.preview_key {
+                if input.key_released(active) {
+                    self.audio_engine.preview_note_off();
+                    self.preview_key = None;
+                }
+            }
+
             // Edit operations (requires edit mode)
             if self.edit_mode {
                 // Delete cell with Delete / Backspace
@@ -99,37 +116,7 @@ impl RustyTrackerApp {
 
                 // Check for note input keys
                 if self.active_field == ActiveField::Note {
-                    for key in [
-                        Key::Z,
-                        Key::S,
-                        Key::X,
-                        Key::D,
-                        Key::C,
-                        Key::V,
-                        Key::G,
-                        Key::B,
-                        Key::H,
-                        Key::N,
-                        Key::J,
-                        Key::M,
-                        Key::Q,
-                        Key::Num2,
-                        Key::W,
-                        Key::Num3,
-                        Key::E,
-                        Key::R,
-                        Key::Num5,
-                        Key::T,
-                        Key::Num6,
-                        Key::Y,
-                        Key::Num7,
-                        Key::U,
-                        Key::I,
-                        Key::Num9,
-                        Key::O,
-                        Key::Num0,
-                        Key::P,
-                    ] {
+                    for key in NOTE_KEYS {
                         if input.key_pressed(key) {
                             if let Some((note_name, octave_offset)) =
                                 key_to_note_and_octave_offset(key)
@@ -229,6 +216,15 @@ impl RustyTrackerApp {
         }
     }
 
+    pub(crate) fn note_value_for_key(&self, key: Key) -> Option<u8> {
+        let (name, octave_offset) = key_to_note_and_octave_offset(key)?;
+        let final_octave = (self.octave as i8 + octave_offset).clamp(0, 8) as u8;
+        match Note::key(final_octave, name) {
+            Ok(Note::Key(value)) => Some(value),
+            _ => None,
+        }
+    }
+
     fn navigate_field_right(&mut self) {
         let pattern_idx = self.get_active_pattern_index();
         let channels = match self.editor.module().patterns.get(pattern_idx) {
@@ -274,6 +270,38 @@ impl RustyTrackerApp {
         self.active_row = (self.active_row + 1) % rows;
     }
 }
+
+const NOTE_KEYS: [Key; 29] = [
+    Key::Z,
+    Key::S,
+    Key::X,
+    Key::D,
+    Key::C,
+    Key::V,
+    Key::G,
+    Key::B,
+    Key::H,
+    Key::N,
+    Key::J,
+    Key::M,
+    Key::Q,
+    Key::Num2,
+    Key::W,
+    Key::Num3,
+    Key::E,
+    Key::R,
+    Key::Num5,
+    Key::T,
+    Key::Num6,
+    Key::Y,
+    Key::Num7,
+    Key::U,
+    Key::I,
+    Key::Num9,
+    Key::O,
+    Key::Num0,
+    Key::P,
+];
 
 fn key_to_note_and_octave_offset(key: Key) -> Option<(NoteName, i8)> {
     match key {
