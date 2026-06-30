@@ -136,6 +136,15 @@ impl RustyTrackerApp {
                 self.active_order_index = 0;
             }
 
+            if self.audio_engine.device_error() {
+                tracker_ui::show_status_label(
+                    ui,
+                    &self.tracker_resources,
+                    "AUDIO ERROR",
+                    theme.pattern_effect,
+                );
+            }
+
             tracker_ui::show_toolbar_separator(ui, &self.tracker_resources);
 
             tracker_ui::show_status_label(ui, &self.tracker_resources, "MIX", theme.foreground);
