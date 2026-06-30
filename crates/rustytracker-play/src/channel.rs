@@ -7,11 +7,10 @@ use crate::envelope::{
     PLAYBACK_ENVELOPE_DEFAULT_VOLUME, XM_ENVELOPE_ENABLED_FLAG,
 };
 use crate::error::{PlaybackError, PlaybackResult};
-use crate::sample::sample_value_at_frame;
 use crate::RawMonoPcmFrame;
 use rustytracker_core::{
-    EffectCommand, FrequencyTable, Module, Note, PatternCell, Sample, SampleLoopKind,
-    DEFAULT_EFFECT_SLOTS, DEFAULT_INSTRUMENT_NUMBER, FIRST_XM_NOTE_VALUE, SAMPLE_DEFAULT_PANNING,
+    EffectCommand, FrequencyTable, Module, Note, PatternCell, Sample, DEFAULT_EFFECT_SLOTS,
+    DEFAULT_INSTRUMENT_NUMBER, FIRST_XM_NOTE_VALUE, SAMPLE_DEFAULT_PANNING,
 };
 
 pub const PLAYBACK_INSTRUMENT_NUMBER_BASE: u8 = 1;
@@ -141,8 +140,6 @@ const AMIGA_LOG_PERIOD_TABLE: [i32; 105] = [
 ];
 const PLAYBACK_EMPTY_SAMPLE_FRACTION: u32 = 0;
 const PLAYBACK_EMPTY_SAMPLE_FRAME: usize = PLAYBACK_SAMPLE_START_FRAME;
-const SAMPLE_LOOP_END_EPSILON: f64 = 0.000001;
-const PING_PONG_LOOP_REFLECT_BACKSTEP: i32 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlaybackSampleValue {
@@ -440,191 +437,6 @@ impl PlaybackChannelState {
         self.sample_frame = PLAYBACK_EMPTY_SAMPLE_FRAME;
         self.stopped = true;
         self.sample_frame_fraction = PLAYBACK_EMPTY_SAMPLE_FRACTION;
-    }
-
-    pub(crate) fn step_sample(
-        &mut self,
-        module: &Module,
-    ) -> PlaybackResult<Option<ChannelSampleFrame>> {
-        if !self.active {
-            return Ok(None);
-        }
-
-        let Some(sample_index) = self.sample_index else {
-            self.stop_sample();
-            return Ok(None);
-        };
-        let Some(instrument_index) = self.instrument_index else {
-            return Err(PlaybackError::MissingInstrument {
-                channel: self.channel,
-                instrument: self.instrument,
-            });
-        };
-        let Some(sample) = module.samples.get(sample_index) else {
-            return Err(PlaybackError::MissingSample {
-                channel: self.channel,
-                instrument_index,
-                sample_index,
-            });
-        };
-        let Some(value) = sample_value_at_frame(&sample.data, self.sample_frame) else {
-            self.stop_sample();
-            return Ok(None);
-        };
-
-        let sample_frame = self.sample_frame;
-        self.advance_sample_frame(sample);
-        Ok(Some(ChannelSampleFrame {
-            channel: self.channel,
-            sample_index,
-            sample_frame,
-            value,
-        }))
-    }
-
-    pub(crate) fn advance_sample_position(&mut self, sample: &Sample, step: f64) {
-        let frame_count = sample.data.frame_count();
-        if frame_count == 0 {
-            self.stop_sample();
-            return;
-        }
-
-        let current_pos =
-            self.sample_frame as f64 + (self.sample_frame_fraction as f64 / u32::MAX as f64);
-
-        let has_loop = sample.loop_length > 0 && sample.loop_kind != SampleLoopKind::None;
-        if has_loop {
-            let loop_start = sample.loop_start as f64;
-            let loop_length = sample.loop_length as f64;
-            let loop_end = loop_start + loop_length;
-
-            match sample.loop_kind {
-                SampleLoopKind::Forward => {
-                    let mut next_pos = current_pos + step;
-                    if next_pos >= loop_end {
-                        let over = next_pos - loop_end;
-                        let wraps = (over / loop_length).floor();
-                        next_pos = loop_start + over - wraps * loop_length;
-                        next_pos = next_pos.clamp(loop_start, loop_end - SAMPLE_LOOP_END_EPSILON);
-                    } else {
-                        next_pos = next_pos.min(loop_end - SAMPLE_LOOP_END_EPSILON);
-                    }
-                    self.sample_frame = next_pos as usize;
-                    self.sample_frame_fraction =
-                        ((next_pos - next_pos.floor()) * u32::MAX as f64) as u32;
-                }
-                SampleLoopKind::PingPong => {
-                    if self.sample_backward {
-                        let mut next_pos = current_pos - step;
-                        if next_pos <= loop_start {
-                            self.sample_backward = false;
-                            let under = loop_start - next_pos;
-                            let wraps = (under / loop_length).floor() as i32;
-                            let rem = under - (wraps as f64) * loop_length;
-                            if wraps % 2 == 0 {
-                                next_pos = loop_start + rem;
-                            } else {
-                                self.sample_backward = true;
-                                next_pos = loop_end - rem;
-                            }
-                        }
-                        next_pos = next_pos.clamp(loop_start, loop_end - SAMPLE_LOOP_END_EPSILON);
-                        self.sample_frame = next_pos as usize;
-                        self.sample_frame_fraction =
-                            ((next_pos - next_pos.floor()) * u32::MAX as f64) as u32;
-                    } else {
-                        let mut next_pos = current_pos + step;
-                        if next_pos >= loop_end {
-                            self.sample_backward = true;
-                            let over = next_pos - loop_end;
-                            let wraps = (over / loop_length).floor() as i32;
-                            let rem = over - (wraps as f64) * loop_length;
-                            if wraps % 2 == 0 {
-                                next_pos = loop_end - rem;
-                            } else {
-                                self.sample_backward = false;
-                                next_pos = loop_start + rem;
-                            }
-                            next_pos =
-                                next_pos.clamp(loop_start, loop_end - SAMPLE_LOOP_END_EPSILON);
-                        } else {
-                            next_pos = next_pos.min(loop_end - SAMPLE_LOOP_END_EPSILON);
-                        }
-                        self.sample_frame = next_pos as usize;
-                        self.sample_frame_fraction =
-                            ((next_pos - next_pos.floor()) * u32::MAX as f64) as u32;
-                    }
-                }
-                SampleLoopKind::None => unreachable!(),
-            }
-        } else {
-            let next_pos = current_pos + step;
-            if next_pos >= frame_count as f64 {
-                self.stop_sample();
-            } else {
-                self.sample_frame = next_pos as usize;
-                self.sample_frame_fraction =
-                    ((next_pos - next_pos.floor()) * u32::MAX as f64) as u32;
-            }
-        }
-    }
-
-    fn advance_sample_frame(&mut self, sample: &Sample) {
-        let frame_count = sample.data.frame_count();
-        if frame_count == 0 {
-            self.stop_sample();
-            return;
-        }
-
-        let has_loop = sample.loop_length > 0 && sample.loop_kind != SampleLoopKind::None;
-
-        if has_loop {
-            let loop_start = sample.loop_start as usize;
-            let loop_length = sample.loop_length as usize;
-            let loop_end = loop_start + loop_length;
-
-            match sample.loop_kind {
-                SampleLoopKind::Forward => {
-                    let next_frame = self.sample_frame.saturating_add(PLAYBACK_SAMPLE_FRAME_STEP);
-                    if next_frame >= loop_end {
-                        self.sample_frame = loop_start + (next_frame - loop_end) % loop_length;
-                    } else {
-                        self.sample_frame = next_frame;
-                    }
-                }
-                SampleLoopKind::PingPong => {
-                    if self.sample_backward {
-                        if self.sample_frame <= loop_start {
-                            self.sample_backward = false;
-                            self.sample_frame =
-                                (loop_start + PLAYBACK_SAMPLE_FRAME_STEP).min(loop_end - 1);
-                        } else {
-                            self.sample_frame =
-                                self.sample_frame.saturating_sub(PLAYBACK_SAMPLE_FRAME_STEP);
-                        }
-                    } else {
-                        let next_frame =
-                            self.sample_frame.saturating_add(PLAYBACK_SAMPLE_FRAME_STEP);
-                        if next_frame >= loop_end {
-                            self.sample_backward = true;
-                            self.sample_frame = (loop_end as i32 - PING_PONG_LOOP_REFLECT_BACKSTEP)
-                                .max(loop_start as i32)
-                                as usize;
-                        } else {
-                            self.sample_frame = next_frame;
-                        }
-                    }
-                }
-                SampleLoopKind::None => unreachable!(),
-            }
-        } else {
-            let next_frame = self.sample_frame.saturating_add(PLAYBACK_SAMPLE_FRAME_STEP);
-            if next_frame >= frame_count {
-                self.stop_sample();
-            } else {
-                self.sample_frame = next_frame;
-            }
-        }
     }
 }
 
