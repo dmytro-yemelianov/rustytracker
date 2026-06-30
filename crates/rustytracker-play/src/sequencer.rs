@@ -22,6 +22,7 @@ pub enum SequencerCommand {
     },
     Update {
         channel: u16,
+        sample_index: Option<usize>,
         volume: u8,
         panning: u8,
         period: u32,
@@ -114,6 +115,7 @@ impl Sequencer {
             } else if channel.active {
                 commands.push(SequencerCommand::Update {
                     channel: channel.channel,
+                    sample_index: channel.sample_index,
                     volume: channel.volume,
                     panning: channel.panning,
                     period: channel.period,
