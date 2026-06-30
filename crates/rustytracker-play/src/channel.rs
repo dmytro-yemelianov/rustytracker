@@ -1,6 +1,7 @@
 use crate::effects::{
     EFFECT_MEMORY_REUSE_OPERAND, EFFECT_SAMPLE_OFFSET, EFFECT_SAMPLE_OFFSET_FRAME_SCALE,
     EFFECT_TONE_PORTAMENTO, PLAYBACK_EMPTY_PERIOD,
+    EFFECT_GLISSANDO_CONTROL, EFFECT_VIBRATO_CONTROL, EFFECT_TREMOLO_CONTROL,
 };
 use crate::envelope::{
     PlaybackEnvelopeState, PLAYBACK_DEFAULT_FADEOUT_VOLUME, PLAYBACK_ENVELOPE_DEFAULT_PANNING,
@@ -175,6 +176,7 @@ pub struct PlaybackChannelState {
     pub sample_frame: usize,
     pub sample_frame_fraction: u32,
     pub volume: u8,
+    pub base_volume: u8,
     pub panning: u8,
     pub active_effects: Vec<EffectCommand>,
     pub volume_slide_memory: u8,
@@ -190,6 +192,12 @@ pub struct PlaybackChannelState {
     pub vibrato_speed: Vec<u8>,
     pub vibrato_depth: Vec<u8>,
     pub vibrato_pos: Vec<u8>,
+    pub vibrato_waveform: Vec<u8>,
+    pub tremolo_waveform: Vec<u8>,
+    pub tremolo_speed: Vec<u8>,
+    pub tremolo_depth: Vec<u8>,
+    pub tremolo_pos: Vec<u8>,
+    pub glissando: bool,
     pub sample_offset_memory: u8,
     pub sample_backward: bool,
     pub keyon: bool,
@@ -214,6 +222,7 @@ impl PlaybackChannelState {
             sample_frame: PLAYBACK_EMPTY_SAMPLE_FRAME,
             sample_frame_fraction: PLAYBACK_EMPTY_SAMPLE_FRACTION,
             volume: PLAYBACK_EMPTY_VOLUME,
+            base_volume: PLAYBACK_EMPTY_VOLUME,
             panning: SAMPLE_DEFAULT_PANNING,
             active_effects: vec![EffectCommand::default(); DEFAULT_EFFECT_SLOTS as usize],
             volume_slide_memory: EFFECT_MEMORY_REUSE_OPERAND,
@@ -229,6 +238,12 @@ impl PlaybackChannelState {
             vibrato_speed: vec![EFFECT_MEMORY_REUSE_OPERAND; DEFAULT_EFFECT_SLOTS as usize],
             vibrato_depth: vec![EFFECT_MEMORY_REUSE_OPERAND; DEFAULT_EFFECT_SLOTS as usize],
             vibrato_pos: vec![EFFECT_MEMORY_REUSE_OPERAND; DEFAULT_EFFECT_SLOTS as usize],
+            vibrato_waveform: vec![0; DEFAULT_EFFECT_SLOTS as usize],
+            tremolo_waveform: vec![0; DEFAULT_EFFECT_SLOTS as usize],
+            tremolo_speed: vec![EFFECT_MEMORY_REUSE_OPERAND; DEFAULT_EFFECT_SLOTS as usize],
+            tremolo_depth: vec![EFFECT_MEMORY_REUSE_OPERAND; DEFAULT_EFFECT_SLOTS as usize],
+            tremolo_pos: vec![EFFECT_MEMORY_REUSE_OPERAND; DEFAULT_EFFECT_SLOTS as usize],
+            glissando: false,
             sample_offset_memory: EFFECT_MEMORY_REUSE_OPERAND,
             sample_backward: false,
             keyon: true,
@@ -245,6 +260,15 @@ impl PlaybackChannelState {
     pub(crate) fn apply_cell(&mut self, module: &Module, cell: &PatternCell) -> PlaybackResult<()> {
         self.active_effects = cell.effects.clone();
         self.ensure_effect_memory_slots();
+        for effect in &cell.effects {
+            if effect.effect == EFFECT_GLISSANDO_CONTROL {
+                self.glissando = effect.operand != 0;
+            } else if effect.effect == EFFECT_VIBRATO_CONTROL {
+                self.vibrato_waveform.fill(effect.operand);
+            } else if effect.effect == EFFECT_TREMOLO_CONTROL {
+                self.tremolo_waveform.fill(effect.operand);
+            }
+        }
         if cell.instrument != DEFAULT_INSTRUMENT_NUMBER && cell.note != Note::Off {
             self.set_instrument(module, cell.instrument)?;
         }
@@ -360,7 +384,14 @@ impl PlaybackChannelState {
         start_offset: Option<usize>,
     ) -> PlaybackResult<()> {
         self.note = Note::Key(note);
-        self.vibrato_pos.fill(EFFECT_MEMORY_REUSE_OPERAND);
+        for slot in 0..self.vibrato_pos.len() {
+            if slot < self.vibrato_waveform.len() && self.vibrato_waveform[slot] < 4 {
+                self.vibrato_pos[slot] = EFFECT_MEMORY_REUSE_OPERAND;
+            }
+            if slot < self.tremolo_waveform.len() && self.tremolo_waveform[slot] < 4 {
+                self.tremolo_pos[slot] = EFFECT_MEMORY_REUSE_OPERAND;
+            }
+        }
         self.sample_backward = false;
         self.keyon = true;
         self.fadeout_volume = PLAYBACK_DEFAULT_FADEOUT_VOLUME;
@@ -401,6 +432,7 @@ impl PlaybackChannelState {
         self.active = true;
         self.sample_index = Some(sample_index);
         self.volume = sample.volume;
+        self.base_volume = sample.volume;
         self.panning =
             panning_for_triggered_sample(module.header.frequency_table, self.channel, sample);
 
@@ -450,7 +482,7 @@ fn note_sample_map_index(note: u8) -> Option<usize> {
     note.checked_sub(FIRST_XM_NOTE_VALUE).map(usize::from)
 }
 
-fn sample_period_for_note(note: u8, sample: &Sample, table: FrequencyTable) -> u32 {
+pub(crate) fn sample_period_for_note(note: u8, sample: &Sample, table: FrequencyTable) -> u32 {
     match table {
         FrequencyTable::Linear => linear_period_for_note(note, sample),
         FrequencyTable::Amiga => amiga_log_period_for_note(note, sample),
