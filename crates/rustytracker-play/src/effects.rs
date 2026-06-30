@@ -1,4 +1,4 @@
-use crate::channel::PlaybackChannelState;
+use crate::channel::{PlaybackChannelState, sample_period_for_note};
 use crate::envelope::{
     PLAYBACK_ENVELOPE_DEFAULT_PANNING, PLAYBACK_ENVELOPE_DEFAULT_VOLUME, XM_ENVELOPE_ENABLED_FLAG,
 };
@@ -18,6 +18,11 @@ pub const EFFECT_PORTAMENTO_DOWN: u8 = 0x02;
 pub const EFFECT_TONE_PORTAMENTO: u8 = 0x03;
 pub const EFFECT_SAMPLE_OFFSET: u8 = 0x09;
 pub const EFFECT_ARPEGGIO_NONZERO: u8 = 0x20;
+
+pub const EFFECT_GLISSANDO_CONTROL: u8 = 0x33;
+pub const EFFECT_VIBRATO_CONTROL: u8 = 0x34;
+pub const EFFECT_TREMOLO: u8 = 0x07;
+pub const EFFECT_TREMOLO_CONTROL: u8 = 0x37;
 
 pub(crate) const EFFECT_MEMORY_REUSE_OPERAND: u8 = 0;
 const EFFECT_LOW_NIBBLE_MASK: u8 = 0x0f;
@@ -52,11 +57,12 @@ impl PlaybackChannelState {
 
         let mut active_arpeggio_op = None;
         let mut active_vibrato_slot = None;
+        let mut active_tremolo_slot = None;
 
         for (slot_idx, effect) in self.active_effects.iter().enumerate() {
             match effect.effect {
                 EFFECT_VOLUME if tick == 0 => {
-                    self.volume = effect.operand;
+                    self.base_volume = effect.operand;
                 }
                 EFFECT_PANNING if tick == 0 => {
                     self.panning = effect.operand;
@@ -68,8 +74,8 @@ impl PlaybackChannelState {
                     } else {
                         self.fine_volume_slide_memory = op;
                     }
-                    self.volume = self
-                        .volume
+                    self.base_volume = self
+                        .base_volume
                         .saturating_add(op.saturating_mul(EFFECT_VOLUME_SCALE));
                 }
                 EFFECT_FINE_VOLUME_SLIDE_DOWN if tick == 0 => {
@@ -79,12 +85,12 @@ impl PlaybackChannelState {
                     } else {
                         self.fine_volume_slide_memory = op;
                     }
-                    self.volume = self
-                        .volume
+                    self.base_volume = self
+                        .base_volume
                         .saturating_sub(op.saturating_mul(EFFECT_VOLUME_SCALE));
                 }
                 EFFECT_NOTE_CUT if tick == u16::from(effect.operand) => {
-                    self.volume = 0;
+                    self.base_volume = 0;
                 }
                 EFFECT_VOLUME_SLIDE if tick > 0 => {
                     let mut op = effect.operand;
@@ -96,14 +102,34 @@ impl PlaybackChannelState {
                     let x = op >> EFFECT_HIGH_NIBBLE_SHIFT;
                     let y = op & EFFECT_LOW_NIBBLE_MASK;
                     if x > 0 {
-                        self.volume = self
-                            .volume
+                        self.base_volume = self
+                            .base_volume
                             .saturating_add(x.saturating_mul(EFFECT_VOLUME_SCALE));
                     } else if y > 0 {
-                        self.volume = self
-                            .volume
+                        self.base_volume = self
+                            .base_volume
                             .saturating_sub(y.saturating_mul(EFFECT_VOLUME_SCALE));
                     }
+                }
+                EFFECT_GLISSANDO_CONTROL if tick == 0 => {
+                    self.glissando = effect.operand != 0;
+                }
+                EFFECT_VIBRATO_CONTROL if tick == 0 => {
+                    self.vibrato_waveform.fill(effect.operand);
+                }
+                EFFECT_TREMOLO_CONTROL if tick == 0 => {
+                    self.tremolo_waveform.fill(effect.operand);
+                }
+                EFFECT_TREMOLO => {
+                    let x = effect.operand >> EFFECT_HIGH_NIBBLE_SHIFT;
+                    let y = effect.operand & EFFECT_LOW_NIBBLE_MASK;
+                    if x > EFFECT_MEMORY_REUSE_OPERAND {
+                        self.tremolo_speed[slot_idx] = x;
+                    }
+                    if y > EFFECT_MEMORY_REUSE_OPERAND {
+                        self.tremolo_depth[slot_idx] = y;
+                    }
+                    active_tremolo_slot = Some(slot_idx);
                 }
                 effect_id if should_apply_arpeggio(effect_id, effect.operand) => {
                     let mut op = effect.operand;
@@ -190,12 +216,12 @@ impl PlaybackChannelState {
                         let x = op >> EFFECT_HIGH_NIBBLE_SHIFT;
                         let y = op & EFFECT_LOW_NIBBLE_MASK;
                         if x > EFFECT_MEMORY_REUSE_OPERAND {
-                            self.volume = self
-                                .volume
+                            self.base_volume = self
+                                .base_volume
                                 .saturating_add(x.saturating_mul(EFFECT_VOLUME_SCALE));
                         } else if y > EFFECT_MEMORY_REUSE_OPERAND {
-                            self.volume = self
-                                .volume
+                            self.base_volume = self
+                                .base_volume
                                 .saturating_sub(y.saturating_mul(EFFECT_VOLUME_SCALE));
                         }
                     }
@@ -205,6 +231,7 @@ impl PlaybackChannelState {
         }
 
         let mut pitch_offset = 0;
+        let mut volume_offset = 0;
 
         if let Some(slot) = active_vibrato_slot {
             let vm = self.calc_vibrato(slot);
@@ -213,6 +240,15 @@ impl PlaybackChannelState {
                     self.vibrato_pos[slot].wrapping_add(self.vibrato_speed[slot]);
             }
             pitch_offset += vm;
+        }
+
+        if let Some(slot) = active_tremolo_slot {
+            let tm = self.calc_tremolo(slot);
+            if tick > 0 {
+                self.tremolo_pos[slot] =
+                    self.tremolo_pos[slot].wrapping_add(self.tremolo_speed[slot]);
+            }
+            volume_offset += tm;
         }
 
         if let Some(arpeg_op) = active_arpeggio_op {
@@ -227,7 +263,27 @@ impl PlaybackChannelState {
             pitch_offset -= i32::from(offset) * ARPEGGIO_PERIOD_STEP;
         }
 
-        self.period = (self.base_period as i32 + pitch_offset).max(0) as u32;
+        let mut effective_base_period = self.base_period;
+        if self.glissando {
+            if let Some(sample_index) = self.sample_index {
+                if let Some(sample) = module.samples.get(sample_index) {
+                    let mut min_diff = i32::MAX;
+                    let mut best_period = self.base_period;
+                    for note in 1..=120 {
+                        let p = sample_period_for_note(note, sample, module.header.frequency_table);
+                        let diff = (p as i32 - self.base_period as i32).abs();
+                        if diff < min_diff {
+                            min_diff = diff;
+                            best_period = p;
+                        }
+                    }
+                    effective_base_period = best_period;
+                }
+            }
+        }
+
+        self.period = (effective_base_period as i32 + pitch_offset).max(0) as u32;
+        self.volume = (self.base_volume as i32 + volume_offset).clamp(0, 255) as u8;
 
         let mut volume_envelope_val = PLAYBACK_ENVELOPE_DEFAULT_VOLUME;
         let mut panning_envelope_val = PLAYBACK_ENVELOPE_DEFAULT_PANNING;
@@ -274,16 +330,66 @@ impl PlaybackChannelState {
         self.vibrato_speed.resize(len, EFFECT_MEMORY_REUSE_OPERAND);
         self.vibrato_depth.resize(len, EFFECT_MEMORY_REUSE_OPERAND);
         self.vibrato_pos.resize(len, EFFECT_MEMORY_REUSE_OPERAND);
+        self.vibrato_waveform.resize(len, 0);
+        self.tremolo_waveform.resize(len, 0);
+        self.tremolo_speed.resize(len, EFFECT_MEMORY_REUSE_OPERAND);
+        self.tremolo_depth.resize(len, EFFECT_MEMORY_REUSE_OPERAND);
+        self.tremolo_pos.resize(len, EFFECT_MEMORY_REUSE_OPERAND);
     }
 
     fn calc_vibrato(&self, slot: usize) -> i32 {
         let vp = self.vibrato_pos[slot] as usize;
         let vd = self.vibrato_depth[slot] as i32;
-        let tab_val = VIB_TAB[vp & VIBRATO_TABLE_INDEX_MASK];
-        let mut vm = (tab_val * vd) >> VIBRATO_SCALE_SHIFT;
-        if (vp & VIBRATO_PHASE_MASK) > VIBRATO_NEGATIVE_PHASE_START {
-            vm = -vm;
+        let wf = self.vibrato_waveform.get(slot).copied().unwrap_or(0) & 3;
+
+        match wf {
+            0 => { // Sine
+                let tab_val = VIB_TAB[vp & VIBRATO_TABLE_INDEX_MASK];
+                let mut vm = (tab_val * vd) >> VIBRATO_SCALE_SHIFT;
+                if (vp & VIBRATO_PHASE_MASK) > VIBRATO_NEGATIVE_PHASE_START {
+                    vm = -vm;
+                }
+                vm
+            }
+            1 => { // Ramp Down
+                let p = vp & VIBRATO_PHASE_MASK;
+                let tab_val = 255 - (p as i32 * 8);
+                (tab_val * vd) >> VIBRATO_SCALE_SHIFT
+            }
+            2 | 3 => { // Square
+                let p = vp & VIBRATO_PHASE_MASK;
+                let tab_val = if p < 32 { 255 } else { -255 };
+                (tab_val * vd) >> VIBRATO_SCALE_SHIFT
+            }
+            _ => unreachable!(),
         }
-        vm
+    }
+
+    fn calc_tremolo(&self, slot: usize) -> i32 {
+        let vp = self.tremolo_pos[slot] as usize;
+        let vd = self.tremolo_depth[slot] as i32;
+        let wf = self.tremolo_waveform.get(slot).copied().unwrap_or(0) & 3;
+
+        match wf {
+            0 => { // Sine
+                let tab_val = VIB_TAB[vp & VIBRATO_TABLE_INDEX_MASK];
+                let mut vm = (tab_val * vd) >> VIBRATO_SCALE_SHIFT;
+                if (vp & VIBRATO_PHASE_MASK) > VIBRATO_NEGATIVE_PHASE_START {
+                    vm = -vm;
+                }
+                vm
+            }
+            1 => { // Ramp Down
+                let p = vp & VIBRATO_PHASE_MASK;
+                let tab_val = 255 - (p as i32 * 8);
+                (tab_val * vd) >> VIBRATO_SCALE_SHIFT
+            }
+            2 | 3 => { // Square
+                let p = vp & VIBRATO_PHASE_MASK;
+                let tab_val = if p < 32 { 255 } else { -255 };
+                (tab_val * vd) >> VIBRATO_SCALE_SHIFT
+            }
+            _ => unreachable!(),
+        }
     }
 }

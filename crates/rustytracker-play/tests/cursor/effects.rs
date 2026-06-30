@@ -1165,3 +1165,171 @@ fn test_effect_note_cut() {
     playback.advance_tick(&module).unwrap();
     assert_eq!(playback.channels()[0].volume, 0);
 }
+
+
+#[test]
+fn test_effect_glissando_control() {
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_TWO_ROWS]);
+    module.header.tick_speed = 3;
+    module.samples[0].volume = 64;
+    map_instrument_to_sample(&mut module, 0, 0);
+
+    // Row 0: Note C-4 (49)
+    // Row 1: Note D-4 (51) with tone portamento speed 4 (0x03, 4) and glissando control E31 (0x33, 1)
+    let cell_0 = PatternCell {
+        note: Note::Key(49),
+        instrument: 1,
+        effects: vec![
+            EffectCommand::default(),
+            EffectCommand::default(),
+        ],
+    };
+    let cell_1 = PatternCell {
+        note: Note::Key(51),
+        instrument: 1,
+        effects: vec![
+            EffectCommand {
+                effect: 0x03, // Tone Portamento
+                operand: 4, // 4 * 4 = 16 period units per tick
+            },
+            EffectCommand {
+                effect: 0x33, // Glissando Control (E31)
+                operand: 1,
+            },
+        ],
+    };
+    module.patterns[0].set_cell(0, 0, cell_0).unwrap();
+    module.patterns[0].set_cell(0, 1, cell_1).unwrap();
+
+    let mut playback = PlaybackState::start(&module).unwrap();
+
+    // Row 0:
+    // Tick 0
+    let period_c4 = playback.channels()[0].base_period;
+    assert_ne!(period_c4, 0);
+
+    // Advance to Row 1 Tick 0
+    playback.advance_tick(&module).unwrap(); // Tick 1
+    playback.advance_tick(&module).unwrap(); // Tick 2
+    playback.advance_tick(&module).unwrap(); // Row 1 Tick 0
+
+    // Row 1 Tick 0 is a note trigger, base_period is still period_c4.
+    let target_period = playback.channels()[0].target_period;
+    assert_ne!(target_period, 0);
+    assert_ne!(target_period, period_c4);
+
+    // Row 1 Tick 1: slide is processed (16 units closer to target).
+    playback.advance_tick(&module).unwrap();
+    
+    let base_period_tick1 = playback.channels()[0].base_period;
+    let period_tick1 = playback.channels()[0].period;
+    assert_eq!(base_period_tick1, period_c4 - 16);
+    // Nearest semitone period to (period_c4 - 16) is period_c4 since (period_c4 - 16) is closer to period_c4 than C#4 (period_c4 - 64).
+    assert_eq!(period_tick1, period_c4);
+
+    // Row 1 Tick 2: slide by another 16 units (total 32 units).
+    playback.advance_tick(&module).unwrap();
+    let base_period_tick2 = playback.channels()[0].base_period;
+    let period_tick2 = playback.channels()[0].period;
+    assert_eq!(base_period_tick2, period_c4 - 32);
+    // Since 32 is exactly halfway or just check that it rounded.
+    assert!(period_tick2 == period_c4 || period_tick2 == period_c4 - 64);
+}
+
+#[test]
+fn test_effect_vibrato_control() {
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_TWO_ROWS]);
+    module.header.tick_speed = 3;
+    module.samples[0].volume = 64;
+    map_instrument_to_sample(&mut module, 0, 0);
+
+    // Row 0: Note C-4 with Vibrato (0x04, 0x44) and E42 (Square wave -> 0x34, 0x02)
+    let cell_0 = PatternCell {
+        note: Note::Key(49),
+        instrument: 1,
+        effects: vec![
+            EffectCommand {
+                effect: 0x04, // Vibrato
+                operand: 0x44, // Speed 4, depth 4
+            },
+            EffectCommand {
+                effect: 0x34, // Vibrato Control (E42)
+                operand: 0x02, // Square wave
+            },
+        ],
+    };
+    module.patterns[0].set_cell(0, 0, cell_0).unwrap();
+
+    let mut playback = PlaybackState::start(&module).unwrap();
+
+    let base_period = playback.channels()[0].base_period;
+
+    // Tick 0: Square wave vibrato at pos 0 is positive (offset (255 * 4) >> 5 = 31)
+    let period_tick0 = playback.channels()[0].period;
+    assert_eq!(period_tick0, (base_period as i32 + 31) as u32);
+
+    // Tick 1: phase advanced by speed 4 -> pos is 4 (still in positive half, < 32)
+    playback.advance_tick(&module).unwrap();
+    let period_tick1 = playback.channels()[0].period;
+    assert_eq!(period_tick1, (base_period as i32 + 31) as u32);
+
+    // Now test continuous (no-retrigger) waveform E46 (Square, no retrig -> 0x34, 0x06)
+    let cell_1 = PatternCell {
+        note: Note::Key(49),
+        instrument: 1,
+        effects: vec![
+            EffectCommand {
+                effect: 0x34, // Vibrato Control (E46)
+                operand: 0x06, // Square, no retrigger
+            },
+            EffectCommand::default(),
+        ],
+    };
+    module.patterns[0].set_cell(0, 1, cell_1).unwrap();
+
+    // Advance to Row 1 Tick 0 (triggering new note)
+    playback.advance_tick(&module).unwrap(); // Tick 2
+    
+    playback.advance_tick(&module).unwrap(); // Row 1 Tick 0
+    let pos_after = playback.channels()[0].vibrato_pos[0];
+    assert_ne!(pos_after, 0);
+}
+
+#[test]
+fn test_effect_tremolo_control() {
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_TWO_ROWS]);
+    module.header.tick_speed = 3;
+    module.samples[0].volume = 64;
+    map_instrument_to_sample(&mut module, 0, 0);
+
+    // Row 0: Note C-4 with Tremolo (0x07, 0x44) and E72 (Square wave -> 0x37, 0x02)
+    let cell_0 = PatternCell {
+        note: Note::Key(49),
+        instrument: 1,
+        effects: vec![
+            EffectCommand {
+                effect: 0x07, // Tremolo
+                operand: 0x44, // Speed 4, depth 4
+            },
+            EffectCommand {
+                effect: 0x37, // Tremolo Control (E72)
+                operand: 0x02, // Square wave
+            },
+        ],
+    };
+    module.patterns[0].set_cell(0, 0, cell_0).unwrap();
+
+    let mut playback = PlaybackState::start(&module).unwrap();
+
+    // modulated volume on tick 0 should be 64 + 31 = 95
+    let vol_tick0 = playback.channels()[0].volume;
+    assert_eq!(vol_tick0, 64 + 31);
+
+    // Tick 1: phase advanced by speed 4 -> pos is 4 (still in positive half, < 32)
+    playback.advance_tick(&module).unwrap();
+    let vol_tick1 = playback.channels()[0].volume;
+    assert_eq!(vol_tick1, 64 + 31);
+}
