@@ -172,3 +172,37 @@ fn preview_voice_note_with_no_mapped_sample_is_silent_without_error() {
         (0, 0)
     );
 }
+
+#[test]
+fn rustysynth_cubic_differs_from_hifi_linear_on_a_curved_sample() {
+    // A parabola is non-linear, so cubic interpolation diverges from linear.
+    // Offset by 16 so integer division yields non-zero starting values (32, 36, 40...),
+    // ensuring the difference between cubic and linear is observable after i32 truncation.
+    let data: Vec<i16> = (0..256).map(|i: i32| (((i + 16) * (i + 16)) / 8) as i16).collect();
+    let module = module_with_preview_sample(SampleData::pcm16(data));
+
+    let render = |mode: PlaybackMixerMode| -> Vec<(i32, i32)> {
+        let mut voice = PreviewVoice::new();
+        voice
+            .note_on(
+                &module,
+                PREVIEW_TEST_INSTRUMENT,
+                PREVIEW_TEST_NOTE,
+                PlaybackSettings::with_mixer_mode(mode),
+            )
+            .unwrap();
+        (0..8)
+            .map(|_| {
+                voice
+                    .render_stereo_frame(&module, PREVIEW_TEST_SAMPLE_RATE)
+                    .unwrap()
+            })
+            .collect()
+    };
+
+    assert_ne!(
+        render(PlaybackMixerMode::HiFi),
+        render(PlaybackMixerMode::RustySynth),
+        "RustySynth cubic should differ from HiFi linear on a curved sample"
+    );
+}
