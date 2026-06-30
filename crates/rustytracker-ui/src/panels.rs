@@ -2,8 +2,27 @@ use crate::app::{InstrumentEditorEdits, RustyTrackerApp, ViewMode};
 use crate::tracker_ui;
 use eframe::egui;
 use egui::Ui;
-use rustytracker_core::{InstrumentName, Note, NoteName, SampleLoopKind, SampleName};
+use rustytracker_core::{
+    Envelope, EnvelopePoint, InstrumentName, Note, NoteName, Sample, SampleData, SampleLoopKind,
+    SampleName,
+};
 use rustytracker_play::{PlaybackMixerMode, PlaybackSettings, PlaybackState};
+
+const SAMPLE_VOLUME_MAX: u8 = 64;
+const SAMPLE_VOLUME_CORE_MAX: u16 = 255;
+const SAMPLE_VOLUME_TO_CORE_SCALE: u32 = 261_120;
+const SAMPLE_VOLUME_TO_CORE_ROUNDING: u32 = 65_535;
+const SAMPLE_VOLUME_TO_CORE_SHIFT: u32 = 16;
+const ENVELOPE_MAX_POINTS: usize = 12;
+const ENVELOPE_FLAG_ENABLED: u8 = 0x01;
+const ENVELOPE_FLAG_SUSTAIN: u8 = 0x02;
+const ENVELOPE_FLAG_LOOP: u8 = 0x04;
+const ENVELOPE_VALUE_MAX: u16 = 64;
+const ENVELOPE_VALUE_SHIFT: u16 = 2;
+const ENVELOPE_VALUE_FULL_SCALE: u16 = ENVELOPE_VALUE_MAX << ENVELOPE_VALUE_SHIFT;
+const ENVELOPE_VALUE_CENTER: u16 = 32 << ENVELOPE_VALUE_SHIFT;
+const TEXT_EDIT_NAME_WIDTH: f32 = 220.0;
+const COMPACT_SLIDER_WIDTH: f32 = 140.0;
 
 impl RustyTrackerApp {
     pub(crate) fn render_menu_bar(&mut self, ui: &mut Ui) {
@@ -444,7 +463,9 @@ impl RustyTrackerApp {
             let mut name_str = instrument.name.as_str().to_string();
             let mut volume_fadeout = instrument.volume_fadeout;
             let mut volume_envelope = instrument.volume_envelope.clone();
-            let mut volume_envelope_changed = false;
+            let mut panning_envelope = instrument.panning_envelope.clone();
+            normalize_envelope_for_editor(&mut volume_envelope, ENVELOPE_VALUE_FULL_SCALE);
+            normalize_envelope_for_editor(&mut panning_envelope, ENVELOPE_VALUE_CENTER);
 
             ui.vertical(|ui| {
                 tracker_ui::show_list_heading(
@@ -454,63 +475,29 @@ impl RustyTrackerApp {
                 );
                 ui.separator();
 
-                ui.horizontal(|ui| {
-                    ui.label("Name:");
-                    let name_changed = ui.text_edit_singleline(&mut name_str).changed();
-                    if name_changed {
-                        edits.instrument_name = Some(InstrumentName::new(&name_str));
-                    }
-                });
-
-                ui.horizontal(|ui| {
-                    ui.label("Fadeout:");
-                    let changed = ui
-                        .add(egui::Slider::new(&mut volume_fadeout, 0..=65535))
-                        .changed();
-                    if changed {
-                        edits.instrument_volume_fadeout = Some(volume_fadeout);
-                    }
-                });
+                render_instrument_controls(
+                    ui,
+                    self.selected_instrument,
+                    &mut name_str,
+                    &mut volume_fadeout,
+                    &mut edits,
+                );
 
                 ui.separator();
-                ui.horizontal(|ui| {
-                    ui.label("Volume Envelope:");
-                    let env_active = (volume_envelope.flags & 0x01) != 0;
-                    let mut check = env_active;
-                    if ui.checkbox(&mut check, "Enabled").changed() {
-                        if check {
-                            volume_envelope.flags |= 0x01;
-                        } else {
-                            volume_envelope.flags &= !0x01;
-                        }
-                        volume_envelope_changed = true;
-                    }
-
-                    let env_sustain = (volume_envelope.flags & 0x02) != 0;
-                    let mut check = env_sustain;
-                    if ui.checkbox(&mut check, "Sustain").changed() {
-                        if check {
-                            volume_envelope.flags |= 0x02;
-                        } else {
-                            volume_envelope.flags &= !0x02;
-                        }
-                        volume_envelope_changed = true;
-                    }
-
-                    let env_loop = (volume_envelope.flags & 0x04) != 0;
-                    let mut check = env_loop;
-                    if ui.checkbox(&mut check, "Loop").changed() {
-                        if check {
-                            volume_envelope.flags |= 0x04;
-                        } else {
-                            volume_envelope.flags &= !0x04;
-                        }
-                        volume_envelope_changed = true;
-                    }
-                });
-
-                if volume_envelope_changed {
+                tracker_ui::show_list_heading(ui, &self.tracker_resources, "VOLUME ENVELOPE");
+                if render_envelope_editor(
+                    ui,
+                    &mut volume_envelope,
+                    ENVELOPE_VALUE_FULL_SCALE,
+                    "Vol",
+                ) {
                     edits.volume_envelope = Some(volume_envelope.clone());
+                }
+
+                ui.separator();
+                tracker_ui::show_list_heading(ui, &self.tracker_resources, "PANNING ENVELOPE");
+                if render_envelope_editor(ui, &mut panning_envelope, ENVELOPE_VALUE_CENTER, "Pan") {
+                    edits.panning_envelope = Some(panning_envelope.clone());
                 }
 
                 if let Some(sample) = sample {
@@ -518,112 +505,7 @@ impl RustyTrackerApp {
                     tracker_ui::show_list_heading(ui, &self.tracker_resources, "SAMPLE PARAMETERS");
                     ui.separator();
 
-                    let mut s_name = sample.name.as_str().to_string();
-                    ui.horizontal(|ui| {
-                        ui.label("Sample Name:");
-                        let name_changed = ui.text_edit_singleline(&mut s_name).changed();
-                        if name_changed {
-                            edits.sample_name = Some(SampleName::new(&s_name));
-                        }
-                    });
-
-                    let mut s_volume = sample.volume;
-                    ui.horizontal(|ui| {
-                        ui.label("Default Volume:");
-                        let changed = ui.add(egui::Slider::new(&mut s_volume, 0..=64)).changed();
-                        if changed {
-                            edits.sample_volume = Some(s_volume);
-                        }
-                    });
-
-                    let mut s_panning = sample.panning;
-                    ui.horizontal(|ui| {
-                        ui.label("Default Panning:");
-                        let changed = ui.add(egui::Slider::new(&mut s_panning, 0..=255)).changed();
-                        if changed {
-                            edits.sample_panning = Some(s_panning);
-                        }
-                    });
-
-                    let mut s_finetune = sample.finetune;
-                    ui.horizontal(|ui| {
-                        ui.label("Finetune:");
-                        let changed = ui
-                            .add(egui::Slider::new(&mut s_finetune, -128..=127))
-                            .changed();
-                        if changed {
-                            edits.sample_finetune = Some(s_finetune);
-                        }
-                    });
-
-                    let mut s_rel_note = sample.relative_note;
-                    ui.horizontal(|ui| {
-                        ui.label("Relative Note:");
-                        let changed = ui
-                            .add(egui::Slider::new(&mut s_rel_note, -96..=95))
-                            .changed();
-                        if changed {
-                            edits.sample_relative_note = Some(s_rel_note);
-                        }
-                    });
-
-                    let mut loop_mode = sample.loop_kind;
-                    ui.horizontal(|ui| {
-                        ui.label("Loop Mode:");
-                        let prev_mode = loop_mode;
-                        egui::ComboBox::from_id_salt("loop_mode_combo")
-                            .selected_text(match loop_mode {
-                                SampleLoopKind::None => "No Loop",
-                                SampleLoopKind::Forward => "Forward",
-                                SampleLoopKind::PingPong => "Ping-Pong",
-                            })
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(
-                                    &mut loop_mode,
-                                    SampleLoopKind::None,
-                                    "No Loop",
-                                );
-                                ui.selectable_value(
-                                    &mut loop_mode,
-                                    SampleLoopKind::Forward,
-                                    "Forward",
-                                );
-                                ui.selectable_value(
-                                    &mut loop_mode,
-                                    SampleLoopKind::PingPong,
-                                    "Ping-Pong",
-                                );
-                            });
-                        if loop_mode != prev_mode {
-                            edits.sample_loop_kind = Some(loop_mode);
-                        }
-                    });
-
-                    if loop_mode != SampleLoopKind::None {
-                        let max_len = sample.length.saturating_sub(1);
-                        let mut loop_start = sample.loop_start;
-                        let mut loop_length = sample.loop_length;
-
-                        ui.horizontal(|ui| {
-                            ui.label("Loop Start:");
-                            let changed = ui
-                                .add(egui::Slider::new(&mut loop_start, 0..=max_len))
-                                .changed();
-                            if changed {
-                                edits.sample_loop_start = Some(loop_start);
-                            }
-                        });
-
-                        ui.horizontal(|ui| {
-                            ui.label("Loop Length:");
-                            let changed = ui
-                                .add(egui::Slider::new(&mut loop_length, 0..=sample.length))
-                                .changed();
-                            if changed {
-                                edits.sample_loop_length = Some(loop_length);
-                            }
-                        });
-                    }
+                    render_sample_controls(ui, sample_idx, sample, &mut edits);
 
                     ui.separator();
                     tracker_ui::show_list_heading(ui, &self.tracker_resources, "WAVEFORM PREVIEW");
@@ -661,5 +543,587 @@ impl RustyTrackerApp {
             );
             self.commit_edit_to_audio();
         }
+    }
+}
+
+fn render_instrument_controls(
+    ui: &mut Ui,
+    selected_instrument: u8,
+    name: &mut String,
+    volume_fadeout: &mut u16,
+    edits: &mut InstrumentEditorEdits,
+) {
+    egui::Grid::new("instrument_editor_instrument_grid")
+        .num_columns(4)
+        .spacing([8.0, 4.0])
+        .show(ui, |ui| {
+            ui.label("Ins");
+            ui.monospace(format!("{selected_instrument:02X}"));
+            ui.label("Name");
+            if ui
+                .add(egui::TextEdit::singleline(name).desired_width(TEXT_EDIT_NAME_WIDTH))
+                .changed()
+            {
+                edits.instrument_name = Some(InstrumentName::new(name));
+            }
+            ui.end_row();
+
+            ui.label("Fade");
+            let drag_changed = ui
+                .add(
+                    egui::DragValue::new(volume_fadeout)
+                        .range(0..=u16::MAX)
+                        .speed(32.0),
+                )
+                .changed();
+            let slider_changed = ui
+                .add_sized(
+                    [COMPACT_SLIDER_WIDTH, 18.0],
+                    egui::Slider::new(volume_fadeout, 0..=u16::MAX).show_value(false),
+                )
+                .changed();
+            if drag_changed || slider_changed {
+                edits.instrument_volume_fadeout = Some(*volume_fadeout);
+            }
+            ui.end_row();
+        });
+}
+
+fn render_sample_controls(
+    ui: &mut Ui,
+    sample_idx: Option<usize>,
+    sample: &Sample,
+    edits: &mut InstrumentEditorEdits,
+) {
+    let mut sample_name = sample.name.as_str().to_string();
+    let sample_number = sample_idx.map(|index| format!("{:02X}", index + 1));
+
+    ui.horizontal_wrapped(|ui| {
+        ui.label("Smp");
+        ui.monospace(sample_number.as_deref().unwrap_or("--"));
+        ui.label("Name");
+        if ui
+            .add(egui::TextEdit::singleline(&mut sample_name).desired_width(TEXT_EDIT_NAME_WIDTH))
+            .changed()
+        {
+            edits.sample_name = Some(SampleName::new(&sample_name));
+        }
+        ui.separator();
+        ui.label("Len");
+        ui.monospace(sample.length.to_string());
+        ui.label(sample_data_label(&sample.data));
+    });
+
+    let mut volume_64 = core_sample_volume_to_tracker(sample.volume);
+    let mut panning = sample.panning;
+    let mut finetune = sample.finetune;
+    let mut relative_note = sample.relative_note;
+
+    egui::Grid::new("instrument_editor_sample_value_grid")
+        .num_columns(6)
+        .spacing([8.0, 4.0])
+        .show(ui, |ui| {
+            ui.label("Vol");
+            let volume_drag_changed = ui
+                .add(egui::DragValue::new(&mut volume_64).range(0..=SAMPLE_VOLUME_MAX))
+                .changed();
+            let volume_slider_changed = ui
+                .add_sized(
+                    [COMPACT_SLIDER_WIDTH, 18.0],
+                    egui::Slider::new(&mut volume_64, 0..=SAMPLE_VOLUME_MAX).show_value(false),
+                )
+                .changed();
+            if volume_drag_changed || volume_slider_changed {
+                edits.sample_volume = Some(tracker_sample_volume_to_core(volume_64));
+            }
+
+            ui.label("Pan");
+            let pan_drag_changed = ui
+                .add(egui::DragValue::new(&mut panning).range(0..=u8::MAX))
+                .changed();
+            let pan_slider_changed = ui
+                .add_sized(
+                    [COMPACT_SLIDER_WIDTH, 18.0],
+                    egui::Slider::new(&mut panning, 0..=u8::MAX).show_value(false),
+                )
+                .changed();
+            if pan_drag_changed || pan_slider_changed {
+                edits.sample_panning = Some(panning);
+            }
+            ui.end_row();
+
+            ui.label("Fine");
+            if ui
+                .add(egui::DragValue::new(&mut finetune).range(i8::MIN..=i8::MAX))
+                .changed()
+            {
+                edits.sample_finetune = Some(finetune);
+            }
+            ui.label("Rel");
+            if ui
+                .add(egui::DragValue::new(&mut relative_note).range(-96..=95))
+                .changed()
+            {
+                edits.sample_relative_note = Some(relative_note);
+            }
+            ui.label("Type");
+            ui.monospace(format!("{:02X}", sample.sample_type));
+            ui.end_row();
+        });
+
+    render_sample_loop_controls(ui, sample, edits);
+}
+
+fn render_sample_loop_controls(ui: &mut Ui, sample: &Sample, edits: &mut InstrumentEditorEdits) {
+    let mut loop_kind = sample.loop_kind;
+    let mut loop_start = sample.loop_start.min(sample.length.saturating_sub(1));
+    let mut loop_length = sample
+        .loop_length
+        .min(sample.length.saturating_sub(loop_start));
+
+    ui.separator();
+    ui.horizontal_wrapped(|ui| {
+        ui.label("Loop");
+        let previous_loop_kind = loop_kind;
+        egui::ComboBox::from_id_salt("instrument_editor_loop_kind")
+            .selected_text(sample_loop_kind_label(loop_kind))
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut loop_kind, SampleLoopKind::None, "Off");
+                ui.selectable_value(&mut loop_kind, SampleLoopKind::Forward, "Forward");
+                ui.selectable_value(&mut loop_kind, SampleLoopKind::PingPong, "Ping-Pong");
+            });
+
+        if loop_kind != previous_loop_kind {
+            edits.sample_loop_kind = Some(loop_kind);
+            if previous_loop_kind == SampleLoopKind::None
+                && loop_kind != SampleLoopKind::None
+                && sample.length > 0
+                && loop_length == 0
+            {
+                loop_start = loop_start.min(sample.length.saturating_sub(1));
+                loop_length = sample.length.saturating_sub(loop_start);
+                edits.sample_loop_start = Some(loop_start);
+                edits.sample_loop_length = Some(loop_length);
+            }
+        }
+
+        let loop_controls_enabled = loop_kind != SampleLoopKind::None && sample.length > 0;
+        let max_loop_start = sample.length.saturating_sub(1);
+
+        ui.label("Start");
+        if ui
+            .add_enabled(
+                loop_controls_enabled,
+                egui::DragValue::new(&mut loop_start).range(0..=max_loop_start),
+            )
+            .changed()
+        {
+            let max_loop_length = sample.length.saturating_sub(loop_start);
+            if loop_length > max_loop_length {
+                loop_length = max_loop_length;
+                edits.sample_loop_length = Some(loop_length);
+            }
+            edits.sample_loop_start = Some(loop_start);
+        }
+
+        ui.label("Len");
+        let max_loop_length = sample.length.saturating_sub(loop_start);
+        if ui
+            .add_enabled(
+                loop_controls_enabled,
+                egui::DragValue::new(&mut loop_length).range(0..=max_loop_length),
+            )
+            .changed()
+        {
+            edits.sample_loop_length = Some(loop_length);
+        }
+
+        ui.label("End");
+        ui.monospace(
+            loop_start
+                .saturating_add(loop_length)
+                .min(sample.length)
+                .to_string(),
+        );
+    });
+}
+
+fn render_envelope_editor(
+    ui: &mut Ui,
+    envelope: &mut Envelope,
+    default_value: u16,
+    value_label: &'static str,
+) -> bool {
+    normalize_envelope_for_editor(envelope, default_value);
+    let mut changed = false;
+
+    ui.horizontal_wrapped(|ui| {
+        changed |= render_envelope_flag(ui, envelope, ENVELOPE_FLAG_ENABLED, "Enabled");
+        changed |= render_envelope_flag(ui, envelope, ENVELOPE_FLAG_SUSTAIN, "Sustain");
+        changed |= render_envelope_flag(ui, envelope, ENVELOPE_FLAG_LOOP, "Loop");
+
+        ui.separator();
+
+        let mut point_count = active_envelope_point_count(envelope) as u8;
+        ui.label("Pts");
+        if ui
+            .add(egui::DragValue::new(&mut point_count).range(0..=ENVELOPE_MAX_POINTS as u8))
+            .changed()
+        {
+            ensure_envelope_point_count(envelope, point_count as usize, default_value);
+            changed = true;
+        }
+    });
+
+    let point_count = active_envelope_point_count(envelope);
+    let has_points = point_count > 0;
+    let max_point_index = point_count.saturating_sub(1) as u8;
+
+    ui.horizontal_wrapped(|ui| {
+        ui.label("Sus");
+        let mut sustain_point = envelope.sustain_point.min(max_point_index);
+        if ui
+            .add_enabled(
+                has_points,
+                egui::DragValue::new(&mut sustain_point).range(0..=max_point_index),
+            )
+            .changed()
+        {
+            envelope.sustain_point = sustain_point;
+            changed = true;
+        }
+
+        ui.label("Loop");
+        let mut loop_start_point = envelope.loop_start_point.min(max_point_index);
+        if ui
+            .add_enabled(
+                has_points,
+                egui::DragValue::new(&mut loop_start_point).range(0..=max_point_index),
+            )
+            .changed()
+        {
+            envelope.loop_start_point = loop_start_point;
+            if envelope.loop_end_point < loop_start_point {
+                envelope.loop_end_point = loop_start_point;
+            }
+            changed = true;
+        }
+
+        ui.label("to");
+        let mut loop_end_point = envelope.loop_end_point.min(max_point_index);
+        if ui
+            .add_enabled(
+                has_points,
+                egui::DragValue::new(&mut loop_end_point).range(loop_start_point..=max_point_index),
+            )
+            .changed()
+        {
+            envelope.loop_end_point = loop_end_point;
+            changed = true;
+        }
+    });
+
+    render_envelope_point_grid(ui, envelope, value_label, &mut changed);
+    render_envelope_preview(ui, envelope);
+
+    if changed {
+        clamp_envelope_point_indexes(envelope);
+    }
+    changed
+}
+
+fn render_envelope_flag(
+    ui: &mut Ui,
+    envelope: &mut Envelope,
+    flag: u8,
+    label: &'static str,
+) -> bool {
+    let mut enabled = (envelope.flags & flag) != 0;
+    if ui.checkbox(&mut enabled, label).changed() {
+        if enabled {
+            envelope.flags |= flag;
+        } else {
+            envelope.flags &= !flag;
+        }
+        return true;
+    }
+    false
+}
+
+fn render_envelope_point_grid(
+    ui: &mut Ui,
+    envelope: &mut Envelope,
+    value_label: &'static str,
+    changed: &mut bool,
+) {
+    let point_count = active_envelope_point_count(envelope);
+    if point_count == 0 {
+        return;
+    }
+
+    egui::Grid::new("instrument_editor_volume_envelope_points")
+        .num_columns(3)
+        .spacing([8.0, 3.0])
+        .show(ui, |ui| {
+            ui.label("#");
+            ui.label("Frame");
+            ui.label(value_label);
+            ui.end_row();
+
+            for point_index in 0..point_count {
+                ui.monospace(format!("{point_index:02}"));
+
+                let previous_frame = point_index
+                    .checked_sub(1)
+                    .and_then(|index| envelope.points.get(index))
+                    .map(|point| point.frame)
+                    .unwrap_or(0);
+                let next_frame = envelope
+                    .points
+                    .get(point_index + 1)
+                    .map(|point| point.frame)
+                    .unwrap_or(u16::MAX);
+                let min_frame = previous_frame.min(next_frame);
+                let max_frame = previous_frame.max(next_frame);
+
+                let mut frame = envelope.points[point_index].frame;
+                let mut value = envelope_value_to_tracker(envelope.points[point_index].value);
+
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut frame)
+                            .range(min_frame..=max_frame)
+                            .speed(1.0),
+                    )
+                    .changed()
+                {
+                    envelope.points[point_index].frame = frame;
+                    *changed = true;
+                }
+
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut value)
+                            .range(0..=ENVELOPE_VALUE_MAX)
+                            .speed(1.0),
+                    )
+                    .changed()
+                {
+                    envelope.points[point_index].value = tracker_envelope_value_to_core(value);
+                    *changed = true;
+                }
+                ui.end_row();
+            }
+        });
+}
+
+fn render_envelope_preview(ui: &mut Ui, envelope: &Envelope) {
+    let desired_size = egui::vec2(ui.available_width().min(420.0), 72.0);
+    let (rect, _response) = ui.allocate_exact_size(desired_size, egui::Sense::hover());
+    let painter = ui.painter_at(rect);
+    let visuals = ui.visuals();
+    painter.rect_filled(rect, 0.0, visuals.extreme_bg_color);
+    painter.rect_stroke(
+        rect,
+        0.0,
+        egui::Stroke::new(1.0, visuals.widgets.noninteractive.bg_stroke.color),
+        egui::StrokeKind::Inside,
+    );
+
+    let point_count = active_envelope_point_count(envelope);
+    if point_count == 0 {
+        painter.text(
+            rect.center(),
+            egui::Align2::CENTER_CENTER,
+            "NO ENVELOPE POINTS",
+            egui::TextStyle::Monospace.resolve(ui.style()),
+            visuals.text_color(),
+        );
+        return;
+    }
+
+    let active_points = &envelope.points[..point_count.min(envelope.points.len())];
+    let max_frame = active_points
+        .iter()
+        .map(|point| point.frame)
+        .max()
+        .unwrap_or(1)
+        .max(1);
+    let to_screen = |point: EnvelopePoint| {
+        let x = rect.left() + rect.width() * (point.frame as f32 / max_frame as f32);
+        let value =
+            point.value.min(ENVELOPE_VALUE_FULL_SCALE) as f32 / ENVELOPE_VALUE_FULL_SCALE as f32;
+        let y = rect.bottom() - rect.height() * value;
+        egui::pos2(x, y)
+    };
+
+    let stroke = egui::Stroke::new(1.5, visuals.selection.stroke.color);
+    for points in active_points.windows(2) {
+        painter.line_segment([to_screen(points[0]), to_screen(points[1])], stroke);
+    }
+    for (index, point) in active_points.iter().copied().enumerate() {
+        let center = to_screen(point);
+        let fill = if index as u8 == envelope.sustain_point {
+            visuals.selection.bg_fill
+        } else {
+            visuals.widgets.active.bg_fill
+        };
+        painter.circle_filled(center, 3.0, fill);
+    }
+}
+
+fn normalize_envelope_for_editor(envelope: &mut Envelope, default_value: u16) {
+    let point_count = active_envelope_point_count(envelope);
+    ensure_envelope_point_count(envelope, point_count, default_value);
+}
+
+fn ensure_envelope_point_count(envelope: &mut Envelope, point_count: usize, default_value: u16) {
+    let point_count = point_count.min(ENVELOPE_MAX_POINTS);
+    while envelope.points.len() < point_count {
+        envelope
+            .points
+            .push(next_envelope_point(&envelope.points, default_value));
+    }
+    envelope.point_count = point_count as u8;
+    clamp_envelope_point_indexes(envelope);
+}
+
+fn next_envelope_point(points: &[EnvelopePoint], default_value: u16) -> EnvelopePoint {
+    match points.last().copied() {
+        Some(point) => EnvelopePoint {
+            frame: point.frame.saturating_add(1),
+            value: point.value,
+        },
+        None => EnvelopePoint {
+            frame: 0,
+            value: default_value,
+        },
+    }
+}
+
+fn clamp_envelope_point_indexes(envelope: &mut Envelope) {
+    let point_count = active_envelope_point_count(envelope);
+    envelope.point_count = point_count as u8;
+
+    if point_count == 0 {
+        envelope.sustain_point = 0;
+        envelope.loop_start_point = 0;
+        envelope.loop_end_point = 0;
+        return;
+    }
+
+    let max_point_index = point_count.saturating_sub(1) as u8;
+    envelope.sustain_point = envelope.sustain_point.min(max_point_index);
+    envelope.loop_start_point = envelope.loop_start_point.min(max_point_index);
+    envelope.loop_end_point = envelope
+        .loop_end_point
+        .min(max_point_index)
+        .max(envelope.loop_start_point);
+}
+
+fn active_envelope_point_count(envelope: &Envelope) -> usize {
+    usize::from(envelope.point_count).min(ENVELOPE_MAX_POINTS)
+}
+
+fn envelope_value_to_tracker(value: u16) -> u16 {
+    (value >> ENVELOPE_VALUE_SHIFT).min(ENVELOPE_VALUE_MAX)
+}
+
+fn tracker_envelope_value_to_core(value: u16) -> u16 {
+    value.min(ENVELOPE_VALUE_MAX) << ENVELOPE_VALUE_SHIFT
+}
+
+fn core_sample_volume_to_tracker(volume: u8) -> u8 {
+    ((u16::from(volume) * u16::from(SAMPLE_VOLUME_MAX)) / SAMPLE_VOLUME_CORE_MAX) as u8
+}
+
+fn tracker_sample_volume_to_core(volume: u8) -> u8 {
+    (((u32::from(volume.min(SAMPLE_VOLUME_MAX)) * SAMPLE_VOLUME_TO_CORE_SCALE
+        + SAMPLE_VOLUME_TO_CORE_ROUNDING)
+        >> SAMPLE_VOLUME_TO_CORE_SHIFT)
+        & u32::from(u8::MAX)) as u8
+}
+
+fn sample_loop_kind_label(loop_kind: SampleLoopKind) -> &'static str {
+    match loop_kind {
+        SampleLoopKind::None => "Off",
+        SampleLoopKind::Forward => "Forward",
+        SampleLoopKind::PingPong => "Ping-Pong",
+    }
+}
+
+fn sample_data_label(data: &SampleData) -> &'static str {
+    match data {
+        SampleData::Empty => "Empty",
+        SampleData::Pcm8(_) => "8-bit",
+        SampleData::Pcm16(_) => "16-bit",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sample_volume_display_uses_tracker_scale() {
+        assert_eq!(core_sample_volume_to_tracker(0), 0);
+        assert_eq!(core_sample_volume_to_tracker(255), 64);
+        assert_eq!(tracker_sample_volume_to_core(0), 0);
+        assert_eq!(tracker_sample_volume_to_core(64), 255);
+    }
+
+    #[test]
+    fn envelope_point_count_growth_uses_requested_default_value() {
+        let mut envelope = Envelope::default();
+
+        ensure_envelope_point_count(&mut envelope, 2, ENVELOPE_VALUE_CENTER);
+
+        assert_eq!(envelope.point_count, 2);
+        assert_eq!(
+            envelope.points,
+            vec![
+                EnvelopePoint {
+                    frame: 0,
+                    value: ENVELOPE_VALUE_CENTER,
+                },
+                EnvelopePoint {
+                    frame: 1,
+                    value: ENVELOPE_VALUE_CENTER,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn envelope_indexes_clamp_to_active_points_without_dropping_hidden_points() {
+        let mut envelope = Envelope {
+            points: vec![
+                EnvelopePoint {
+                    frame: 0,
+                    value: ENVELOPE_VALUE_FULL_SCALE,
+                },
+                EnvelopePoint {
+                    frame: 8,
+                    value: ENVELOPE_VALUE_FULL_SCALE / 2,
+                },
+                EnvelopePoint {
+                    frame: 16,
+                    value: 0,
+                },
+            ],
+            point_count: 2,
+            sustain_point: 9,
+            loop_start_point: 9,
+            loop_end_point: 1,
+            flags: ENVELOPE_FLAG_ENABLED,
+        };
+
+        clamp_envelope_point_indexes(&mut envelope);
+
+        assert_eq!(envelope.point_count, 2);
+        assert_eq!(envelope.sustain_point, 1);
+        assert_eq!(envelope.loop_start_point, 1);
+        assert_eq!(envelope.loop_end_point, 1);
+        assert_eq!(envelope.points.len(), 3);
     }
 }

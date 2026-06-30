@@ -34,6 +34,7 @@ pub(crate) struct InstrumentEditorEdits {
     pub(crate) instrument_name: Option<InstrumentName>,
     pub(crate) instrument_volume_fadeout: Option<u16>,
     pub(crate) volume_envelope: Option<Envelope>,
+    pub(crate) panning_envelope: Option<Envelope>,
     pub(crate) sample_name: Option<SampleName>,
     pub(crate) sample_volume: Option<u8>,
     pub(crate) sample_panning: Option<u8>,
@@ -49,6 +50,7 @@ impl InstrumentEditorEdits {
         self.instrument_name.is_some()
             || self.instrument_volume_fadeout.is_some()
             || self.volume_envelope.is_some()
+            || self.panning_envelope.is_some()
             || self.sample_name.is_some()
             || self.sample_volume.is_some()
             || self.sample_panning.is_some()
@@ -68,6 +70,9 @@ impl InstrumentEditorEdits {
         }
         if let Some(volume_envelope) = self.volume_envelope {
             instrument.volume_envelope = volume_envelope;
+        }
+        if let Some(panning_envelope) = self.panning_envelope {
+            instrument.panning_envelope = panning_envelope;
         }
 
         if let Some(sample) = sample {
