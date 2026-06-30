@@ -41,22 +41,48 @@ impl RustyTrackerApp {
             }
 
             // Live sample preview (jam) — runs in both edit and non-edit mode.
+            let mut released = false;
+            let old_active_key = self.pressed_keys.last().copied();
+
+            self.pressed_keys.retain(|&k| {
+                let down = input.key_down(k);
+                if !down {
+                    released = true;
+                }
+                down
+            });
+
+            let mut newly_pressed_notes = Vec::new();
             for key in NOTE_KEYS {
-                if input.key_pressed(key) {
-                    if let Some(value) = self.note_value_for_key(key) {
+                if input.key_pressed(key) && !self.pressed_keys.contains(&key) {
+                    newly_pressed_notes.push(key);
+                }
+            }
+
+            let mut active_note_changed = false;
+            if !newly_pressed_notes.is_empty() {
+                for &key in &newly_pressed_notes {
+                    self.pressed_keys.push(key);
+                }
+                active_note_changed = true;
+            } else if released {
+                let new_active_key = self.pressed_keys.last().copied();
+                if new_active_key != old_active_key {
+                    active_note_changed = true;
+                }
+            }
+
+            if active_note_changed {
+                if let Some(&active_key) = self.pressed_keys.last() {
+                    if let Some(value) = self.note_value_for_key(active_key) {
                         self.audio_engine.preview_note_on(
                             self.selected_instrument,
                             value,
                             self.mixer_mode,
                         );
-                        self.preview_key = Some(key);
                     }
-                }
-            }
-            if let Some(active) = self.preview_key {
-                if input.key_released(active) {
+                } else {
                     self.audio_engine.preview_note_off();
-                    self.preview_key = None;
                 }
             }
 
@@ -119,29 +145,27 @@ impl RustyTrackerApp {
 
                 // Check for note input keys
                 if self.active_field == ActiveField::Note {
-                    for key in NOTE_KEYS {
-                        if input.key_pressed(key) {
-                            if let Some(value) = self.note_value_for_key(key) {
-                                let note = Note::Key(value);
-                                let active_pattern_idx = self.get_active_pattern_index();
+                    for &key in &newly_pressed_notes {
+                        if let Some(value) = self.note_value_for_key(key) {
+                            let note = Note::Key(value);
+                            let active_pattern_idx = self.get_active_pattern_index();
 
-                                // Write note
-                                let _ = self.editor.set_note(
-                                    active_pattern_idx,
-                                    self.active_channel,
-                                    self.active_row,
-                                    note,
-                                );
-                                // Write selected instrument
-                                let _ = self.editor.set_instrument(
-                                    active_pattern_idx,
-                                    self.active_channel,
-                                    self.active_row,
-                                    self.selected_instrument,
-                                );
-                                self.commit_edit_to_audio();
-                                self.advance_row_after_edit();
-                            }
+                            // Write note
+                            let _ = self.editor.set_note(
+                                active_pattern_idx,
+                                self.active_channel,
+                                self.active_row,
+                                note,
+                            );
+                            // Write selected instrument
+                            let _ = self.editor.set_instrument(
+                                active_pattern_idx,
+                                self.active_channel,
+                                self.active_row,
+                                self.selected_instrument,
+                            );
+                            self.commit_edit_to_audio();
+                            self.advance_row_after_edit();
                         }
                     }
                 }
