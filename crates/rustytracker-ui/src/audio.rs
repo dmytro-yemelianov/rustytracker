@@ -27,6 +27,7 @@ pub(crate) struct AudioStatus {
     pub(crate) is_playing: AtomicBool,
     pub(crate) order_index: AtomicUsize,
     pub(crate) row: AtomicU32,
+    pub(crate) device_error: AtomicBool,
 }
 
 impl AudioStatus {
@@ -35,6 +36,7 @@ impl AudioStatus {
             is_playing: AtomicBool::new(false),
             order_index: AtomicUsize::new(0),
             row: AtomicU32::new(0),
+            device_error: AtomicBool::new(false),
         }
     }
 }
@@ -61,9 +63,11 @@ impl AudioPlaybackEngine {
             None => {
                 eprintln!("No default audio output device found!");
                 let (producer, _) = rtrb::RingBuffer::new(1);
+                let status = Arc::new(AudioStatus::new());
+                status.device_error.store(true, Ordering::Relaxed);
                 return Self {
                     producer: Mutex::new(producer),
-                    status: Arc::new(AudioStatus::new()),
+                    status,
                     _stream: None,
                 };
             }
@@ -74,9 +78,11 @@ impl AudioPlaybackEngine {
             Err(e) => {
                 eprintln!("Failed to get default output config: {e}");
                 let (producer, _) = rtrb::RingBuffer::new(1);
+                let status = Arc::new(AudioStatus::new());
+                status.device_error.store(true, Ordering::Relaxed);
                 return Self {
                     producer: Mutex::new(producer),
-                    status: Arc::new(AudioStatus::new()),
+                    status,
                     _stream: None,
                 };
             }
@@ -85,9 +91,6 @@ impl AudioPlaybackEngine {
         let sample_rate = config.sample_rate().0;
         let (producer, consumer) = rtrb::RingBuffer::new(256);
         let status = Arc::new(AudioStatus::new());
-
-        let status_clone = Arc::clone(&status);
-        let err_fn = |err| eprintln!("an error occurred on stream: {err}");
 
         let mut consumer_opt = Some(consumer);
         let mut local_state_opt = Some(AudioThreadState {
@@ -98,44 +101,58 @@ impl AudioPlaybackEngine {
             preview: PreviewVoice::new(),
         });
 
-        let status_inner_clone = Arc::clone(&status_clone);
         let stream = match config.sample_format() {
             cpal::SampleFormat::F32 => {
                 let mut consumer = consumer_opt.take().unwrap();
                 let mut local_state = local_state_opt.take().unwrap();
-                let status_inner = Arc::clone(&status_inner_clone);
+                let status_inner = Arc::clone(&status);
+                let status_err = Arc::clone(&status);
                 device.build_output_stream(
                     &config.into(),
                     move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                         write_audio(data, &mut consumer, &status_inner, &mut local_state);
                     },
-                    err_fn,
+                    move |err| {
+                        eprintln!("an error occurred on stream: {err}");
+                        status_err.device_error.store(true, Ordering::Relaxed);
+                        status_err.is_playing.store(false, Ordering::Relaxed);
+                    },
                     None,
                 )
             }
             cpal::SampleFormat::I16 => {
                 let mut consumer = consumer_opt.take().unwrap();
                 let mut local_state = local_state_opt.take().unwrap();
-                let status_inner = Arc::clone(&status_inner_clone);
+                let status_inner = Arc::clone(&status);
+                let status_err = Arc::clone(&status);
                 device.build_output_stream(
                     &config.into(),
                     move |data: &mut [i16], _: &cpal::OutputCallbackInfo| {
                         write_audio(data, &mut consumer, &status_inner, &mut local_state);
                     },
-                    err_fn,
+                    move |err| {
+                        eprintln!("an error occurred on stream: {err}");
+                        status_err.device_error.store(true, Ordering::Relaxed);
+                        status_err.is_playing.store(false, Ordering::Relaxed);
+                    },
                     None,
                 )
             }
             cpal::SampleFormat::U16 => {
                 let mut consumer = consumer_opt.take().unwrap();
                 let mut local_state = local_state_opt.take().unwrap();
-                let status_inner = Arc::clone(&status_inner_clone);
+                let status_inner = Arc::clone(&status);
+                let status_err = Arc::clone(&status);
                 device.build_output_stream(
                     &config.into(),
                     move |data: &mut [u16], _: &cpal::OutputCallbackInfo| {
                         write_audio(data, &mut consumer, &status_inner, &mut local_state);
                     },
-                    err_fn,
+                    move |err| {
+                        eprintln!("an error occurred on stream: {err}");
+                        status_err.device_error.store(true, Ordering::Relaxed);
+                        status_err.is_playing.store(false, Ordering::Relaxed);
+                    },
                     None,
                 )
             }
@@ -149,6 +166,7 @@ impl AudioPlaybackEngine {
             }
             Err(e) => {
                 eprintln!("Failed to build audio output stream: {e}");
+                status.device_error.store(true, Ordering::Relaxed);
                 None
             }
         };
@@ -208,6 +226,10 @@ impl AudioPlaybackEngine {
 
     pub(crate) fn is_playing(&self) -> bool {
         self.status.is_playing.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn device_error(&self) -> bool {
+        self.status.device_error.load(Ordering::Relaxed)
     }
 
     pub(crate) fn get_position(&self) -> (usize, u16) {
@@ -365,6 +387,20 @@ mod tests {
     use super::*;
     use rustytracker_core::{FrequencyTable, Module, SampleData};
     use rustytracker_play::PlaybackSettings;
+
+    #[test]
+    fn audio_status_device_error_atomic_plumbing() {
+        let status = Arc::new(AudioStatus::new());
+        assert!(
+            !status.device_error.load(Ordering::Relaxed),
+            "fresh AudioStatus should have device_error == false"
+        );
+        status.device_error.store(true, Ordering::Relaxed);
+        assert!(
+            status.device_error.load(Ordering::Relaxed),
+            "device_error should be true after store"
+        );
+    }
 
     #[test]
     fn normalize_pcm16_sample_clamps_to_output_range() {
