@@ -15,6 +15,95 @@ The first milestone is not a GUI. It is a Rust CLI/library that can load a
 reference XM, dump normalized structure, save it back, and render PCM close to
 MilkyTracker's output.
 
+### LLM-friendly API (`api` subcommand)
+
+`rustytracker api` accepts a JSON request and returns a JSON response.
+
+```json
+{
+  "id": "optional",
+  "method": "module.render_wav",
+  "params": {
+    "module_path": "path/to/module.xm",
+    "sample_rate": 44100,
+    "duration_ms": 500,
+    "mixer": "hifi",
+    "include_wav": false,
+    "output_path": "/tmp/preview.wav"
+  }
+}
+```
+
+Supported methods:
+
+- `api.methods` – discover available methods and supported values.
+- `module.load` / `module.dump` – validate and dump module metadata.
+- `module.play_state` – step through playback state (rows).
+- `module.render_wav` – render headless WAV. Use `duration_ms` or `max_frames` to bound output.
+  Set `include_wav=false` and `output_path` for large file rendering.
+- `module.launch_ui` – write module file and launch `rustytracker-ui` with that path.
+- `module.new` – create an empty module and optionally apply creation/structure patches
+  in one request.
+- `module.apply_patch` – mutate notes/effects with deterministic operations.
+- `module.write`, `module.write_xm`, `module.write_mod` – serialize module bytes.
+
+`module.apply_patch` supports creation and structural operations for
+`create_sample`, `create_instrument`, `create_pattern`, and track operations in
+addition to note/effect edits:
+
+- `insert_track` / `delete_track`
+- `create_pattern` / `delete_pattern` (pattern operations)
+- `create_instrument` / `delete_instrument` / `rename_instrument`
+- `create_sample` / `delete_sample` / `rename_sample`
+
+Discovery + deterministic examples for LLM tool use:
+
+```json
+{ "method": "api.methods" }
+```
+
+```json
+{
+  "id": "create-song",
+  "method": "module.new",
+  "params": {
+    "module_title": "LLM Demo",
+    "module_channel_count": 6,
+    "patch": [
+      { "op": "create_pattern", "rows": 64 },
+      { "op": "create_sample", "index": 0, "sample": { "name": "Kick", "data": { "kind": "empty" } } },
+      { "op": "create_instrument", "index": 0, "name": "Drums", "default_sample_index": 0 },
+      { "op": "set_note", "pattern": 0, "channel": 0, "row": 0, "note": 49 }
+    ]
+  }
+}
+```
+
+```json
+{
+  "method": "module.render_wav",
+  "params": {
+    "module_bytes_b64": "<bytes from module.new.result.module_bytes_b64>",
+    "duration_ms": 1500,
+    "sample_rate": 22050
+  }
+}
+```
+
+```json
+{
+  "method": "module.launch_ui",
+  "params": {
+    "module_bytes_b64": "<bytes from module.new.result.module_bytes_b64>",
+    "output_format": "xm"
+  }
+}
+```
+
+This API is intentionally request/response oriented for tool callers: every
+response includes `schema_version`, `ok`, `id`, `method`, and either `result` or
+`error`.
+
 ## Repository Layout
 
 ```text
