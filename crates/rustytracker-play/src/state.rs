@@ -80,6 +80,10 @@ impl PlaybackState {
         &self.sequencer.channels
     }
 
+    pub fn global_volume(&self) -> u8 {
+        self.sequencer.global_volume
+    }
+
     pub fn song_ended(&self) -> bool {
         self.sequencer.song_ended
     }

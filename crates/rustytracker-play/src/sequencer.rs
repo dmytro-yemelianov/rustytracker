@@ -1,11 +1,16 @@
 use rustytracker_core::{Module, Note};
 
 use crate::channel::PlaybackChannelState;
+use crate::effects::{
+    EFFECT_GLOBAL_VOLUME, EFFECT_GLOBAL_VOLUME_SLIDE, EFFECT_MEMORY_REUSE_OPERAND,
+};
 use crate::error::PlaybackResult;
 use crate::{PlaybackClock, PlaybackPosition, PlaybackRowState, TickAdvance};
 use crate::{
     EFFECT_PATTERN_BREAK, EFFECT_POSITION_JUMP, EFFECT_SET_SPEED_BPM, SPEED_BPM_THRESHOLD,
 };
+
+const GLOBAL_VOLUME_SLIDE_SCALE: u8 = 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SequencerCommand {
@@ -40,6 +45,8 @@ pub struct Sequencer {
     pub clock: PlaybackClock,
     pub channels: Vec<PlaybackChannelState>,
     pub song_ended: bool,
+    pub global_volume: u8,
+    pub global_volume_slide_memory: u8,
 }
 
 impl Sequencer {
@@ -55,6 +62,8 @@ impl Sequencer {
             clock,
             channels,
             song_ended: false,
+            global_volume: module.header.main_volume.min(u16::from(u8::MAX)) as u8,
+            global_volume_slide_memory: EFFECT_MEMORY_REUSE_OPERAND,
         };
         seq.apply_row_state(module, &row_state)?;
         Ok(seq)
@@ -82,6 +91,7 @@ impl Sequencer {
                 for channel in &mut self.channels {
                     channel.process_tick_effects(module, current_tick);
                 }
+                self.process_global_effects(current_tick);
             }
             TickAdvance::SongEnd => {
                 self.song_ended = true;
@@ -105,7 +115,7 @@ impl Sequencer {
                         instrument_index,
                         note: channel.note,
                         instrument: channel.instrument,
-                        volume: channel.volume,
+                        volume: self.scaled_channel_volume(channel.volume),
                         panning: channel.panning,
                         period: channel.period,
                         offset,
@@ -114,7 +124,7 @@ impl Sequencer {
             } else if channel.active {
                 commands.push(SequencerCommand::Update {
                     channel: channel.channel,
-                    volume: channel.volume,
+                    volume: self.scaled_channel_volume(channel.volume),
                     panning: channel.panning,
                     period: channel.period,
                     volume_envelope_val: channel.volume_envelope_val,
@@ -141,7 +151,7 @@ impl Sequencer {
                         instrument_index,
                         note: channel.note,
                         instrument: channel.instrument,
-                        volume: channel.volume,
+                        volume: self.scaled_channel_volume(channel.volume),
                         panning: channel.panning,
                         period: channel.period,
                         offset: if channel.sample_frame > 0 {
@@ -215,7 +225,45 @@ impl Sequencer {
             ch_state.apply_cell(module, &channel.cell)?;
             ch_state.process_tick_effects(module, 0);
         }
+        self.process_global_effects(0);
 
         Ok(())
+    }
+
+    fn process_global_effects(&mut self, tick: u16) {
+        for channel in &self.channels {
+            for effect in &channel.active_effects {
+                match effect.effect {
+                    EFFECT_GLOBAL_VOLUME if tick == 0 => {
+                        self.global_volume = effect.operand;
+                    }
+                    EFFECT_GLOBAL_VOLUME_SLIDE if tick > 0 => {
+                        let mut op = effect.operand;
+                        if op == EFFECT_MEMORY_REUSE_OPERAND {
+                            op = self.global_volume_slide_memory;
+                        } else {
+                            self.global_volume_slide_memory = op;
+                        }
+
+                        let x = op >> 4;
+                        let y = op & 0x0f;
+                        if x > EFFECT_MEMORY_REUSE_OPERAND {
+                            self.global_volume = self
+                                .global_volume
+                                .saturating_add(x.saturating_mul(GLOBAL_VOLUME_SLIDE_SCALE));
+                        } else if y > EFFECT_MEMORY_REUSE_OPERAND {
+                            self.global_volume = self
+                                .global_volume
+                                .saturating_sub(y.saturating_mul(GLOBAL_VOLUME_SLIDE_SCALE));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    fn scaled_channel_volume(&self, volume: u8) -> u8 {
+        ((u16::from(volume) * u16::from(self.global_volume)) / u16::from(u8::MAX)) as u8
     }
 }
