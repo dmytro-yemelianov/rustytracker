@@ -313,6 +313,7 @@ impl PlaybackChannelState {
                                 {
                                     if let Some(sample) = module.samples.get(sample_index) {
                                         self.sample_index = Some(sample_index);
+                                        self.base_volume = sample.volume;
                                         self.volume = sample.volume;
                                         self.panning = panning_for_triggered_sample(
                                             module.header.frequency_table,
