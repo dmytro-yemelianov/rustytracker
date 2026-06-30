@@ -42,8 +42,6 @@ impl PreviewVoice {
         note: u8,
         settings: PlaybackSettings,
     ) -> PlaybackResult<()> {
-        self.settings = settings;
-
         // Mono: stop whatever was playing before resolving the new note.
         self.mixer.handle_commands(&[SequencerCommand::Stop {
             channel: PREVIEW_CHANNEL,
@@ -55,6 +53,7 @@ impl PreviewVoice {
             ..PatternCell::default()
         };
         self.channels[0].apply_cell(module, &cell)?;
+        self.settings = settings;
 
         if self.channels[0].active {
             if let (Some(sample_index), Some(instrument_index)) = (
