@@ -21,6 +21,20 @@ pub(crate) fn save_module_file(module: &Module, path: &Path) -> Result<(), Strin
         .unwrap_or("")
         .to_lowercase();
 
+    let path_val = rustytracker_core::validation::validate_export_path(path, &extension);
+    if !path_val.is_valid() {
+        return Err(format!("Failed to save module: {}", path_val.errors.join("; ")));
+    }
+
+    let module_val = rustytracker_core::validation::validate_module_for_export(module, &extension);
+    if !module_val.is_valid() {
+        return Err(format!("Failed to save module: {}", module_val.errors.join("; ")));
+    }
+
+    for warning in &module_val.warnings {
+        eprintln!("WARNING: {}", warning);
+    }
+
     let bytes = if extension == "xm" {
         rustytracker_xm::write_xm_module(module).map_err(|e| format!("{e:?}"))
     } else if extension == "mod" {
@@ -37,6 +51,11 @@ pub(crate) fn export_to_wav_file(
     mixer_mode: PlaybackMixerMode,
     path: &Path,
 ) -> Result<(), String> {
+    let path_val = rustytracker_core::validation::validate_export_path(path, "wav");
+    if !path_val.is_valid() {
+        return Err(format!("Failed to export WAV: {}", path_val.errors.join("; ")));
+    }
+
     let mut playback = PlaybackState::start_with_settings(
         module,
         PlaybackSettings::with_mixer_mode(mixer_mode),

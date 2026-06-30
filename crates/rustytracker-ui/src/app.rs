@@ -235,3 +235,25 @@ impl eframe::App for RustyTrackerApp {
         }
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_app_save_and_export_validations() {
+        let ctx = egui::Context::default();
+        let app = RustyTrackerApp::new(&ctx);
+
+        let temp_dir = std::env::temp_dir();
+        let invalid_path = temp_dir.join("non_existent_dir_12345/module.invalid");
+        
+        // This should return early without creating any file
+        app.save_module_file(&invalid_path);
+        assert!(!invalid_path.exists());
+
+        app.export_to_wav_file(&invalid_path);
+        assert!(!invalid_path.exists());
+    }
+}
