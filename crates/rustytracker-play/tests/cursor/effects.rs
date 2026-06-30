@@ -1099,7 +1099,7 @@ fn test_volume_envelope_and_fadeout() {
                             // Read before advance: still at step 2 -> 128
         assert_eq!(ch.volume_envelope_val, 128);
         assert_eq!(ch.panning_envelope_val, 256); // remains at last point
-                                                   // fadeout volume starts decreasing: 65536 - 16384 = 49152
+                                                  // fadeout volume starts decreasing: 65536 - 16384 = 49152
         assert_eq!(ch.fadeout_volume, 49152);
     }
 
@@ -1166,7 +1166,6 @@ fn test_effect_note_cut() {
     assert_eq!(playback.channels()[0].volume, 0);
 }
 
-
 #[test]
 fn test_effect_glissando_control() {
     let mut module =
@@ -1180,10 +1179,7 @@ fn test_effect_glissando_control() {
     let cell_0 = PatternCell {
         note: Note::Key(49),
         instrument: 1,
-        effects: vec![
-            EffectCommand::default(),
-            EffectCommand::default(),
-        ],
+        effects: vec![EffectCommand::default(), EffectCommand::default()],
     };
     let cell_1 = PatternCell {
         note: Note::Key(51),
@@ -1191,7 +1187,7 @@ fn test_effect_glissando_control() {
         effects: vec![
             EffectCommand {
                 effect: 0x03, // Tone Portamento
-                operand: 4, // 4 * 4 = 16 period units per tick
+                operand: 4,   // 4 * 4 = 16 period units per tick
             },
             EffectCommand {
                 effect: 0x33, // Glissando Control (E31)
@@ -1221,7 +1217,7 @@ fn test_effect_glissando_control() {
 
     // Row 1 Tick 1: slide is processed (16 units closer to target).
     playback.advance_tick(&module).unwrap();
-    
+
     let base_period_tick1 = playback.channels()[0].base_period;
     let period_tick1 = playback.channels()[0].period;
     assert_eq!(base_period_tick1, period_c4 - 16);
@@ -1251,11 +1247,11 @@ fn test_effect_vibrato_control() {
         instrument: 1,
         effects: vec![
             EffectCommand {
-                effect: 0x04, // Vibrato
+                effect: 0x04,  // Vibrato
                 operand: 0x44, // Speed 4, depth 4
             },
             EffectCommand {
-                effect: 0x34, // Vibrato Control (E42)
+                effect: 0x34,  // Vibrato Control (E42)
                 operand: 0x02, // Square wave
             },
         ],
@@ -1281,7 +1277,7 @@ fn test_effect_vibrato_control() {
         instrument: 1,
         effects: vec![
             EffectCommand {
-                effect: 0x34, // Vibrato Control (E46)
+                effect: 0x34,  // Vibrato Control (E46)
                 operand: 0x06, // Square, no retrigger
             },
             EffectCommand::default(),
@@ -1291,7 +1287,7 @@ fn test_effect_vibrato_control() {
 
     // Advance to Row 1 Tick 0 (triggering new note)
     playback.advance_tick(&module).unwrap(); // Tick 2
-    
+
     playback.advance_tick(&module).unwrap(); // Row 1 Tick 0
     let pos_after = playback.channels()[0].vibrato_pos[0];
     assert_ne!(pos_after, 0);
@@ -1311,11 +1307,11 @@ fn test_effect_tremolo_control() {
         instrument: 1,
         effects: vec![
             EffectCommand {
-                effect: 0x07, // Tremolo
+                effect: 0x07,  // Tremolo
                 operand: 0x44, // Speed 4, depth 4
             },
             EffectCommand {
-                effect: 0x37, // Tremolo Control (E72)
+                effect: 0x37,  // Tremolo Control (E72)
                 operand: 0x02, // Square wave
             },
         ],
@@ -1332,4 +1328,195 @@ fn test_effect_tremolo_control() {
     playback.advance_tick(&module).unwrap();
     let vol_tick1 = playback.channels()[0].volume;
     assert_eq!(vol_tick1, 64 + 31);
+}
+
+#[test]
+fn test_effect_panning_slide_with_memory() {
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_THREE_ROWS]);
+    module.header.tick_speed = 3;
+    map_instrument_to_sample(&mut module, 0, 0);
+
+    let cell_0 = PatternCell {
+        note: Note::Key(49),
+        instrument: 1,
+        effects: vec![
+            EffectCommand {
+                effect: 0x08,
+                operand: 100,
+            },
+            EffectCommand::default(),
+        ],
+    };
+    let cell_1 = PatternCell {
+        effects: vec![
+            EffectCommand::default(),
+            EffectCommand {
+                effect: EFFECT_PANNING_SLIDE,
+                operand: 0x30,
+            },
+        ],
+        ..PatternCell::default()
+    };
+    let cell_2 = PatternCell {
+        effects: vec![
+            EffectCommand::default(),
+            EffectCommand {
+                effect: EFFECT_PANNING_SLIDE,
+                operand: 0x00,
+            },
+        ],
+        ..PatternCell::default()
+    };
+    module.patterns[0].set_cell(0, 0, cell_0).unwrap();
+    module.patterns[0].set_cell(0, 1, cell_1).unwrap();
+    module.patterns[0].set_cell(0, 2, cell_2).unwrap();
+
+    let mut playback = PlaybackState::start(&module).unwrap();
+    assert_eq!(playback.channels()[0].panning, 100);
+
+    playback.advance_tick(&module).unwrap();
+    playback.advance_tick(&module).unwrap();
+    playback.advance_tick(&module).unwrap();
+    assert_eq!(playback.channels()[0].panning, 100);
+
+    playback.advance_tick(&module).unwrap();
+    assert_eq!(playback.channels()[0].panning, 103);
+    playback.advance_tick(&module).unwrap();
+    assert_eq!(playback.channels()[0].panning, 106);
+
+    playback.advance_tick(&module).unwrap();
+    assert_eq!(playback.channels()[0].panning, 106);
+    playback.advance_tick(&module).unwrap();
+    assert_eq!(playback.channels()[0].panning, 109);
+}
+
+#[test]
+fn test_effect_tremor_mutes_output_volume_without_changing_base_volume() {
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_ONE_ROW]);
+    module.header.tick_speed = 5;
+    module.samples[0].volume = 64;
+    map_instrument_to_sample(&mut module, 0, 0);
+
+    let cell = PatternCell {
+        note: Note::Key(49),
+        instrument: 1,
+        effects: vec![
+            EffectCommand {
+                effect: EFFECT_TREMOR,
+                operand: 0x11,
+            },
+            EffectCommand::default(),
+        ],
+    };
+    module.patterns[0].set_cell(0, 0, cell).unwrap();
+
+    let mut playback = PlaybackState::start(&module).unwrap();
+    assert_eq!(playback.channels()[0].base_volume, 64);
+    assert_eq!(playback.channels()[0].volume, 64);
+
+    playback.advance_tick(&module).unwrap();
+    assert_eq!(playback.channels()[0].base_volume, 64);
+    assert_eq!(playback.channels()[0].volume, 64);
+
+    playback.advance_tick(&module).unwrap();
+    assert_eq!(playback.channels()[0].base_volume, 64);
+    assert_eq!(playback.channels()[0].volume, 0);
+
+    playback.advance_tick(&module).unwrap();
+    assert_eq!(playback.channels()[0].base_volume, 64);
+    assert_eq!(playback.channels()[0].volume, 0);
+
+    playback.advance_tick(&module).unwrap();
+    assert_eq!(playback.channels()[0].base_volume, 64);
+    assert_eq!(playback.channels()[0].volume, 64);
+}
+
+#[test]
+fn test_effect_global_volume_scales_rendered_output() {
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_ONE_ROW]);
+    module.samples[0].data = SampleData::pcm16(vec![1000; 8]);
+    module.samples[0].volume = 255;
+    map_instrument_to_sample(&mut module, 0, 0);
+
+    let cell = PatternCell {
+        note: Note::Key(49),
+        instrument: 1,
+        effects: vec![
+            EffectCommand {
+                effect: EFFECT_GLOBAL_VOLUME,
+                operand: 128,
+            },
+            EffectCommand::default(),
+        ],
+    };
+    module.patterns[0].set_cell(0, 0, cell).unwrap();
+
+    let mut playback = PlaybackState::start(&module).unwrap();
+    assert_eq!(playback.global_volume(), 128);
+    assert_eq!(
+        playback.render_raw_mono_pcm(&module, 8363, 1).unwrap(),
+        vec![501]
+    );
+}
+
+#[test]
+fn test_effect_global_volume_slide_with_memory() {
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_THREE_ROWS]);
+    module.header.tick_speed = 3;
+
+    let cell_0 = PatternCell {
+        effects: vec![
+            EffectCommand {
+                effect: EFFECT_GLOBAL_VOLUME,
+                operand: 128,
+            },
+            EffectCommand::default(),
+        ],
+        ..PatternCell::default()
+    };
+    let cell_1 = PatternCell {
+        effects: vec![
+            EffectCommand {
+                effect: EFFECT_GLOBAL_VOLUME_SLIDE,
+                operand: 0x20,
+            },
+            EffectCommand::default(),
+        ],
+        ..PatternCell::default()
+    };
+    let cell_2 = PatternCell {
+        effects: vec![
+            EffectCommand {
+                effect: EFFECT_GLOBAL_VOLUME_SLIDE,
+                operand: 0x00,
+            },
+            EffectCommand::default(),
+        ],
+        ..PatternCell::default()
+    };
+    module.patterns[0].set_cell(0, 0, cell_0).unwrap();
+    module.patterns[0].set_cell(0, 1, cell_1).unwrap();
+    module.patterns[0].set_cell(0, 2, cell_2).unwrap();
+
+    let mut playback = PlaybackState::start(&module).unwrap();
+    assert_eq!(playback.global_volume(), 128);
+
+    playback.advance_tick(&module).unwrap();
+    playback.advance_tick(&module).unwrap();
+    playback.advance_tick(&module).unwrap();
+    assert_eq!(playback.global_volume(), 128);
+
+    playback.advance_tick(&module).unwrap();
+    assert_eq!(playback.global_volume(), 136);
+    playback.advance_tick(&module).unwrap();
+    assert_eq!(playback.global_volume(), 144);
+
+    playback.advance_tick(&module).unwrap();
+    assert_eq!(playback.global_volume(), 144);
+    playback.advance_tick(&module).unwrap();
+    assert_eq!(playback.global_volume(), 152);
 }

@@ -1,7 +1,7 @@
 use crate::effects::{
-    EFFECT_MEMORY_REUSE_OPERAND, EFFECT_SAMPLE_OFFSET, EFFECT_SAMPLE_OFFSET_FRAME_SCALE,
-    EFFECT_TONE_PORTAMENTO, PLAYBACK_EMPTY_PERIOD,
-    EFFECT_GLISSANDO_CONTROL, EFFECT_VIBRATO_CONTROL, EFFECT_TREMOLO_CONTROL,
+    EFFECT_GLISSANDO_CONTROL, EFFECT_MEMORY_REUSE_OPERAND, EFFECT_SAMPLE_OFFSET,
+    EFFECT_SAMPLE_OFFSET_FRAME_SCALE, EFFECT_TONE_PORTAMENTO, EFFECT_TREMOLO_CONTROL,
+    EFFECT_VIBRATO_CONTROL, PLAYBACK_EMPTY_PERIOD,
 };
 use crate::envelope::{
     PlaybackEnvelopeState, PLAYBACK_DEFAULT_FADEOUT_VOLUME, PLAYBACK_ENVELOPE_DEFAULT_PANNING,
@@ -198,6 +198,9 @@ pub struct PlaybackChannelState {
     pub tremolo_depth: Vec<u8>,
     pub tremolo_pos: Vec<u8>,
     pub glissando: bool,
+    pub panning_slide_memory: u8,
+    pub tremor_memory: u8,
+    pub tremor_tick: u16,
     pub sample_offset_memory: u8,
     pub sample_backward: bool,
     pub keyon: bool,
@@ -244,6 +247,9 @@ impl PlaybackChannelState {
             tremolo_depth: vec![EFFECT_MEMORY_REUSE_OPERAND; DEFAULT_EFFECT_SLOTS as usize],
             tremolo_pos: vec![EFFECT_MEMORY_REUSE_OPERAND; DEFAULT_EFFECT_SLOTS as usize],
             glissando: false,
+            panning_slide_memory: EFFECT_MEMORY_REUSE_OPERAND,
+            tremor_memory: EFFECT_MEMORY_REUSE_OPERAND,
+            tremor_tick: 0,
             sample_offset_memory: EFFECT_MEMORY_REUSE_OPERAND,
             sample_backward: false,
             keyon: true,
@@ -293,7 +299,10 @@ impl PlaybackChannelState {
 
         match cell.note {
             Note::Empty => {
-                if module.header.is_mod && cell.instrument != DEFAULT_INSTRUMENT_NUMBER && self.active {
+                if module.header.is_mod
+                    && cell.instrument != DEFAULT_INSTRUMENT_NUMBER
+                    && self.active
+                {
                     if let Note::Key(prev_note) = self.note {
                         if let Some(instrument_index) = self.instrument_index {
                             if let Some(note_index) = note_sample_map_index(prev_note) {
@@ -328,7 +337,7 @@ impl PlaybackChannelState {
                     }
                 }
                 Ok(())
-            },
+            }
             Note::Off => {
                 if !tone_porta {
                     let volume_envelope_enabled = if let Some(ins_idx) = self.instrument_index {
@@ -428,6 +437,7 @@ impl PlaybackChannelState {
                 self.tremolo_pos[slot] = EFFECT_MEMORY_REUSE_OPERAND;
             }
         }
+        self.tremor_tick = 0;
         self.sample_backward = false;
         self.keyon = true;
         self.fadeout_volume = PLAYBACK_DEFAULT_FADEOUT_VOLUME;

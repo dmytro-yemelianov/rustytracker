@@ -34,7 +34,7 @@ fn test_protracker_mod_sample_swap() {
 
     // Set up pattern with 2 rows
     let mut pattern = Pattern::new(2, 1, DEFAULT_EFFECT_SLOTS);
-    
+
     // Row 0: trigger Note C-4 with Instrument 1
     let cell0 = PatternCell {
         note: Note::key(4, NoteName::C).unwrap(),
@@ -58,7 +58,8 @@ fn test_protracker_mod_sample_swap() {
     let mut state = PlaybackState::start_with_settings(
         &module,
         rustytracker_play::PlaybackSettings::with_mixer_mode(PlaybackMixerMode::ProTracker),
-    ).unwrap();
+    )
+    .unwrap();
 
     // Verify initial Row 0 state
     {
@@ -80,7 +81,11 @@ fn test_protracker_mod_sample_swap() {
     {
         let channels = state.channels();
         assert!(channels[0].active);
-        assert_eq!(channels[0].sample_index, Some(1), "sample should have swapped to 1");
+        assert_eq!(
+            channels[0].sample_index,
+            Some(1),
+            "sample should have swapped to 1"
+        );
         assert_eq!(channels[0].volume, 32, "volume should have updated to 32");
         assert_eq!(
             channels[0].sample_frame, frame_before_swap,

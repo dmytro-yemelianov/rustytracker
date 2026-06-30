@@ -6,7 +6,8 @@ pub use rustytracker_play::{
     ChannelSampleFrame, PlaybackChannelState, PlaybackClock, PlaybackCursor, PlaybackEnvelopeState,
     PlaybackError, PlaybackMixerMode, PlaybackSampleValue, PlaybackState, PlaybackTiming,
     RawMonoPcmFrame, RawStereoPcmFrame, RowAdvance, TickAdvance, EFFECT_ARPEGGIO_ZERO,
-    EFFECT_PATTERN_BREAK, EFFECT_POSITION_JUMP, EFFECT_SET_SPEED_BPM, EFFECT_TONE_PORTAMENTO,
+    EFFECT_GLOBAL_VOLUME, EFFECT_GLOBAL_VOLUME_SLIDE, EFFECT_PANNING_SLIDE, EFFECT_PATTERN_BREAK,
+    EFFECT_POSITION_JUMP, EFFECT_SET_SPEED_BPM, EFFECT_TONE_PORTAMENTO, EFFECT_TREMOR,
     EFFECT_VOLUME_SLIDE, PLAYBACK_FIRST_ORDER_INDEX, PLAYBACK_FIRST_ROW, PLAYBACK_FIRST_TICK,
     PLAYBACK_MONO_SILENCE, PLAYBACK_ORDER_STEP, PLAYBACK_ROW_STEP, PLAYBACK_STEREO_SILENCE,
     PLAYBACK_TICK_STEP, SPEED_BPM_THRESHOLD, VIB_TAB,
@@ -120,9 +121,9 @@ pub fn map_instrument_to_sample(module: &mut Module, instrument_index: usize, sa
 
 mod cursor {
     mod basic;
-    mod traverse;
-    mod timing;
+    mod effects;
     mod playback;
     mod render;
-    mod effects;
+    mod timing;
+    mod traverse;
 }
