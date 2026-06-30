@@ -7,9 +7,10 @@ use crate::envelope::{
     PLAYBACK_ENVELOPE_DEFAULT_VOLUME, XM_ENVELOPE_ENABLED_FLAG,
 };
 use crate::error::{PlaybackError, PlaybackResult};
+use crate::sample::sample_value_at_frame;
 use crate::RawMonoPcmFrame;
 use rustytracker_core::{
-    EffectCommand, FrequencyTable, Module, Note, PatternCell, Sample, SampleData, SampleLoopKind,
+    EffectCommand, FrequencyTable, Module, Note, PatternCell, Sample, SampleLoopKind,
     DEFAULT_EFFECT_SLOTS, DEFAULT_INSTRUMENT_NUMBER, FIRST_XM_NOTE_VALUE, SAMPLE_DEFAULT_PANNING,
 };
 
@@ -677,12 +678,4 @@ fn amiga_log_period_for_note(note: u8, sample: &Sample) -> u32 {
     let interpolated = v1 + (t * (v2 - v1)) / AMIGA_LOG_PERIOD_INTERP_DENOMINATOR;
 
     (interpolated >> octave).max(1) as u32
-}
-
-fn sample_value_at_frame(data: &SampleData, frame: usize) -> Option<PlaybackSampleValue> {
-    match data {
-        SampleData::Empty => None,
-        SampleData::Pcm8(values) => values.get(frame).copied().map(PlaybackSampleValue::Pcm8),
-        SampleData::Pcm16(values) => values.get(frame).copied().map(PlaybackSampleValue::Pcm16),
-    }
 }
