@@ -230,7 +230,10 @@ Append to `crates/rustytracker-play/tests/preview.rs` (reuses `module_with_previ
 #[test]
 fn rustysynth_cubic_differs_from_hifi_linear_on_a_curved_sample() {
     // A parabola is non-linear, so cubic interpolation diverges from linear.
-    let data: Vec<i16> = (0..256).map(|i| ((i * i) / 8) as i16).collect();
+    // Parabola shifted by +16 so the early sample frames the C-4 step actually
+    // visits carry non-zero curvature (plain (i*i)/8 is 0 at frames 0-1, which
+    // would make linear and cubic both render (0,0) — a degenerate test).
+    let data: Vec<i16> = (0..256).map(|i| (((i + 16) * (i + 16)) / 8) as i16).collect();
     let module = module_with_preview_sample(SampleData::pcm16(data));
 
     let render = |mode: PlaybackMixerMode| -> Vec<(i32, i32)> {
