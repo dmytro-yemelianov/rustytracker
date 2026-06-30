@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use eframe::egui;
 use egui::{Color32, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui, Vec2};
 use rustytracker_core::{EffectCommand, Note, Pattern, PatternCell, SampleData, SampleLoopKind};
@@ -45,6 +47,9 @@ const WAVEFORM_HEIGHT: f32 = 120.0;
 const WAVEFORM_MIN_WIDTH: f32 = 240.0;
 const WAVEFORM_EDGE_PADDING: f32 = 5.0;
 const WAVEFORM_STROKE_WIDTH: f32 = 1.5;
+const WAVEFORM_LOOP_MARKER_INSET: f32 = 4.0;
+const WAVEFORM_LOOP_MARKER_CAP: f32 = 6.0;
+const WAVEFORM_LOOP_MIN_MARKER_WIDTH: f32 = 12.0;
 const PCM8_NORMALIZATION_FACTOR: f32 = 128.0;
 const PCM16_NORMALIZATION_FACTOR: f32 = 32768.0;
 const NO_WAVEFORM_TEXT: &str = "NO AUDIO WAVEFORM DATA";
@@ -494,28 +499,14 @@ pub fn show_waveform(ui: &mut Ui, resources: &TrackerUiResources, view: Waveform
         Stroke::new(CURSOR_BORDER_WIDTH, theme.waveform_center),
     );
 
-    if let Some(loop_rect) = waveform_loop_rect(
+    if let Some(loop_region) = waveform_loop_region(
         rect,
         view.sample_length,
         view.loop_kind,
         view.loop_start,
         view.loop_length,
     ) {
-        painter.rect_filled(loop_rect, 0.0, theme.waveform_loop);
-        painter.line_segment(
-            [
-                egui::pos2(loop_rect.min.x, rect.min.y),
-                egui::pos2(loop_rect.min.x, rect.max.y),
-            ],
-            Stroke::new(CURSOR_BORDER_WIDTH, theme.waveform_loop_edge),
-        );
-        painter.line_segment(
-            [
-                egui::pos2(loop_rect.max.x, rect.min.y),
-                egui::pos2(loop_rect.max.x, rect.max.y),
-            ],
-            Stroke::new(CURSOR_BORDER_WIDTH, theme.waveform_loop_edge),
-        );
+        draw_waveform_loop(&painter, rect, loop_region, theme);
     }
 
     let sample_len = view.data.frame_count();
@@ -537,21 +528,31 @@ pub fn show_waveform(ui: &mut Ui, resources: &TrackerUiResources, view: Waveform
 
     let pixel_width = rect.width().round().max(1.0) as usize;
     let amplitude = rect.height() / 2.0 - WAVEFORM_EDGE_PADDING;
-    let mut previous = None;
+    let mut previous_center = None;
 
     for x in 0..pixel_width {
-        let sample_index = waveform_sample_index(x, pixel_width, sample_len);
-        let sample_value = waveform_sample_value(view.data, sample_index);
-        let point = egui::pos2(rect.min.x + x as f32, mid_y - sample_value * amplitude);
+        let Some(sample_range) = waveform_sample_range(x, pixel_width, sample_len) else {
+            continue;
+        };
+        let peak = waveform_sample_peak(view.data, sample_range);
+        let x_pos = rect.min.x + x as f32;
+        let high_point = egui::pos2(x_pos, mid_y - peak.max * amplitude);
+        let low_point = egui::pos2(x_pos, mid_y - peak.min * amplitude);
+        let center_point = egui::pos2(x_pos, mid_y - peak.center() * amplitude);
 
-        if let Some(previous_point) = previous {
+        painter.line_segment(
+            [high_point, low_point],
+            Stroke::new(WAVEFORM_STROKE_WIDTH, theme.waveform),
+        );
+
+        if let Some(previous_point) = previous_center {
             painter.line_segment(
-                [previous_point, point],
+                [previous_point, center_point],
                 Stroke::new(WAVEFORM_STROKE_WIDTH, theme.waveform),
             );
         }
 
-        previous = Some(point);
+        previous_center = Some(center_point);
     }
 }
 
@@ -1007,13 +1008,131 @@ fn text_width(text: &str, metrics: TrackerMetrics) -> f32 {
     text.chars().count() as f32 * metrics.char_width
 }
 
-fn waveform_loop_rect(
+#[derive(Debug, Clone, Copy)]
+struct WaveformLoopRegion {
+    rect: Rect,
+    kind: SampleLoopKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct WaveformSamplePeak {
+    min: f32,
+    max: f32,
+}
+
+impl WaveformSamplePeak {
+    fn center(self) -> f32 {
+        (self.min + self.max) * 0.5
+    }
+}
+
+fn draw_waveform_loop(
+    painter: &egui::Painter,
+    waveform_rect: Rect,
+    region: WaveformLoopRegion,
+    theme: TrackerTheme,
+) {
+    let loop_rect = region.rect;
+    let stroke = Stroke::new(CURSOR_BORDER_WIDTH, theme.waveform_loop_edge);
+
+    painter.rect_filled(loop_rect, 0.0, theme.waveform_loop);
+    painter.rect_stroke(loop_rect, 0.0, stroke, StrokeKind::Inside);
+
+    painter.line_segment(
+        [
+            egui::pos2(loop_rect.min.x, waveform_rect.min.y),
+            egui::pos2(loop_rect.min.x, waveform_rect.max.y),
+        ],
+        stroke,
+    );
+    painter.line_segment(
+        [
+            egui::pos2(loop_rect.max.x, waveform_rect.min.y),
+            egui::pos2(loop_rect.max.x, waveform_rect.max.y),
+        ],
+        stroke,
+    );
+
+    if loop_rect.width() < WAVEFORM_LOOP_MIN_MARKER_WIDTH {
+        return;
+    }
+
+    let marker_inset = WAVEFORM_LOOP_MARKER_INSET.min(waveform_rect.height() / 4.0);
+    let marker_cap = WAVEFORM_LOOP_MARKER_CAP.min(loop_rect.width() / 2.0);
+    let left_x = loop_rect.min.x;
+    let right_x = loop_rect.max.x;
+    let top_y = waveform_rect.min.y + marker_inset;
+    let bottom_y = waveform_rect.max.y - marker_inset;
+
+    painter.line_segment(
+        [
+            egui::pos2(left_x, top_y),
+            egui::pos2(left_x + marker_cap, top_y),
+        ],
+        stroke,
+    );
+    painter.line_segment(
+        [
+            egui::pos2(right_x - marker_cap, top_y),
+            egui::pos2(right_x, top_y),
+        ],
+        stroke,
+    );
+    painter.line_segment(
+        [
+            egui::pos2(left_x, bottom_y),
+            egui::pos2(left_x + marker_cap, bottom_y),
+        ],
+        stroke,
+    );
+    painter.line_segment(
+        [
+            egui::pos2(right_x - marker_cap, bottom_y),
+            egui::pos2(right_x, bottom_y),
+        ],
+        stroke,
+    );
+
+    if region.kind == SampleLoopKind::PingPong {
+        let center_y = waveform_rect.center().y;
+        painter.line_segment(
+            [
+                egui::pos2(left_x + marker_cap, top_y),
+                egui::pos2(left_x, center_y),
+            ],
+            stroke,
+        );
+        painter.line_segment(
+            [
+                egui::pos2(left_x, center_y),
+                egui::pos2(left_x + marker_cap, bottom_y),
+            ],
+            stroke,
+        );
+        painter.line_segment(
+            [
+                egui::pos2(right_x - marker_cap, top_y),
+                egui::pos2(right_x, center_y),
+            ],
+            stroke,
+        );
+        painter.line_segment(
+            [
+                egui::pos2(right_x, center_y),
+                egui::pos2(right_x - marker_cap, bottom_y),
+            ],
+            stroke,
+        );
+    }
+}
+
+fn waveform_loop_region(
     rect: Rect,
     sample_length: u32,
     loop_kind: SampleLoopKind,
     loop_start: u32,
     loop_length: u32,
-) -> Option<Rect> {
+) -> Option<WaveformLoopRegion> {
     if loop_kind == SampleLoopKind::None || sample_length == 0 || loop_length == 0 {
         return None;
     }
@@ -1023,24 +1142,80 @@ fn waveform_loop_rect(
         return None;
     }
 
-    let start_ratio = loop_start as f32 / sample_length as f32;
-    let end_ratio = loop_end as f32 / sample_length as f32;
-    let start_x = rect.min.x + start_ratio * rect.width();
-    let end_x = rect.min.x + end_ratio * rect.width();
+    let start_x = waveform_sample_x(rect, sample_length, loop_start);
+    let end_x = waveform_sample_x(rect, sample_length, loop_end);
 
-    Some(Rect::from_min_max(
-        egui::pos2(start_x, rect.min.y),
-        egui::pos2(end_x, rect.max.y),
-    ))
+    Some(WaveformLoopRegion {
+        rect: Rect::from_min_max(
+            egui::pos2(start_x, rect.min.y),
+            egui::pos2(end_x, rect.max.y),
+        ),
+        kind: loop_kind,
+    })
+}
+
+fn waveform_loop_rect(
+    rect: Rect,
+    sample_length: u32,
+    loop_kind: SampleLoopKind,
+    loop_start: u32,
+    loop_length: u32,
+) -> Option<Rect> {
+    waveform_loop_region(rect, sample_length, loop_kind, loop_start, loop_length)
+        .map(|region| region.rect)
+}
+
+fn waveform_sample_x(rect: Rect, sample_length: u32, sample_index: u32) -> f32 {
+    if sample_length == 0 {
+        return rect.min.x;
+    }
+
+    let ratio = sample_index.min(sample_length) as f32 / sample_length as f32;
+    rect.min.x + ratio.clamp(0.0, 1.0) * rect.width()
 }
 
 fn waveform_sample_index(x: usize, pixel_width: usize, sample_len: usize) -> usize {
-    if pixel_width <= 1 || sample_len <= 1 {
-        return 0;
+    waveform_sample_range(x, pixel_width, sample_len)
+        .map(|range| range.start + (range.end - range.start) / 2)
+        .unwrap_or(0)
+}
+
+fn waveform_sample_range(x: usize, pixel_width: usize, sample_len: usize) -> Option<Range<usize>> {
+    if pixel_width == 0 || sample_len == 0 || x >= pixel_width {
+        return None;
     }
 
-    let x_ratio = x as f32 / (pixel_width - 1) as f32;
-    (x_ratio * (sample_len - 1) as f32).round() as usize
+    let start = proportional_sample_index(x, pixel_width, sample_len);
+    let mut end = proportional_sample_index(x + 1, pixel_width, sample_len).min(sample_len);
+    if end <= start {
+        end = (start + 1).min(sample_len);
+    }
+
+    Some(start..end)
+}
+
+fn proportional_sample_index(numerator: usize, denominator: usize, sample_len: usize) -> usize {
+    ((numerator as u128 * sample_len as u128) / denominator as u128) as usize
+}
+
+fn waveform_sample_peak(data: &SampleData, sample_range: Range<usize>) -> WaveformSamplePeak {
+    let mut peak: Option<WaveformSamplePeak> = None;
+
+    for index in sample_range {
+        let value = waveform_sample_value(data, index);
+        peak = Some(match peak {
+            Some(current) => WaveformSamplePeak {
+                min: f32::min(current.min, value),
+                max: f32::max(current.max, value),
+            },
+            None => WaveformSamplePeak {
+                min: value,
+                max: value,
+            },
+        });
+    }
+
+    peak.unwrap_or(WaveformSamplePeak { min: 0.0, max: 0.0 })
 }
 
 fn waveform_sample_value(data: &SampleData, index: usize) -> f32 {
@@ -1228,6 +1403,30 @@ mod tests {
         assert!(waveform_loop_rect(rect, 100, SampleLoopKind::None, 10, 20).is_none());
         assert!(waveform_loop_rect(rect, 100, SampleLoopKind::Forward, 10, 0).is_none());
         assert!(waveform_loop_rect(rect, 0, SampleLoopKind::Forward, 10, 20).is_none());
+        assert!(waveform_loop_rect(rect, 100, SampleLoopKind::Forward, 100, 20).is_none());
+        assert!(waveform_loop_rect(rect, 100, SampleLoopKind::Forward, 120, 20).is_none());
+    }
+
+    #[test]
+    fn waveform_loop_region_keeps_forward_and_ping_pong_kinds() {
+        let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(100.0, 20.0));
+
+        let forward = waveform_loop_region(rect, 100, SampleLoopKind::Forward, 10, 20).unwrap();
+        let ping_pong = waveform_loop_region(rect, 100, SampleLoopKind::PingPong, 10, 20).unwrap();
+
+        assert_eq!(forward.kind, SampleLoopKind::Forward);
+        assert!((forward.rect.min.x - 10.0).abs() < 0.0001);
+        assert!((forward.rect.max.x - 30.0).abs() < 0.0001);
+        assert_eq!(ping_pong.kind, SampleLoopKind::PingPong);
+        assert!((ping_pong.rect.min.x - forward.rect.min.x).abs() < 0.0001);
+        assert!((ping_pong.rect.max.x - forward.rect.max.x).abs() < 0.0001);
+    }
+
+    #[test]
+    fn waveform_sample_range_spreads_pixels_across_sample_range() {
+        assert_eq!(waveform_sample_range(0, 5, 9), Some(0..1));
+        assert_eq!(waveform_sample_range(2, 5, 9), Some(3..5));
+        assert_eq!(waveform_sample_range(4, 5, 9), Some(7..9));
     }
 
     #[test]
@@ -1238,6 +1437,49 @@ mod tests {
     }
 
     #[test]
+    fn waveform_sample_mapping_handles_empty_and_short_samples() {
+        assert_eq!(waveform_sample_range(0, 0, 8), None);
+        assert_eq!(waveform_sample_range(0, 8, 0), None);
+        assert_eq!(waveform_sample_range(8, 8, 8), None);
+        assert_eq!(waveform_sample_range(0, 8, 1), Some(0..1));
+        assert_eq!(waveform_sample_range(7, 8, 1), Some(0..1));
+        assert_eq!(waveform_sample_index(0, 1, 9), 4);
+        assert_eq!(waveform_sample_index(0, 1, 1), 0);
+    }
+
+    #[test]
+    fn waveform_sample_peak_captures_min_and_max_across_range() {
+        let peak = waveform_sample_peak(&SampleData::pcm8(vec![-128, 0, 127, 64]), 0..4);
+
+        assert_eq!(
+            peak,
+            WaveformSamplePeak {
+                min: -1.0,
+                max: 127.0 / 128.0
+            }
+        );
+    }
+
+    #[test]
+    fn waveform_sample_peak_handles_empty_and_short_ranges() {
+        assert_eq!(
+            waveform_sample_peak(&SampleData::Empty, 0..4),
+            WaveformSamplePeak { min: 0.0, max: 0.0 }
+        );
+        assert_eq!(
+            waveform_sample_peak(&SampleData::pcm16(vec![-16384]), 0..1),
+            WaveformSamplePeak {
+                min: -0.5,
+                max: -0.5
+            }
+        );
+        assert_eq!(
+            waveform_sample_peak(&SampleData::pcm8(vec![64]), 1..1),
+            WaveformSamplePeak { min: 0.0, max: 0.0 }
+        );
+    }
+
+    #[test]
     fn waveform_sample_value_normalizes_pcm_data() {
         assert_eq!(waveform_sample_value(&SampleData::pcm8(vec![64]), 0), 0.5);
         assert_eq!(
@@ -1245,5 +1487,6 @@ mod tests {
             -0.5
         );
         assert_eq!(waveform_sample_value(&SampleData::Empty, 0), 0.0);
+        assert_eq!(waveform_sample_value(&SampleData::pcm8(vec![64]), 1), 0.0);
     }
 }
