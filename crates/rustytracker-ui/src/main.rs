@@ -1,8 +1,9 @@
 mod app;
-mod audio;
 mod effect_entry;
 mod input;
+mod io;
 mod panels;
+mod playback;
 mod tracker_ui;
 
 use app::RustyTrackerApp;

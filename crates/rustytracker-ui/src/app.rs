@@ -3,11 +3,11 @@ use rustytracker_core::{
     Envelope, Instrument, InstrumentName, Module, Sample, SampleLoopKind, SampleName,
 };
 use rustytracker_edit::ModuleEditor;
-use rustytracker_play::{PlaybackMixerMode, PlaybackSettings, PlaybackState};
-use rustytracker_xm::{XM_HEADER_SIGNATURE, XM_HEADER_SIGNATURE_LENGTH};
+use rustytracker_play::PlaybackMixerMode;
 use std::path::Path;
 
-use crate::audio::AudioPlaybackEngine;
+use crate::io;
+use crate::playback::AudioPlaybackEngine;
 use crate::tracker_ui;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -162,75 +162,31 @@ impl RustyTrackerApp {
     }
 
     pub(crate) fn load_module_file(&mut self, path: &Path) {
-        if let Ok(bytes) = std::fs::read(path) {
-            let parsed = if bytes.len() >= XM_HEADER_SIGNATURE_LENGTH
-                && &bytes[..XM_HEADER_SIGNATURE_LENGTH] == XM_HEADER_SIGNATURE
-            {
-                rustytracker_xm::parse_xm_module(&bytes).map_err(|e| format!("{e:?}"))
-            } else {
-                rustytracker_mod::parse_mod_module(&bytes).map_err(|e| format!("{e:?}"))
-            };
-
-            match parsed {
-                Ok(module) => {
-                    self.editor = ModuleEditor::new(module);
-                    self.active_row = 0;
-                    self.active_order_index = 0;
-                    self.active_channel = 0;
-                    self.audio_engine
-                        .update_module(self.editor.module().clone());
-                    self.audio_engine.stop();
-                }
-                Err(err) => {
-                    eprintln!("Failed to parse module: {err}");
-                }
+        match io::load_module_file(path) {
+            Ok(module) => {
+                self.editor = ModuleEditor::new(module);
+                self.active_row = 0;
+                self.active_order_index = 0;
+                self.active_channel = 0;
+                self.audio_engine
+                    .update_module(self.editor.module().clone());
+                self.audio_engine.stop();
+            }
+            Err(err) => {
+                eprintln!("Failed to parse module: {err}");
             }
         }
     }
 
     pub(crate) fn export_to_wav_file(&self, path: &Path) {
-        let module = self.editor.module();
-        if let Ok(mut playback) = PlaybackState::start_with_settings(
-            module,
-            PlaybackSettings::with_mixer_mode(self.mixer_mode),
-        ) {
-            if let Ok(wav_bytes) = playback.render_to_wav(module, 44100) {
-                if let Err(e) = std::fs::write(path, wav_bytes) {
-                    eprintln!("Failed to write WAV file: {e:?}");
-                }
-            } else {
-                eprintln!("Failed to render WAV bytes");
-            }
-        } else {
-            eprintln!("Failed to start playback for WAV rendering");
+        if let Err(err) = io::export_to_wav_file(self.editor.module(), self.mixer_mode, path) {
+            eprintln!("{err}");
         }
     }
 
     pub(crate) fn save_module_file(&self, path: &Path) {
-        let module = self.editor.module();
-        let extension = path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .unwrap_or("")
-            .to_lowercase();
-
-        let result = if extension == "xm" {
-            rustytracker_xm::write_xm_module(module).map_err(|e| format!("{e:?}"))
-        } else if extension == "mod" {
-            rustytracker_mod::write_mod_module(module).map_err(|e| format!("{e:?}"))
-        } else {
-            Err("Unsupported file format. Please use .xm or .mod extension.".to_string())
-        };
-
-        match result {
-            Ok(bytes) => {
-                if let Err(e) = std::fs::write(path, bytes) {
-                    eprintln!("Failed to write module file: {e:?}");
-                }
-            }
-            Err(err) => {
-                eprintln!("Failed to export module: {err}");
-            }
+        if let Err(err) = io::save_module_file(self.editor.module(), path) {
+            eprintln!("Failed to export module: {err}");
         }
     }
 }
