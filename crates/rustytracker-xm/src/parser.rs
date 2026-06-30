@@ -255,6 +255,7 @@ pub fn parse_xm_module(bytes: &[u8]) -> XmResult<Module> {
             tick_speed: header.default_tick_speed,
             main_volume: rustytracker_core::DEFAULT_MAIN_VOLUME,
             restart_position: header.restart_position,
+            is_mod: false,
         },
         orders: header.orders,
         patterns,

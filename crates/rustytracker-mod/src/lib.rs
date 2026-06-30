@@ -302,6 +302,7 @@ pub fn parse_mod_module(bytes: &[u8]) -> Result<Module, ModParseError> {
             tick_speed: DEFAULT_TICK_SPEED,
             main_volume: DEFAULT_MAIN_VOLUME,
             restart_position: restart_position as u16,
+            is_mod: true,
         },
         orders,
         patterns,

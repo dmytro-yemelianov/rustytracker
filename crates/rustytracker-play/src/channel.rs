@@ -268,7 +268,43 @@ impl PlaybackChannelState {
             .any(|eff| eff.effect == EFFECT_TONE_PORTAMENTO);
 
         match cell.note {
-            Note::Empty => Ok(()),
+            Note::Empty => {
+                if module.header.is_mod && cell.instrument != DEFAULT_INSTRUMENT_NUMBER && self.active {
+                    if let Note::Key(prev_note) = self.note {
+                        if let Some(instrument_index) = self.instrument_index {
+                            if let Some(note_index) = note_sample_map_index(prev_note) {
+                                if let Some(sample_index) = module.instruments[instrument_index]
+                                    .note_sample_map
+                                    .get(note_index)
+                                    .and_then(|sample_index| *sample_index)
+                                {
+                                    if let Some(sample) = module.samples.get(sample_index) {
+                                        self.sample_index = Some(sample_index);
+                                        self.volume = sample.volume;
+                                        self.panning = panning_for_triggered_sample(
+                                            module.header.frequency_table,
+                                            self.channel,
+                                            sample,
+                                        );
+                                        let period = sample_period_for_note(
+                                            prev_note,
+                                            sample,
+                                            module.header.frequency_table,
+                                        );
+                                        self.base_period = period;
+                                        self.period = period;
+                                    } else {
+                                        self.stop_sample();
+                                    }
+                                } else {
+                                    self.stop_sample();
+                                }
+                            }
+                        }
+                    }
+                }
+                Ok(())
+            },
             Note::Off => {
                 if !tone_porta {
                     let volume_envelope_enabled = if let Some(ins_idx) = self.instrument_index {

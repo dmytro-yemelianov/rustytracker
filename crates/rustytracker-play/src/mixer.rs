@@ -302,6 +302,7 @@ impl Mixer {
                 }
                 SequencerCommand::Update {
                     channel,
+                    sample_index,
                     volume,
                     panning,
                     period,
@@ -311,6 +312,7 @@ impl Mixer {
                     keyon,
                 } => {
                     let voice = &mut self.voices[channel as usize];
+                    voice.sample_index = sample_index;
                     voice.volume = volume;
                     voice.panning = panning;
                     voice.period = period;

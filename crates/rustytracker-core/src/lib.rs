@@ -531,6 +531,7 @@ pub struct ModuleHeader {
     pub tick_speed: u16,
     pub main_volume: u16,
     pub restart_position: u16,
+    pub is_mod: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -562,6 +563,7 @@ impl Module {
                 tick_speed: DEFAULT_TICK_SPEED,
                 main_volume: DEFAULT_MAIN_VOLUME,
                 restart_position: EMPTY_PATTERN_NUMBER as u16,
+                is_mod: false,
             },
             orders: vec![EMPTY_PATTERN_NUMBER],
             patterns: vec![Pattern::empty_editor_pattern()],
