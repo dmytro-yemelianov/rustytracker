@@ -1,0 +1,38 @@
+{
+  "milky.xm": {
+    "amiga": "371c292da971931f",
+    "hifi": "055b1a59e278f65a",
+    "protracker": "371c292da971931f",
+    "rustysynth": "f5681df93fbc0485"
+  },
+  "slumberjack.xm": {
+    "amiga": "a94c3b4d573d1f36",
+    "hifi": "b027167eeb96f96e",
+    "protracker": "a94c3b4d573d1f36",
+    "rustysynth": "3b841c453d41d842"
+  },
+  "sv_ttt.xm": {
+    "amiga": "d7303d0ae39ab245",
+    "hifi": "b8ac1da8b20df956",
+    "protracker": "d7303d0ae39ab245",
+    "rustysynth": "83c5f9db8c9abb4f"
+  },
+  "synthetic_mod": {
+    "amiga": "65c631dbde998c5c",
+    "hifi": "747d6598ae73e1b4",
+    "protracker": "65c631dbde998c5c",
+    "rustysynth": "abf85b6200d67dc8"
+  },
+  "theday.xm": {
+    "amiga": "b404d1dfaa067c2b",
+    "hifi": "d184e8a68752e28d",
+    "protracker": "b404d1dfaa067c2b",
+    "rustysynth": "c2a1a81b7084c128"
+  },
+  "universalnetwork2_real.xm": {
+    "amiga": "d8704ee5cd7f6a6a",
+    "hifi": "a9abed1b8a2c3617",
+    "protracker": "d8704ee5cd7f6a6a",
+    "rustysynth": "02066a794422dff2"
+  }
+}

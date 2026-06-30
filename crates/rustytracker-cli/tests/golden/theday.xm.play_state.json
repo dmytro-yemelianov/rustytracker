@@ -1,0 +1,3726 @@
+{
+  "schema_version": 1,
+  "format": "play_state",
+  "requested_rows": 16,
+  "completed": false,
+  "timing": {
+    "bpm": 160,
+    "ticks_per_row": 8,
+    "tick_duration_nanos": 15625000,
+    "row_duration_nanos": 125000000
+  },
+  "rows": [
+    {
+      "order_index": 0,
+      "pattern_index": 0,
+      "row": 0,
+      "tick": 0,
+      "channels": [
+        {
+          "channel": 0,
+          "note": 63,
+          "instrument": 1,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 12,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 15,
+              "operand": 8
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 1,
+          "note": 63,
+          "instrument": 1,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 12,
+              "operand": 64
+            },
+            {
+              "slot": 1,
+              "effect": 4,
+              "operand": 81
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 2,
+          "note": 67,
+          "instrument": 5,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 12,
+              "operand": 64
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 17
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 3,
+          "note": 27,
+          "instrument": 5,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 15,
+              "operand": 160
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 27,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 255,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 4,
+          "note": 63,
+          "instrument": 5,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 12,
+              "operand": 128
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 1
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 128,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 5,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": false,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": false,
+            "note": 0,
+            "instrument": 0,
+            "instrument_index": null,
+            "sample_index": null,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 6,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": false,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": false,
+            "note": 0,
+            "instrument": 0,
+            "instrument_index": null,
+            "sample_index": null,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 7,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": false,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": false,
+            "note": 0,
+            "instrument": 0,
+            "instrument_index": null,
+            "sample_index": null,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 128
+          }
+        }
+      ]
+    },
+    {
+      "order_index": 0,
+      "pattern_index": 0,
+      "row": 1,
+      "tick": 0,
+      "channels": [
+        {
+          "channel": 0,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 12,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 1,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 4,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 2,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 3,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": false,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 27,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 255,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 4,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 25,
+              "operand": 1
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 100,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 5,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": false,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": false,
+            "note": 0,
+            "instrument": 0,
+            "instrument_index": null,
+            "sample_index": null,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 6,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": false,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": false,
+            "note": 0,
+            "instrument": 0,
+            "instrument_index": null,
+            "sample_index": null,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 7,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": false,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": false,
+            "note": 0,
+            "instrument": 0,
+            "instrument_index": null,
+            "sample_index": null,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 128
+          }
+        }
+      ]
+    },
+    {
+      "order_index": 0,
+      "pattern_index": 0,
+      "row": 2,
+      "tick": 0,
+      "channels": [
+        {
+          "channel": 0,
+          "note": 75,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 12,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 15,
+              "operand": 5
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 75,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 1,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 4,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 2,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 3,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": false,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 27,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 255,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 4,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 25,
+              "operand": 1
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 72,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 5,
+          "note": 75,
+          "instrument": 5,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 12,
+              "operand": 128
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 1
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 75,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 128,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 6,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": false,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": false,
+            "note": 0,
+            "instrument": 0,
+            "instrument_index": null,
+            "sample_index": null,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 7,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": false,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": false,
+            "note": 0,
+            "instrument": 0,
+            "instrument_index": null,
+            "sample_index": null,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 128
+          }
+        }
+      ]
+    },
+    {
+      "order_index": 0,
+      "pattern_index": 0,
+      "row": 3,
+      "tick": 0,
+      "channels": [
+        {
+          "channel": 0,
+          "note": 63,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 12,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 1,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 4,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 2,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 3,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": false,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 27,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 255,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 4,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 25,
+              "operand": 1
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 56,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 5,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 75,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 112,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 6,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": false,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": false,
+            "note": 0,
+            "instrument": 0,
+            "instrument_index": null,
+            "sample_index": null,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 7,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": false,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": false,
+            "note": 0,
+            "instrument": 0,
+            "instrument_index": null,
+            "sample_index": null,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 128
+          }
+        }
+      ]
+    },
+    {
+      "order_index": 0,
+      "pattern_index": 0,
+      "row": 4,
+      "tick": 0,
+      "channels": [
+        {
+          "channel": 0,
+          "note": 67,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 12,
+              "operand": 4
+            },
+            {
+              "slot": 1,
+              "effect": 15,
+              "operand": 8
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 4,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 1,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 4,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 17
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 2,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 3,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 1
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 27,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 255,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 4,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 25,
+              "operand": 1
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 40,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 5,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 75,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 96,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 6,
+          "note": 67,
+          "instrument": 5,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 12,
+              "operand": 128
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 1
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 128,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 7,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": false,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": false,
+            "note": 0,
+            "instrument": 0,
+            "instrument_index": null,
+            "sample_index": null,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 128
+          }
+        }
+      ]
+    },
+    {
+      "order_index": 0,
+      "pattern_index": 0,
+      "row": 5,
+      "tick": 0,
+      "channels": [
+        {
+          "channel": 0,
+          "note": 75,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 12,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 75,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 1,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 4,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 2,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 3,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 27,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 227,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 4,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 25,
+              "operand": 1
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 12,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 5,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 75,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 68,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 6,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 25,
+              "operand": 16
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 100,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 7,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": false,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": false,
+            "note": 0,
+            "instrument": 0,
+            "instrument_index": null,
+            "sample_index": null,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 128
+          }
+        }
+      ]
+    },
+    {
+      "order_index": 0,
+      "pattern_index": 0,
+      "row": 6,
+      "tick": 0,
+      "channels": [
+        {
+          "channel": 0,
+          "note": 63,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 12,
+              "operand": 4
+            },
+            {
+              "slot": 1,
+              "effect": 15,
+              "operand": 5
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 4,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 1,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 4,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 2,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 3,
+          "note": 0,
+          "instrument": 5,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 27,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 199,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 4,
+          "note": 63,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 12,
+              "operand": 128
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 128,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 5,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 75,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 40,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 6,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 25,
+              "operand": 16
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 72,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 7,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": false,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": false,
+            "note": 0,
+            "instrument": 0,
+            "instrument_index": null,
+            "sample_index": null,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 128
+          }
+        }
+      ]
+    },
+    {
+      "order_index": 0,
+      "pattern_index": 0,
+      "row": 7,
+      "tick": 0,
+      "channels": [
+        {
+          "channel": 0,
+          "note": 67,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 12,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 1,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 4,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 2,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 3,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 27,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 183,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 4,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 25,
+              "operand": 1
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 112,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 5,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 75,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 24,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 6,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 25,
+              "operand": 16
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 56,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 7,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": false,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": false,
+            "note": 0,
+            "instrument": 0,
+            "instrument_index": null,
+            "sample_index": null,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 128
+          }
+        }
+      ]
+    },
+    {
+      "order_index": 0,
+      "pattern_index": 0,
+      "row": 8,
+      "tick": 0,
+      "channels": [
+        {
+          "channel": 0,
+          "note": 75,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 12,
+              "operand": 8
+            },
+            {
+              "slot": 1,
+              "effect": 15,
+              "operand": 8
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 75,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 8,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 1,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 4,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 2,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 3,
+          "note": 0,
+          "instrument": 5,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 27,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 167,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 4,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 25,
+              "operand": 1
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 96,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 5,
+          "note": 75,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 12,
+              "operand": 128
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 75,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 128,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 6,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 25,
+              "operand": 16
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 40,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 7,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": false,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": false,
+            "note": 0,
+            "instrument": 0,
+            "instrument_index": null,
+            "sample_index": null,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 128
+          }
+        }
+      ]
+    },
+    {
+      "order_index": 0,
+      "pattern_index": 0,
+      "row": 9,
+      "tick": 0,
+      "channels": [
+        {
+          "channel": 0,
+          "note": 63,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 12,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 1,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 4,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 2,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 3,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 27,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 139,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 4,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 25,
+              "operand": 1
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 68,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 5,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 75,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 100,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 6,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 25,
+              "operand": 16
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 12,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 7,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": false,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": false,
+            "note": 0,
+            "instrument": 0,
+            "instrument_index": null,
+            "sample_index": null,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 128
+          }
+        }
+      ]
+    },
+    {
+      "order_index": 0,
+      "pattern_index": 0,
+      "row": 10,
+      "tick": 0,
+      "channels": [
+        {
+          "channel": 0,
+          "note": 67,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 12,
+              "operand": 8
+            },
+            {
+              "slot": 1,
+              "effect": 15,
+              "operand": 5
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 8,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 1,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 4,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 2,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 3,
+          "note": 0,
+          "instrument": 5,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 27,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 111,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 4,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 25,
+              "operand": 1
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 40,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 5,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 75,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 72,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 6,
+          "note": 67,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 12,
+              "operand": 128
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 128,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 7,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": false,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": false,
+            "note": 0,
+            "instrument": 0,
+            "instrument_index": null,
+            "sample_index": null,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 128
+          }
+        }
+      ]
+    },
+    {
+      "order_index": 0,
+      "pattern_index": 0,
+      "row": 11,
+      "tick": 0,
+      "channels": [
+        {
+          "channel": 0,
+          "note": 75,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 12,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 75,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 1,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 4,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 2,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 3,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": false,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 27,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 111,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 4,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 25,
+              "operand": 1
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 24,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 5,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 75,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 56,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 6,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 25,
+              "operand": 16
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 112,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 7,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": false,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": false,
+            "note": 0,
+            "instrument": 0,
+            "instrument_index": null,
+            "sample_index": null,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 128
+          }
+        }
+      ]
+    },
+    {
+      "order_index": 0,
+      "pattern_index": 0,
+      "row": 12,
+      "tick": 0,
+      "channels": [
+        {
+          "channel": 0,
+          "note": 63,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 12,
+              "operand": 12
+            },
+            {
+              "slot": 1,
+              "effect": 15,
+              "operand": 8
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 12,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 1,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 4,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 2,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 3,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 27,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 111,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 4,
+          "note": 63,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 12,
+              "operand": 128
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 128,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 5,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 75,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 40,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 6,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 25,
+              "operand": 16
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 96,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 7,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": false,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": false,
+            "note": 0,
+            "instrument": 0,
+            "instrument_index": null,
+            "sample_index": null,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 128
+          }
+        }
+      ]
+    },
+    {
+      "order_index": 0,
+      "pattern_index": 0,
+      "row": 13,
+      "tick": 0,
+      "channels": [
+        {
+          "channel": 0,
+          "note": 67,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 12,
+              "operand": 4
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 4,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 1,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 4,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 2,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 3,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 27,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 83,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 4,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 25,
+              "operand": 1
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 100,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 5,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 75,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 12,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 6,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 25,
+              "operand": 16
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 68,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 7,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": false,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": false,
+            "note": 0,
+            "instrument": 0,
+            "instrument_index": null,
+            "sample_index": null,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 128
+          }
+        }
+      ]
+    },
+    {
+      "order_index": 0,
+      "pattern_index": 0,
+      "row": 14,
+      "tick": 0,
+      "channels": [
+        {
+          "channel": 0,
+          "note": 70,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 12,
+              "operand": 12
+            },
+            {
+              "slot": 1,
+              "effect": 15,
+              "operand": 5
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 70,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 12,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 1,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 4,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 2,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 3,
+          "note": 0,
+          "instrument": 5,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 27,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 55,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 4,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 25,
+              "operand": 1
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 72,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 5,
+          "note": 70,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 12,
+              "operand": 128
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 70,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 128,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 6,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 25,
+              "operand": 16
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 40,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 7,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": false,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": false,
+            "note": 0,
+            "instrument": 0,
+            "instrument_index": null,
+            "sample_index": null,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 128
+          }
+        }
+      ]
+    },
+    {
+      "order_index": 0,
+      "pattern_index": 0,
+      "row": 15,
+      "tick": 0,
+      "channels": [
+        {
+          "channel": 0,
+          "note": 63,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 12,
+              "operand": 4
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 4,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 1,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 4,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 1,
+            "instrument_index": 0,
+            "sample_index": 0,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 100
+          }
+        },
+        {
+          "channel": 2,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 7,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 64,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 3,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 27,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 39,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 4,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 25,
+              "operand": 1
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 63,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 56,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 5,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 70,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 112,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 6,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": true,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 25,
+              "operand": 16
+            },
+            {
+              "slot": 1,
+              "effect": 10,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": true,
+            "note": 67,
+            "instrument": 5,
+            "instrument_index": 4,
+            "sample_index": 64,
+            "sample_frame": 0,
+            "volume": 24,
+            "panning": 128
+          }
+        },
+        {
+          "channel": 7,
+          "note": 0,
+          "instrument": 0,
+          "non_empty": false,
+          "effects": [
+            {
+              "slot": 0,
+              "effect": 0,
+              "operand": 0
+            },
+            {
+              "slot": 1,
+              "effect": 0,
+              "operand": 0
+            }
+          ],
+          "state": {
+            "active": false,
+            "note": 0,
+            "instrument": 0,
+            "instrument_index": null,
+            "sample_index": null,
+            "sample_frame": 0,
+            "volume": 0,
+            "panning": 128
+          }
+        }
+      ]
+    }
+  ]
+}
