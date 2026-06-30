@@ -14,6 +14,7 @@ pub enum DumpError {
     InvalidSampleRate(String),
     InvalidMixerMode(String),
     UnsupportedFormat(String),
+    ValidationError(String),
 }
 
 impl fmt::Display for DumpError {
@@ -36,6 +37,9 @@ impl fmt::Display for DumpError {
             }
             Self::UnsupportedFormat(format) => {
                 write!(formatter, "unsupported dump format: {format}")
+            }
+            Self::ValidationError(error) => {
+                write!(formatter, "validation error: {error}")
             }
         }
     }

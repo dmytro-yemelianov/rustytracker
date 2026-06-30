@@ -350,6 +350,10 @@ pub fn export_wav_file_with_mixer(
     sample_rate: u32,
     mixer_mode: PlaybackMixerMode,
 ) -> Result<(), DumpError> {
+    let path_val = rustytracker_core::validation::validate_export_path(output_path, "wav");
+    if !path_val.is_valid() {
+        return Err(DumpError::ValidationError(path_val.errors.join("; ")));
+    }
     let (module, _format) = load_module_from_file(input_path)?;
     let mut playback =
         PlaybackState::start_with_settings(&module, PlaybackSettings::with_mixer_mode(mixer_mode))?;
@@ -694,5 +698,40 @@ fn sample_loop_kind_name(loop_kind: SampleLoopKind) -> &'static str {
         SampleLoopKind::None => SAMPLE_LOOP_NONE,
         SampleLoopKind::Forward => SAMPLE_LOOP_FORWARD,
         SampleLoopKind::PingPong => SAMPLE_LOOP_PING_PONG,
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn test_export_wav_path_rejections() {
+        let input_path = Path::new("test_resources/test.xm");
+        let output_mismatched = Path::new("output.xm");
+        let result = export_wav_file_with_mixer(
+            input_path,
+            output_mismatched,
+            44100,
+            PlaybackMixerMode::default(),
+        );
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(err_msg.contains("validation error"));
+        assert!(err_msg.contains("mismatched extension"));
+
+        let output_no_ext = Path::new("output");
+        let result = export_wav_file_with_mixer(
+            input_path,
+            output_no_ext,
+            44100,
+            PlaybackMixerMode::default(),
+        );
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(err_msg.contains("validation error"));
+        assert!(err_msg.contains("missing a file extension"));
     }
 }

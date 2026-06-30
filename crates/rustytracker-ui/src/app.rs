@@ -189,6 +189,11 @@ impl RustyTrackerApp {
     }
 
     pub(crate) fn export_to_wav_file(&self, path: &Path) {
+        let path_val = rustytracker_core::validation::validate_export_path(path, "wav");
+        if !path_val.is_valid() {
+            eprintln!("Failed to export WAV: {}", path_val.errors.join("; "));
+            return;
+        }
         let module = self.editor.module();
         if let Ok(mut playback) = PlaybackState::start_with_settings(
             module,
@@ -213,6 +218,22 @@ impl RustyTrackerApp {
             .and_then(|ext| ext.to_str())
             .unwrap_or("")
             .to_lowercase();
+
+        let path_val = rustytracker_core::validation::validate_export_path(path, &extension);
+        if !path_val.is_valid() {
+            eprintln!("Failed to save module: {}", path_val.errors.join("; "));
+            return;
+        }
+
+        let module_val = rustytracker_core::validation::validate_module_for_export(module, &extension);
+        if !module_val.is_valid() {
+            eprintln!("Failed to save module: {}", module_val.errors.join("; "));
+            return;
+        }
+
+        for warning in &module_val.warnings {
+            eprintln!("WARNING: {}", warning);
+        }
 
         let result = if extension == "xm" {
             rustytracker_xm::write_xm_module(module).map_err(|e| format!("{e:?}"))
@@ -277,5 +298,27 @@ impl eframe::App for RustyTrackerApp {
         if is_playing {
             ctx.request_repaint();
         }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_app_save_and_export_validations() {
+        let ctx = egui::Context::default();
+        let app = RustyTrackerApp::new(&ctx);
+
+        let temp_dir = std::env::temp_dir();
+        let invalid_path = temp_dir.join("non_existent_dir_12345/module.invalid");
+        
+        // This should return early without creating any file
+        app.save_module_file(&invalid_path);
+        assert!(!invalid_path.exists());
+
+        app.export_to_wav_file(&invalid_path);
+        assert!(!invalid_path.exists());
     }
 }
