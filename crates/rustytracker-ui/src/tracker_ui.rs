@@ -41,9 +41,6 @@ const CONTROL_MIN_WIDTH: f32 = 48.0;
 const STATUS_HORIZONTAL_PADDING: f32 = 6.0;
 const TOOLBAR_SEPARATOR_WIDTH: f32 = 8.0;
 const TOOLBAR_SEPARATOR_INSET_Y: f32 = 3.0;
-const PANEL_HORIZONTAL_PADDING: f32 = 6.0;
-const PANEL_VERTICAL_PADDING: f32 = 5.0;
-const PANEL_CONTENT_GAP: f32 = 6.0;
 const WAVEFORM_HEIGHT: f32 = 120.0;
 const WAVEFORM_MIN_WIDTH: f32 = 240.0;
 const WAVEFORM_EDGE_PADDING: f32 = 5.0;
@@ -467,49 +464,6 @@ pub fn show_toolbar_separator(ui: &mut Ui, resources: &TrackerUiResources) {
                 egui::pos2(x, rect.max.y - TOOLBAR_SEPARATOR_INSET_Y),
             ],
             Stroke::new(CURSOR_BORDER_WIDTH, theme.border),
-        );
-    }
-}
-
-pub fn show_panel(
-    ui: &mut Ui,
-    resources: &TrackerUiResources,
-    title: &str,
-    add_contents: impl FnOnce(&mut Ui),
-) {
-    let theme = resources.theme();
-    egui::Frame::NONE
-        .fill(theme.pattern_background)
-        .stroke(Stroke::new(CURSOR_BORDER_WIDTH, theme.border))
-        .inner_margin(egui::Margin::symmetric(
-            PANEL_HORIZONTAL_PADDING as i8,
-            PANEL_VERTICAL_PADDING as i8,
-        ))
-        .show(ui, |ui| {
-            show_panel_title(ui, resources, title);
-            ui.add_space(PANEL_CONTENT_GAP);
-            add_contents(ui);
-        });
-}
-
-pub fn show_panel_title(ui: &mut Ui, resources: &TrackerUiResources, text: &str) {
-    let theme = resources.theme();
-    let metrics = resources.metrics();
-    let desired_size = egui::vec2(ui.available_width(), metrics.header_height);
-    let (rect, _response) = ui.allocate_exact_size(desired_size, Sense::hover());
-
-    if ui.is_rect_visible(rect) {
-        ui.painter().rect_filled(rect, 0.0, theme.theme_background);
-        draw_text(
-            ui.painter(),
-            egui::pos2(
-                rect.min.x + LIST_TEXT_OFFSET_X,
-                rect.min.y + LIST_TEXT_OFFSET_Y,
-            ),
-            text,
-            theme.foreground,
-            metrics,
-            resources,
         );
     }
 }
