@@ -2434,3 +2434,37 @@ fn raw_render_rejects_zero_sample_rate() {
         }
     );
 }
+
+#[test]
+fn test_effect_note_cut() {
+    let mut module =
+        module_with_orders_and_pattern_rows(vec![PLAY_TEST_PATTERN_ZERO], &[PLAY_TEST_TWO_ROWS]);
+    module.header.tick_speed = 3;
+    module.samples[0].volume = 64;
+
+    // Row 0: Note C-4 with note-cut at tick 2 (EC2 -> internal 0x3c / operand 0x02)
+    let cell_0 = PatternCell {
+        note: Note::Key(49),
+        instrument: 1,
+        effects: vec![
+            EffectCommand {
+                effect: 0x3c,
+                operand: 0x02,
+            },
+            EffectCommand::default(),
+        ],
+    };
+    module.patterns[0].set_cell(0, 0, cell_0).unwrap();
+    map_instrument_to_sample(&mut module, 0, 0);
+
+    let mut playback = PlaybackState::start(&module).unwrap();
+
+    // Tick 0: sample volume applied, not yet cut.
+    assert_eq!(playback.channels()[0].volume, 64);
+    // Tick 1: still not cut.
+    playback.advance_tick(&module).unwrap();
+    assert_eq!(playback.channels()[0].volume, 64);
+    // Tick 2: cut -> volume 0.
+    playback.advance_tick(&module).unwrap();
+    assert_eq!(playback.channels()[0].volume, 0);
+}

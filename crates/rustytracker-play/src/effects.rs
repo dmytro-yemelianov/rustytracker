@@ -11,6 +11,7 @@ pub const EFFECT_PANNING: u8 = 0x08;
 pub const EFFECT_VOLUME_SLIDE: u8 = 0x0a;
 pub const EFFECT_FINE_VOLUME_SLIDE_UP: u8 = 0x3a;
 pub const EFFECT_FINE_VOLUME_SLIDE_DOWN: u8 = 0x3b;
+pub const EFFECT_NOTE_CUT: u8 = 0x3c;
 pub const EFFECT_ARPEGGIO_ZERO: u8 = 0x00;
 pub const EFFECT_PORTAMENTO_UP: u8 = 0x01;
 pub const EFFECT_PORTAMENTO_DOWN: u8 = 0x02;
@@ -81,6 +82,9 @@ impl PlaybackChannelState {
                     self.volume = self
                         .volume
                         .saturating_sub(op.saturating_mul(EFFECT_VOLUME_SCALE));
+                }
+                EFFECT_NOTE_CUT if tick == u16::from(effect.operand) => {
+                    self.volume = 0;
                 }
                 EFFECT_VOLUME_SLIDE if tick > 0 => {
                     let mut op = effect.operand;
