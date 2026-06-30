@@ -1,4 +1,5 @@
 use crate::app::{InstrumentEditorEdits, RustyTrackerApp, ViewMode};
+use crate::io;
 use crate::tracker_ui;
 use eframe::egui;
 use egui::Ui;
@@ -102,10 +103,10 @@ impl RustyTrackerApp {
 
     pub(crate) fn render_controls_bar(&mut self, ui: &mut Ui) {
         let theme = self.tracker_resources.theme();
+        let playback_status = self.audio_engine.playback_status();
+        let is_playing = playback_status.transport.is_playing();
 
         ui.horizontal(|ui| {
-            let is_playing = self.audio_engine.is_playing();
-
             if is_playing {
                 if tracker_ui::show_toolbar_button(
                     ui,
@@ -163,6 +164,30 @@ impl RustyTrackerApp {
                     theme.pattern_effect,
                 );
             }
+
+            tracker_ui::show_toolbar_separator(ui, &self.tracker_resources);
+            tracker_ui::show_status_label(
+                ui,
+                &self.tracker_resources,
+                transport_label(playback_status.transport),
+                transport_status_color(playback_status.transport, &theme),
+            );
+            tracker_ui::show_status_label(
+                ui,
+                &self.tracker_resources,
+                &format!("POS {:02}/{:03}", playback_status.order_index, playback_status.row),
+                theme.foreground,
+            );
+            tracker_ui::show_status_label(
+                ui,
+                &self.tracker_resources,
+                &format!(
+                    "L{:03}% R{:03}%",
+                    peak_to_percent(playback_status.meters.master_left_peak),
+                    peak_to_percent(playback_status.meters.master_right_peak),
+                ),
+                theme.pattern_note,
+            );
 
             tracker_ui::show_toolbar_separator(ui, &self.tracker_resources);
 
@@ -298,6 +323,21 @@ impl RustyTrackerApp {
                 &format!("CHN {}", module.header.channel_count),
                 theme.foreground,
             );
+            match self.last_file_operation_status() {
+                Some(status) => {
+                    let (status_text, status_color) =
+                        file_operation_status_text_and_color(status, &theme);
+                    tracker_ui::show_status_label(ui, &self.tracker_resources, &status_text, status_color);
+                }
+                None => {
+                    tracker_ui::show_status_label(
+                        ui,
+                        &self.tracker_resources,
+                        "READY",
+                        theme.pattern_instrument,
+                    );
+                }
+            }
             tracker_ui::show_status_label(
                 ui,
                 &self.tracker_resources,
@@ -971,6 +1011,80 @@ fn render_envelope_preview(ui: &mut Ui, envelope: &Envelope) {
         painter.circle_filled(center, 3.0, fill);
     }
 }
+
+fn transport_label(transport: crate::playback::PlaybackTransportState) -> &'static str {
+    match transport {
+        crate::playback::PlaybackTransportState::Stopped => "STOP",
+        crate::playback::PlaybackTransportState::Playing => "PLAY",
+        crate::playback::PlaybackTransportState::Paused => "PAUSE",
+    }
+}
+
+fn transport_status_color(
+    transport: crate::playback::PlaybackTransportState,
+    theme: &tracker_ui::TrackerTheme,
+) -> egui::Color32 {
+    match transport {
+        crate::playback::PlaybackTransportState::Stopped => theme.foreground,
+        crate::playback::PlaybackTransportState::Playing => theme.pattern_note,
+        crate::playback::PlaybackTransportState::Paused => theme.pattern_instrument,
+    }
+}
+
+fn peak_to_percent(peak: f32) -> u16 {
+    (peak.clamp(0.0, 1.0) * 100.0).round() as u16
+}
+
+fn compact_path_name(path: &std::path::Path) -> String {
+    match path.file_name().and_then(|name| name.to_str()) {
+        Some(name) if !name.is_empty() => name.to_string(),
+        _ => path.to_string_lossy().into_owned(),
+    }
+}
+
+fn trim_to_chars(text: &str, max_chars: usize) -> String {
+    let trimmed: String = text.chars().take(max_chars).collect();
+    if text.chars().count() > max_chars {
+        format!("{trimmed}…")
+    } else {
+        trimmed
+    }
+}
+
+fn file_operation_status_text_and_color(
+    status: &io::FileOperationStatus,
+    theme: &tracker_ui::TrackerTheme,
+) -> (String, egui::Color32) {
+    let operation = match status.operation {
+        io::FileOperation::LoadModule => "LOAD",
+        io::FileOperation::SaveModule => "SAVE",
+        io::FileOperation::ExportWav => "WAV",
+    };
+
+    if status.is_failure() {
+        let text = format!(
+            "ERR {} {} {}",
+            operation,
+            compact_path_name(&status.path),
+            trim_to_chars(&status.message, 28),
+        );
+        return (text, theme.pattern_effect);
+    }
+
+    if status.details.is_empty() {
+        let text = format!("OK {} {}", operation, compact_path_name(&status.path));
+        (text, theme.pattern_note)
+    } else {
+        let text = format!(
+            "OK {} {} (+{}warn)",
+            operation,
+            compact_path_name(&status.path),
+            status.details.len(),
+        );
+        (text, theme.pattern_instrument)
+    }
+}
+
 
 fn normalize_envelope_for_editor(envelope: &mut Envelope, default_value: u16) {
     let point_count = active_envelope_point_count(envelope);
