@@ -2,7 +2,7 @@ use rustytracker_core::{FrequencyTable, Module};
 
 use crate::channel::{ChannelSampleFrame, PlaybackChannelState};
 use crate::error::{validate_sample_rate, PlaybackResult};
-use crate::mixer::Mixer;
+use crate::mixer::{Mixer, MixerTrackControl};
 use crate::sequencer::Sequencer;
 use crate::{PlaybackClock, PlaybackRowState, TickAdvance};
 use crate::{
@@ -78,6 +78,25 @@ impl PlaybackState {
 
     pub fn channels(&self) -> &[PlaybackChannelState] {
         &self.sequencer.channels
+    }
+
+    pub fn set_track_controls(&mut self, controls: &[MixerTrackControl]) {
+        self.mixer.set_track_controls(controls);
+    }
+
+    pub fn track_activity_mask(&self) -> u32 {
+        let mut mask = 0u32;
+
+        for channel in &self.sequencer.channels {
+            if channel.active {
+                let shift = usize::from(channel.channel);
+                if shift < u32::BITS as usize {
+                    mask |= 1u32 << shift;
+                }
+            }
+        }
+
+        mask
     }
 
     pub fn global_volume(&self) -> u8 {

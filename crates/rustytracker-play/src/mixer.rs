@@ -11,6 +11,29 @@ use crate::{
     PlaybackMixerMode, RawMonoPcmFrame, RawStereoPcmFrame, SequencerCommand, PLAYBACK_MONO_SILENCE,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MixerTrackControl {
+    pub armed: bool,
+    pub solo: bool,
+    pub muted: bool,
+    pub stopped: bool,
+    pub volume: u8,
+    pub pan: u8,
+}
+
+impl Default for MixerTrackControl {
+    fn default() -> Self {
+        Self {
+            armed: true,
+            solo: false,
+            muted: false,
+            stopped: false,
+            volume: u8::MAX,
+            pan: SAMPLE_DEFAULT_PANNING,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MixerVoice {
     pub channel: u16,
@@ -253,6 +276,7 @@ impl MixerVoice {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Mixer {
     pub voices: Vec<MixerVoice>,
+    track_controls: Vec<MixerTrackControl>,
     warmth: MasterWarmth,
 }
 
@@ -263,12 +287,82 @@ impl Mixer {
             .collect();
         Self {
             voices,
+            track_controls: vec![MixerTrackControl::default(); channel_count],
             warmth: MasterWarmth::new(),
         }
     }
 
+    pub fn set_track_controls(&mut self, controls: &[MixerTrackControl]) {
+        self.track_controls = if controls.len() >= self.voices.len() {
+            controls[..self.voices.len()].to_vec()
+        } else {
+            controls
+                .iter()
+                .copied()
+                .chain(
+                    std::iter::repeat_with(MixerTrackControl::default)
+                        .take(self.voices.len() - controls.len()),
+                )
+                .collect()
+        };
+
+        for (idx, control) in self.track_controls.iter().enumerate() {
+            if !control.armed || control.stopped {
+                self.voices[idx].stop_sample();
+            }
+        }
+    }
+
+    pub(crate) fn track_control_or_default(
+        track_controls: &[MixerTrackControl],
+        channel: u16,
+    ) -> MixerTrackControl {
+        track_controls
+            .get(channel as usize)
+            .copied()
+            .unwrap_or_default()
+    }
+
+    pub(crate) fn has_any_solo(track_controls: &[MixerTrackControl]) -> bool {
+        track_controls.iter().any(|control| control.solo)
+    }
+
+    pub(crate) fn channel_is_solo_active(
+        track_controls: &[MixerTrackControl],
+        has_any_solo: bool,
+        channel: u16,
+    ) -> bool {
+        let control = Self::track_control_or_default(track_controls, channel);
+        if !control.armed || control.stopped || control.muted {
+            return false;
+        }
+
+        if !has_any_solo {
+            return true;
+        }
+
+        control.solo
+    }
+
+    fn channel_is_muted_by_controls(
+        track_controls: &[MixerTrackControl],
+        has_any_solo: bool,
+        channel: u16,
+    ) -> bool {
+        let control = Self::track_control_or_default(track_controls, channel);
+        !control.armed
+            || control.stopped
+            || control.muted
+            || !Self::channel_is_solo_active(track_controls, has_any_solo, channel)
+    }
+
+    fn apply_sample_gain(control: MixerTrackControl, sample_volume: f64) -> f64 {
+        sample_volume * (f64::from(control.volume) / f64::from(u8::MAX))
+    }
+
     pub fn handle_commands(&mut self, commands: &[SequencerCommand]) {
         for cmd in commands {
+            let has_any_solo = Self::has_any_solo(&self.track_controls);
             match *cmd {
                 SequencerCommand::Trigger {
                     channel,
@@ -281,6 +375,14 @@ impl Mixer {
                     period,
                     offset,
                 } => {
+                    if Self::channel_is_muted_by_controls(
+                        &self.track_controls,
+                        has_any_solo,
+                        channel,
+                    ) {
+                        continue;
+                    }
+
                     let voice = &mut self.voices[channel as usize];
                     voice.active = true;
                     voice.sample_index = Some(sample_index);
@@ -311,6 +413,14 @@ impl Mixer {
                     fadeout_volume,
                     keyon,
                 } => {
+                    if Self::channel_is_muted_by_controls(
+                        &self.track_controls,
+                        has_any_solo,
+                        channel,
+                    ) {
+                        continue;
+                    }
+
                     let voice = &mut self.voices[channel as usize];
                     voice.sample_index = sample_index;
                     voice.volume = volume;
@@ -350,15 +460,23 @@ impl Mixer {
     ) -> PlaybackResult<RawStereoPcmFrame> {
         let mut mixed_l = 0.0;
         let mut mixed_r = 0.0;
+        let track_controls = self.track_controls.as_slice();
+        let has_any_solo = Self::has_any_solo(track_controls);
 
         for voice in &mut self.voices {
-            if let Some((channel_mono_pcm, pan)) =
+            if let Some((channel_mono_pcm, _pan)) =
                 voice.render_sample(module, sample_rate, mixer_mode, channels)?
             {
-                let right_gain = pan as f64 / 255.0;
+                if Self::channel_is_muted_by_controls(track_controls, has_any_solo, voice.channel) {
+                    continue;
+                }
+
+                let control = Self::track_control_or_default(track_controls, voice.channel);
+                let right_gain = (control.pan as f64 / 255.0).clamp(0.0, 1.0);
                 let left_gain = 1.0 - right_gain;
-                mixed_l += channel_mono_pcm * left_gain;
-                mixed_r += channel_mono_pcm * right_gain;
+                let volume = Self::apply_sample_gain(control, channel_mono_pcm);
+                mixed_l += volume * left_gain;
+                mixed_r += volume * right_gain;
             }
         }
 
@@ -382,12 +500,19 @@ impl Mixer {
         mixer_mode: PlaybackMixerMode,
     ) -> PlaybackResult<RawMonoPcmFrame> {
         let mut mixed = PLAYBACK_MONO_SILENCE;
+        let track_controls = self.track_controls.as_slice();
+        let has_any_solo = Self::has_any_solo(track_controls);
 
         for voice in &mut self.voices {
             if let Some((channel_mono_pcm, _)) =
                 voice.render_sample(module, sample_rate, mixer_mode, channels)?
             {
-                mixed += channel_mono_pcm as i32;
+                if Self::channel_is_muted_by_controls(track_controls, has_any_solo, voice.channel) {
+                    continue;
+                }
+
+                let control = Self::track_control_or_default(track_controls, voice.channel);
+                mixed += Self::apply_sample_gain(control, channel_mono_pcm) as i32;
             }
         }
 

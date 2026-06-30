@@ -7,7 +7,7 @@ use rustytracker_core::{
     Envelope, EnvelopePoint, InstrumentName, Note, NoteName, Sample, SampleData, SampleLoopKind,
     SampleName,
 };
-use rustytracker_play::{PlaybackMixerMode, PlaybackSettings, PlaybackState};
+use rustytracker_play::{MixerTrackControl, PlaybackMixerMode, PlaybackSettings, PlaybackState};
 
 const SAMPLE_VOLUME_MAX: u8 = 64;
 const SAMPLE_VOLUME_CORE_MAX: u16 = 255;
@@ -129,6 +129,7 @@ impl RustyTrackerApp {
             .clicked()
             {
                 let cloned_module = self.editor.module().clone();
+                self.sync_track_controls_to_audio();
                 self.audio_engine.play();
                 self.audio_engine.update_module(cloned_module.clone());
                 if !is_playing {
@@ -175,8 +176,23 @@ impl RustyTrackerApp {
             tracker_ui::show_status_label(
                 ui,
                 &self.tracker_resources,
-                &format!("POS {:02}/{:03}", playback_status.order_index, playback_status.row),
+                &format!(
+                    "POS {:02}/{:03}",
+                    playback_status.order_index, playback_status.row
+                ),
                 theme.foreground,
+            );
+            tracker_ui::show_status_label(
+                ui,
+                &self.tracker_resources,
+                &format!(
+                    "TRK {}",
+                    playback_status
+                        .active_track
+                        .map(|track| format!("{:02}", track + 1))
+                        .unwrap_or_else(|| "--".to_string())
+                ),
+                theme.pattern_instrument,
             );
             tracker_ui::show_status_label(
                 ui,
@@ -207,6 +223,7 @@ impl RustyTrackerApp {
             if selected_mixer_mode != self.mixer_mode {
                 self.mixer_mode = selected_mixer_mode;
                 if is_playing {
+                    self.sync_track_controls_to_audio();
                     let cloned_module = self.editor.module().clone();
                     self.audio_engine.update_module(cloned_module.clone());
                     if let Ok(pb) = PlaybackState::start_with_settings(
@@ -327,7 +344,12 @@ impl RustyTrackerApp {
                 Some(status) => {
                     let (status_text, status_color) =
                         file_operation_status_text_and_color(status, &theme);
-                    tracker_ui::show_status_label(ui, &self.tracker_resources, &status_text, status_color);
+                    tracker_ui::show_status_label(
+                        ui,
+                        &self.tracker_resources,
+                        &status_text,
+                        status_color,
+                    );
                 }
                 None => {
                     tracker_ui::show_status_label(
@@ -406,6 +428,113 @@ impl RustyTrackerApp {
                 }
             }
         });
+    }
+
+    pub(crate) fn render_track_controls(&mut self, ui: &mut Ui) {
+        let theme = self.tracker_resources.theme();
+        let playback_status = self.audio_engine.playback_status();
+        let channel_count = self.editor.module().header.channel_count as usize;
+
+        tracker_ui::show_list_heading(ui, &self.tracker_resources, "TRACKS");
+        ui.separator();
+
+        self.track_controls
+            .resize_with(channel_count, MixerTrackControl::default);
+
+        if channel_count == 0 {
+            tracker_ui::show_status_label(
+                ui,
+                &self.tracker_resources,
+                "NO CHANNELS",
+                theme.pattern_effect,
+            );
+            return;
+        }
+
+        let mut controls_changed = false;
+        for (idx, control) in self.track_controls.iter_mut().enumerate() {
+            let track_id = idx as u16;
+            let is_active = playback_status
+                .active_track
+                .map_or(false, |active| u16::from(active) == track_id);
+            let label = format!("CH{:02}", idx + 1);
+            let accent = if is_active {
+                theme.pattern_note
+            } else {
+                theme.foreground
+            };
+
+            ui.horizontal(|ui| {
+                if ui
+                    .add(egui::Button::new(label).min_size([42.0, 18.0].into()).fill(
+                        if is_active {
+                            theme.selection
+                        } else {
+                            theme.theme_background
+                        },
+                    ))
+                    .clicked()
+                {
+                    self.active_channel = track_id;
+                }
+                ui.colored_label(accent, "•");
+
+                if control.stopped {
+                    if ui
+                        .add(egui::Button::new("PLAY").min_size([40.0, 18.0].into()))
+                        .clicked()
+                    {
+                        control.stopped = false;
+                        controls_changed = true;
+                    }
+                } else if ui
+                    .add(egui::Button::new("STOP").min_size([40.0, 18.0].into()))
+                    .clicked()
+                {
+                    control.stopped = true;
+                    controls_changed = true;
+                }
+
+                if ui.checkbox(&mut control.armed, "ARM").changed() {
+                    controls_changed = true;
+                }
+                if ui.checkbox(&mut control.solo, "SOLO").changed() {
+                    controls_changed = true;
+                }
+                if ui.checkbox(&mut control.muted, "MUTE").changed() {
+                    controls_changed = true;
+                }
+
+                let mut volume = i32::from(control.volume);
+                if ui
+                    .add_sized(
+                        [84.0, 18.0],
+                        egui::Slider::new(&mut volume, 0..=i32::from(u8::MAX)).show_value(false),
+                    )
+                    .changed()
+                {
+                    control.volume = volume as u8;
+                    controls_changed = true;
+                }
+
+                let mut pan = i32::from(control.pan);
+                if ui
+                    .add_sized(
+                        [84.0, 18.0],
+                        egui::Slider::new(&mut pan, 0..=i32::from(u8::MAX)).show_value(false),
+                    )
+                    .changed()
+                {
+                    control.pan = pan as u8;
+                    controls_changed = true;
+                }
+            });
+        }
+
+        ui.separator();
+        if controls_changed {
+            self.sync_track_controls_to_audio();
+        }
     }
 
     pub(crate) fn render_instrument_list(&mut self, ui: &mut Ui) {
@@ -1084,7 +1213,6 @@ fn file_operation_status_text_and_color(
         (text, theme.pattern_instrument)
     }
 }
-
 
 fn normalize_envelope_for_editor(envelope: &mut Envelope, default_value: u16) {
     let point_count = active_envelope_point_count(envelope);

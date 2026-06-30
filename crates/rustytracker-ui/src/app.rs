@@ -3,7 +3,7 @@ use rustytracker_core::{
     Envelope, Instrument, InstrumentName, Module, Sample, SampleLoopKind, SampleName,
 };
 use rustytracker_edit::ModuleEditor;
-use rustytracker_play::PlaybackMixerMode;
+use rustytracker_play::{MixerTrackControl, PlaybackMixerMode};
 use std::path::Path;
 
 use crate::io;
@@ -117,7 +117,11 @@ pub struct RustyTrackerApp {
     pub(crate) active_order_index: usize,
     pub(crate) active_row: u16,
     pub(crate) active_channel: u16,
+    pub(crate) active_track: Option<u16>,
     pub(crate) active_field: ActiveField,
+
+    pub(crate) track_controls: Vec<MixerTrackControl>,
+    pub(crate) track_activity_mask: u32,
 
     // Input state
     pub(crate) selected_instrument: u8,
@@ -127,6 +131,10 @@ pub struct RustyTrackerApp {
 }
 
 impl RustyTrackerApp {
+    fn track_controls_for_channel_count(channel_count: usize) -> Vec<MixerTrackControl> {
+        vec![MixerTrackControl::default(); channel_count]
+    }
+
     pub fn new(ctx: &egui::Context) -> Self {
         let editor = ModuleEditor::new(Module::empty());
         let audio_engine = AudioPlaybackEngine::new();
@@ -134,7 +142,10 @@ impl RustyTrackerApp {
         let ui_settings = TrackerUiSettings {
             palette: tracker_resources.palette(),
         };
+        let track_controls =
+            Self::track_controls_for_channel_count(editor.module().header.channel_count as usize);
         audio_engine.update_module(editor.module().clone());
+        audio_engine.set_track_controls(track_controls.clone());
 
         Self {
             editor,
@@ -147,7 +158,10 @@ impl RustyTrackerApp {
             active_order_index: 0,
             active_row: 0,
             active_channel: 0,
+            active_track: None,
             active_field: ActiveField::Note,
+            track_controls,
+            track_activity_mask: 0,
             selected_instrument: 1,
             octave: 4,
             view_mode: ViewMode::PatternEditor,
@@ -164,11 +178,27 @@ impl RustyTrackerApp {
             .update_module(self.editor.module().clone());
     }
 
+    pub(crate) fn sync_track_controls_to_audio(&mut self) {
+        let channel_count = self.editor.module().header.channel_count as usize;
+        if self.track_controls.len() != channel_count {
+            self.track_controls = Self::track_controls_for_channel_count(channel_count);
+        }
+        self.audio_engine
+            .set_track_controls(self.track_controls.clone());
+    }
+
     pub(crate) fn sync_playhead_position(&mut self) {
+        let playback_status = self.audio_engine.playback_status();
+        self.track_activity_mask = playback_status.track_activity_mask;
+        self.active_track = playback_status.active_track.map(u16::from);
+
         if self.audio_engine.is_playing() {
-            let (order_index, row) = self.audio_engine.get_position();
+            let (order_index, row) = (playback_status.order_index, playback_status.row);
             self.active_order_index = order_index;
             self.active_row = row;
+            if let Some(active_track) = playback_status.active_track {
+                self.active_channel = u16::from(active_track);
+            }
         }
     }
 
@@ -176,11 +206,16 @@ impl RustyTrackerApp {
         match io::load_module_file(path) {
             Ok(module) => {
                 self.editor = ModuleEditor::new(module);
+                let channel_count = self.editor.module().header.channel_count as usize;
                 self.active_row = 0;
                 self.active_order_index = 0;
                 self.active_channel = 0;
+                self.active_track = None;
+                self.track_controls = Self::track_controls_for_channel_count(channel_count);
                 self.audio_engine
                     .update_module(self.editor.module().clone());
+                self.audio_engine
+                    .set_track_controls(self.track_controls.clone());
                 self.audio_engine.stop();
                 self.last_file_operation = Some(io::FileOperationStatus::success(
                     io::FileOperation::LoadModule,
@@ -277,6 +312,8 @@ impl eframe::App for RustyTrackerApp {
             .resizable(true)
             .default_width(220.0)
             .show(ctx, |ui| {
+                self.render_track_controls(ui);
+                ui.separator();
                 self.render_instrument_list(ui);
             });
 
@@ -300,6 +337,7 @@ impl eframe::App for RustyTrackerApp {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rustytracker_core::Module;
 
     #[test]
     fn test_app_save_and_export_validations() {
@@ -376,6 +414,31 @@ mod tests {
         assert_eq!(status.message, "Loaded module");
 
         std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn track_controls_for_channel_count_defaults_enabled_tracks() {
+        let controls = RustyTrackerApp::track_controls_for_channel_count(4);
+
+        assert_eq!(controls.len(), 4);
+        assert!(controls.iter().all(|control| control.armed));
+        assert!(controls.iter().all(|control| !control.solo));
+        assert!(controls.iter().all(|control| !control.muted));
+        assert!(controls.iter().all(|control| !control.stopped));
+        assert!(controls.iter().all(|control| control.volume == u8::MAX));
+    }
+
+    #[test]
+    fn sync_track_controls_resizes_when_channel_count_changes() {
+        let ctx = egui::Context::default();
+        let mut app = RustyTrackerApp::new(&ctx);
+        let expanded = Module::empty_with_channels(8).expect("valid channel count");
+
+        app.track_controls = vec![];
+        app.editor = ModuleEditor::new(expanded);
+        app.sync_track_controls_to_audio();
+
+        assert_eq!(app.track_controls.len(), 8);
     }
 
     fn unique_temp_path(file_name: &str) -> std::path::PathBuf {

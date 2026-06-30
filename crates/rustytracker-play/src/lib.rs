@@ -37,7 +37,7 @@ pub use error::{PlaybackError, PlaybackResult, PLAYBACK_MIN_SAMPLE_RATE};
 pub use flow::{
     EFFECT_PATTERN_BREAK, EFFECT_POSITION_JUMP, EFFECT_SET_SPEED_BPM, SPEED_BPM_THRESHOLD,
 };
-pub use mixer::{Mixer, MixerVoice};
+pub use mixer::{Mixer, MixerTrackControl, MixerVoice};
 pub use mode::{Interpolation, PlaybackMixerMode, PlaybackSettings};
 pub use preview::PreviewVoice;
 pub use sequencer::{Sequencer, SequencerCommand};

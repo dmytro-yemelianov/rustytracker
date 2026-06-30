@@ -1,9 +1,13 @@
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
+use std::sync::atomic::{
+    AtomicBool, AtomicU16, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering,
+};
 use std::sync::{Arc, Mutex};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use rustytracker_core::Module;
-use rustytracker_play::{PlaybackMixerMode, PlaybackSettings, PlaybackState, PreviewVoice};
+use rustytracker_play::{
+    MixerTrackControl, PlaybackMixerMode, PlaybackSettings, PlaybackState, PreviewVoice,
+};
 
 const PCM16_MIN: i32 = -32_768;
 const PCM16_MAX: i32 = 32_767;
@@ -19,6 +23,7 @@ pub(crate) enum AudioCommand {
     Stop,
     UpdateModule(Module),
     SetPlayback(Option<PlaybackState>),
+    SetTrackControls(Vec<MixerTrackControl>),
     PreviewNoteOn {
         instrument: u8,
         note: u8,
@@ -67,6 +72,8 @@ pub(crate) struct PlaybackStatusSnapshot {
     pub(crate) transport: PlaybackTransportState,
     pub(crate) order_index: usize,
     pub(crate) row: u16,
+    pub(crate) track_activity_mask: u32,
+    pub(crate) active_track: Option<u8>,
     pub(crate) device_error: bool,
     pub(crate) meters: PlaybackMeterSnapshot,
 }
@@ -77,6 +84,8 @@ pub(crate) struct AudioStatus {
     position: AtomicU64,
     pub(crate) order_index: AtomicUsize,
     pub(crate) row: AtomicU32,
+    track_activity_mask: AtomicU32,
+    active_track: AtomicU16,
     pub(crate) device_error: AtomicBool,
     master_left_peak: AtomicU32,
     master_right_peak: AtomicU32,
@@ -90,6 +99,8 @@ impl AudioStatus {
             position: AtomicU64::new(pack_position(0, 0)),
             order_index: AtomicUsize::new(0),
             row: AtomicU32::new(0),
+            track_activity_mask: AtomicU32::new(0),
+            active_track: AtomicU16::new(u16::MAX),
             device_error: AtomicBool::new(false),
             master_left_peak: AtomicU32::new(0),
             master_right_peak: AtomicU32::new(0),
@@ -116,12 +127,24 @@ impl AudioStatus {
             .store(encode_meter_peak(right_peak), Ordering::Relaxed);
     }
 
+    fn publish_track_state(&self, track_activity_mask: u32, active_track: Option<u16>) {
+        self.track_activity_mask
+            .store(track_activity_mask, Ordering::Relaxed);
+        self.active_track
+            .store(active_track.unwrap_or(u16::MAX), Ordering::Relaxed);
+    }
+
     pub(crate) fn snapshot(&self) -> PlaybackStatusSnapshot {
         let (order_index, row) = unpack_position(self.position.load(Ordering::Relaxed));
         PlaybackStatusSnapshot {
             transport: PlaybackTransportState::from_u8(self.transport.load(Ordering::Relaxed)),
             order_index,
             row,
+            track_activity_mask: self.track_activity_mask.load(Ordering::Relaxed),
+            active_track: match self.active_track.load(Ordering::Relaxed) {
+                value if value == u16::MAX => None,
+                value => Some(value as u8),
+            },
             device_error: self.device_error.load(Ordering::Relaxed),
             meters: PlaybackMeterSnapshot {
                 master_left_peak: decode_meter_peak(self.master_left_peak.load(Ordering::Relaxed)),
@@ -137,6 +160,7 @@ struct AudioThreadState {
     playback: Option<PlaybackState>,
     module: Option<Module>,
     transport: PlaybackTransportState,
+    track_controls: Vec<MixerTrackControl>,
     sample_rate: u32,
     preview: PreviewVoice,
 }
@@ -189,6 +213,7 @@ impl AudioPlaybackEngine {
             playback: None,
             module: None,
             transport: PlaybackTransportState::Stopped,
+            track_controls: Vec::new(),
             sample_rate,
             preview: PreviewVoice::new(),
         });
@@ -209,6 +234,7 @@ impl AudioPlaybackEngine {
                         status_err.device_error.store(true, Ordering::Relaxed);
                         status_err.publish_transport(PlaybackTransportState::Stopped);
                         status_err.publish_master_peaks(0.0, 0.0);
+                        status_err.publish_track_state(0, None);
                     },
                     None,
                 )
@@ -228,6 +254,7 @@ impl AudioPlaybackEngine {
                         status_err.device_error.store(true, Ordering::Relaxed);
                         status_err.publish_transport(PlaybackTransportState::Stopped);
                         status_err.publish_master_peaks(0.0, 0.0);
+                        status_err.publish_track_state(0, None);
                     },
                     None,
                 )
@@ -247,6 +274,7 @@ impl AudioPlaybackEngine {
                         status_err.device_error.store(true, Ordering::Relaxed);
                         status_err.publish_transport(PlaybackTransportState::Stopped);
                         status_err.publish_master_peaks(0.0, 0.0);
+                        status_err.publish_track_state(0, None);
                     },
                     None,
                 )
@@ -300,6 +328,12 @@ impl AudioPlaybackEngine {
     pub(crate) fn set_playback(&self, playback: Option<PlaybackState>) {
         if let Ok(mut prod) = self.producer.lock() {
             let _ = prod.push(AudioCommand::SetPlayback(playback));
+        }
+    }
+
+    pub(crate) fn set_track_controls(&self, controls: Vec<MixerTrackControl>) {
+        if let Ok(mut prod) = self.producer.lock() {
+            let _ = prod.push(AudioCommand::SetTrackControls(controls));
         }
     }
 
@@ -362,6 +396,15 @@ fn write_audio<T>(
             }
             AudioCommand::SetPlayback(playback) => {
                 local_state.playback = playback;
+                if let Some(pb) = &mut local_state.playback {
+                    pb.set_track_controls(&local_state.track_controls);
+                }
+            }
+            AudioCommand::SetTrackControls(controls) => {
+                local_state.track_controls = controls;
+                if let Some(pb) = &mut local_state.playback {
+                    pb.set_track_controls(&local_state.track_controls);
+                }
             }
             AudioCommand::PreviewNoteOn {
                 instrument,
@@ -392,6 +435,7 @@ fn write_audio<T>(
             write_silence(output);
             status.publish_transport(PlaybackTransportState::Stopped);
             status.publish_master_peaks(0.0, 0.0);
+            status.publish_track_state(0, None);
             return;
         }
     };
@@ -460,6 +504,13 @@ fn write_audio<T>(
 
     status.publish_transport(local_state.transport);
     status.publish_master_peaks(master_left_peak, master_right_peak);
+    if let Some(pb) = &local_state.playback {
+        let track_activity_mask = pb.track_activity_mask();
+        let active_track = track_activity_mask_to_index(track_activity_mask);
+        status.publish_track_state(track_activity_mask, active_track);
+    } else {
+        status.publish_track_state(0, None);
+    }
 
     if local_state.transport.is_playing() {
         if let (Some(pb), Some(module)) = (&local_state.playback, &local_state.module) {
@@ -501,6 +552,14 @@ fn decode_meter_peak(peak: u32) -> f32 {
     peak.min(METER_MAX) as f32 / METER_SCALE
 }
 
+fn track_activity_mask_to_index(mask: u32) -> Option<u16> {
+    if mask == 0 {
+        None
+    } else {
+        Some(mask.trailing_zeros() as u16)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -531,6 +590,8 @@ mod tests {
                 transport: PlaybackTransportState::Stopped,
                 order_index: 0,
                 row: 0,
+                track_activity_mask: 0,
+                active_track: None,
                 device_error: false,
                 meters: PlaybackMeterSnapshot {
                     master_left_peak: 0.0,
@@ -554,6 +615,24 @@ mod tests {
         let snapshot = status.snapshot();
         assert_eq!(snapshot.transport, PlaybackTransportState::Paused);
         assert!(!snapshot.transport.is_playing());
+    }
+
+    #[test]
+    fn audio_status_snapshot_includes_track_activity() {
+        let status = AudioStatus::new();
+        status.publish_track_state(0b1010, Some(3));
+
+        let snapshot = status.snapshot();
+        assert_eq!(snapshot.track_activity_mask, 0b1010);
+        assert_eq!(snapshot.active_track, Some(3));
+    }
+
+    #[test]
+    fn track_activity_mask_to_index_picks_first_active_track() {
+        assert_eq!(track_activity_mask_to_index(0), None);
+        assert_eq!(track_activity_mask_to_index(0b0001), Some(0));
+        assert_eq!(track_activity_mask_to_index(0b0010), Some(1));
+        assert_eq!(track_activity_mask_to_index(0b1010), Some(1));
     }
 
     #[test]
@@ -583,6 +662,7 @@ mod tests {
             playback: None,
             module: Some(module.clone()),
             transport: PlaybackTransportState::Stopped,
+            track_controls: Vec::new(),
             sample_rate: 44_100,
             preview: PreviewVoice::new(),
         };
@@ -615,6 +695,7 @@ mod tests {
             playback: None,
             module: Some(module),
             transport: PlaybackTransportState::Stopped,
+            track_controls: Vec::new(),
             sample_rate: 44_100,
             preview: PreviewVoice::new(),
         };
