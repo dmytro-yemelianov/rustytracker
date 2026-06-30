@@ -140,6 +140,59 @@ impl MixerVoice {
         }
     }
 
+    fn render_sample(
+        &mut self,
+        module: &Module,
+        sample_rate: u32,
+        mixer_mode: PlaybackMixerMode,
+        channels: &[PlaybackChannelState],
+    ) -> PlaybackResult<Option<(f64, u8)>> {
+        if !self.active {
+            return Ok(None);
+        }
+        let Some(sample_index) = self.sample_index else {
+            self.stop_sample();
+            return Ok(None);
+        };
+        let Some(sample) = module.samples.get(sample_index) else {
+            return Err(PlaybackError::MissingSample {
+                channel: self.channel,
+                instrument_index: channels[self.channel as usize]
+                    .instrument_index
+                    .unwrap_or(0),
+                sample_index,
+            });
+        };
+        if sample.data.frame_count() == 0 || self.sample_frame >= sample.data.frame_count() {
+            self.stop_sample();
+            return Ok(None);
+        }
+
+        let frequency = period_to_frequency(self.period, module.header.frequency_table, mixer_mode);
+        let step = frequency / sample_rate as f64;
+
+        let sample_val = get_sample_value(
+            &sample.data,
+            self.sample_frame,
+            self.sample_frame_fraction,
+            sample,
+            mixer_mode,
+        );
+
+        let vol_factor = (self.volume as f64 / 255.0)
+            * (self.volume_envelope_val as f64 / 256.0)
+            * (self.fadeout_volume as f64 / 65536.0);
+
+        let channel_mono_pcm = sample_val * vol_factor;
+
+        let mut pan = self.panning as i32 + self.panning_envelope_val as i32 - 128;
+        pan = pan.clamp(0, 255);
+
+        self.advance_sample_position(sample, step);
+
+        Ok(Some((channel_mono_pcm, pan as u8)))
+    }
+
     fn advance_sample_frame(&mut self, sample: &Sample) {
         let frame_count = sample.data.frame_count();
         if frame_count == 0 {
@@ -297,54 +350,14 @@ impl Mixer {
         let mut mixed_r = 0.0;
 
         for voice in &mut self.voices {
-            if !voice.active {
-                continue;
+            if let Some((channel_mono_pcm, pan)) =
+                voice.render_sample(module, sample_rate, mixer_mode, channels)?
+            {
+                let right_gain = pan as f64 / 255.0;
+                let left_gain = 1.0 - right_gain;
+                mixed_l += channel_mono_pcm * left_gain;
+                mixed_r += channel_mono_pcm * right_gain;
             }
-            let Some(sample_index) = voice.sample_index else {
-                voice.stop_sample();
-                continue;
-            };
-            let Some(sample) = module.samples.get(sample_index) else {
-                let ch = &channels[voice.channel as usize];
-                return Err(PlaybackError::MissingSample {
-                    channel: voice.channel,
-                    instrument_index: ch.instrument_index.unwrap_or(0),
-                    sample_index,
-                });
-            };
-            if sample.data.frame_count() == 0 || voice.sample_frame >= sample.data.frame_count() {
-                voice.stop_sample();
-                continue;
-            }
-
-            let frequency =
-                period_to_frequency(voice.period, module.header.frequency_table, mixer_mode);
-            let step = frequency / sample_rate as f64;
-
-            let sample_val = get_sample_value(
-                &sample.data,
-                voice.sample_frame,
-                voice.sample_frame_fraction,
-                sample,
-                mixer_mode,
-            );
-
-            let vol_factor = (voice.volume as f64 / 255.0)
-                * (voice.volume_envelope_val as f64 / 256.0)
-                * (voice.fadeout_volume as f64 / 65536.0);
-
-            let channel_mono_pcm = sample_val * vol_factor;
-
-            let mut pan = voice.panning as i32 + voice.panning_envelope_val as i32 - 128;
-            pan = pan.clamp(0, 255);
-
-            let right_gain = pan as f64 / 255.0;
-            let left_gain = 1.0 - right_gain;
-
-            mixed_l += channel_mono_pcm * left_gain;
-            mixed_r += channel_mono_pcm * right_gain;
-
-            voice.advance_sample_position(sample, step);
         }
 
         // Write back state to keep channels in sync
@@ -369,46 +382,11 @@ impl Mixer {
         let mut mixed = PLAYBACK_MONO_SILENCE;
 
         for voice in &mut self.voices {
-            if !voice.active {
-                continue;
+            if let Some((channel_mono_pcm, _)) =
+                voice.render_sample(module, sample_rate, mixer_mode, channels)?
+            {
+                mixed += channel_mono_pcm as i32;
             }
-            let Some(sample_index) = voice.sample_index else {
-                voice.stop_sample();
-                continue;
-            };
-            let Some(sample) = module.samples.get(sample_index) else {
-                let ch = &channels[voice.channel as usize];
-                return Err(PlaybackError::MissingSample {
-                    channel: voice.channel,
-                    instrument_index: ch.instrument_index.unwrap_or(0),
-                    sample_index,
-                });
-            };
-            if sample.data.frame_count() == 0 || voice.sample_frame >= sample.data.frame_count() {
-                voice.stop_sample();
-                continue;
-            }
-
-            let frequency =
-                period_to_frequency(voice.period, module.header.frequency_table, mixer_mode);
-            let step = frequency / sample_rate as f64;
-
-            let sample_val = get_sample_value(
-                &sample.data,
-                voice.sample_frame,
-                voice.sample_frame_fraction,
-                sample,
-                mixer_mode,
-            );
-
-            let vol_factor = (voice.volume as f64 / 255.0)
-                * (voice.volume_envelope_val as f64 / 256.0)
-                * (voice.fadeout_volume as f64 / 65536.0);
-
-            let channel_mono_pcm = sample_val * vol_factor;
-            mixed += channel_mono_pcm as i32;
-
-            voice.advance_sample_position(sample, step);
         }
 
         // Write back state to keep channels in sync
