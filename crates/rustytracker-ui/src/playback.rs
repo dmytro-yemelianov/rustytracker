@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -8,6 +8,10 @@ use rustytracker_play::{PlaybackMixerMode, PlaybackSettings, PlaybackState, Prev
 const PCM16_MIN: i32 = -32_768;
 const PCM16_MAX: i32 = 32_767;
 const PCM16_NORMALIZATION: f32 = 32_768.0;
+const POSITION_ROW_BITS: u64 = 16;
+const POSITION_ROW_MASK: u64 = (1 << POSITION_ROW_BITS) - 1;
+const METER_SCALE: f32 = 1_000.0;
+const METER_MAX: u32 = METER_SCALE as u32;
 
 pub(crate) enum AudioCommand {
     Play,
@@ -23,20 +27,108 @@ pub(crate) enum AudioCommand {
     PreviewNoteOff,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PlaybackTransportState {
+    Stopped,
+    Playing,
+    Paused,
+}
+
+impl PlaybackTransportState {
+    fn as_u8(self) -> u8 {
+        match self {
+            Self::Stopped => 0,
+            Self::Playing => 1,
+            Self::Paused => 2,
+        }
+    }
+
+    fn from_u8(value: u8) -> Self {
+        match value {
+            1 => Self::Playing,
+            2 => Self::Paused,
+            _ => Self::Stopped,
+        }
+    }
+
+    pub(crate) fn is_playing(self) -> bool {
+        matches!(self, Self::Playing)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct PlaybackMeterSnapshot {
+    pub(crate) master_left_peak: f32,
+    pub(crate) master_right_peak: f32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct PlaybackStatusSnapshot {
+    pub(crate) transport: PlaybackTransportState,
+    pub(crate) order_index: usize,
+    pub(crate) row: u16,
+    pub(crate) device_error: bool,
+    pub(crate) meters: PlaybackMeterSnapshot,
+}
+
 pub(crate) struct AudioStatus {
+    pub(crate) transport: AtomicU8,
     pub(crate) is_playing: AtomicBool,
+    position: AtomicU64,
     pub(crate) order_index: AtomicUsize,
     pub(crate) row: AtomicU32,
     pub(crate) device_error: AtomicBool,
+    master_left_peak: AtomicU32,
+    master_right_peak: AtomicU32,
 }
 
 impl AudioStatus {
     pub(crate) fn new() -> Self {
         Self {
+            transport: AtomicU8::new(PlaybackTransportState::Stopped.as_u8()),
             is_playing: AtomicBool::new(false),
+            position: AtomicU64::new(pack_position(0, 0)),
             order_index: AtomicUsize::new(0),
             row: AtomicU32::new(0),
             device_error: AtomicBool::new(false),
+            master_left_peak: AtomicU32::new(0),
+            master_right_peak: AtomicU32::new(0),
+        }
+    }
+
+    fn publish_transport(&self, transport: PlaybackTransportState) {
+        self.transport.store(transport.as_u8(), Ordering::Relaxed);
+        self.is_playing
+            .store(transport.is_playing(), Ordering::Relaxed);
+    }
+
+    fn publish_position(&self, order_index: usize, row: u16) {
+        self.position
+            .store(pack_position(order_index, row), Ordering::Relaxed);
+        self.order_index.store(order_index, Ordering::Relaxed);
+        self.row.store(row as u32, Ordering::Relaxed);
+    }
+
+    fn publish_master_peaks(&self, left_peak: f32, right_peak: f32) {
+        self.master_left_peak
+            .store(encode_meter_peak(left_peak), Ordering::Relaxed);
+        self.master_right_peak
+            .store(encode_meter_peak(right_peak), Ordering::Relaxed);
+    }
+
+    pub(crate) fn snapshot(&self) -> PlaybackStatusSnapshot {
+        let (order_index, row) = unpack_position(self.position.load(Ordering::Relaxed));
+        PlaybackStatusSnapshot {
+            transport: PlaybackTransportState::from_u8(self.transport.load(Ordering::Relaxed)),
+            order_index,
+            row,
+            device_error: self.device_error.load(Ordering::Relaxed),
+            meters: PlaybackMeterSnapshot {
+                master_left_peak: decode_meter_peak(self.master_left_peak.load(Ordering::Relaxed)),
+                master_right_peak: decode_meter_peak(
+                    self.master_right_peak.load(Ordering::Relaxed),
+                ),
+            },
         }
     }
 }
@@ -44,7 +136,7 @@ impl AudioStatus {
 struct AudioThreadState {
     playback: Option<PlaybackState>,
     module: Option<Module>,
-    is_playing: bool,
+    transport: PlaybackTransportState,
     sample_rate: u32,
     preview: PreviewVoice,
 }
@@ -96,7 +188,7 @@ impl AudioPlaybackEngine {
         let mut local_state_opt = Some(AudioThreadState {
             playback: None,
             module: None,
-            is_playing: false,
+            transport: PlaybackTransportState::Stopped,
             sample_rate,
             preview: PreviewVoice::new(),
         });
@@ -115,7 +207,8 @@ impl AudioPlaybackEngine {
                     move |err| {
                         eprintln!("an error occurred on stream: {err}");
                         status_err.device_error.store(true, Ordering::Relaxed);
-                        status_err.is_playing.store(false, Ordering::Relaxed);
+                        status_err.publish_transport(PlaybackTransportState::Stopped);
+                        status_err.publish_master_peaks(0.0, 0.0);
                     },
                     None,
                 )
@@ -133,7 +226,8 @@ impl AudioPlaybackEngine {
                     move |err| {
                         eprintln!("an error occurred on stream: {err}");
                         status_err.device_error.store(true, Ordering::Relaxed);
-                        status_err.is_playing.store(false, Ordering::Relaxed);
+                        status_err.publish_transport(PlaybackTransportState::Stopped);
+                        status_err.publish_master_peaks(0.0, 0.0);
                     },
                     None,
                 )
@@ -151,7 +245,8 @@ impl AudioPlaybackEngine {
                     move |err| {
                         eprintln!("an error occurred on stream: {err}");
                         status_err.device_error.store(true, Ordering::Relaxed);
-                        status_err.is_playing.store(false, Ordering::Relaxed);
+                        status_err.publish_transport(PlaybackTransportState::Stopped);
+                        status_err.publish_master_peaks(0.0, 0.0);
                     },
                     None,
                 )
@@ -225,17 +320,20 @@ impl AudioPlaybackEngine {
     }
 
     pub(crate) fn is_playing(&self) -> bool {
-        self.status.is_playing.load(Ordering::Relaxed)
+        self.playback_status().transport.is_playing()
     }
 
     pub(crate) fn device_error(&self) -> bool {
-        self.status.device_error.load(Ordering::Relaxed)
+        self.playback_status().device_error
     }
 
     pub(crate) fn get_position(&self) -> (usize, u16) {
-        let order_index = self.status.order_index.load(Ordering::Relaxed);
-        let row = self.status.row.load(Ordering::Relaxed) as u16;
-        (order_index, row)
+        let status = self.playback_status();
+        (status.order_index, status.row)
+    }
+
+    pub(crate) fn playback_status(&self) -> PlaybackStatusSnapshot {
+        self.status.snapshot()
     }
 }
 
@@ -250,13 +348,13 @@ fn write_audio<T>(
     while let Ok(cmd) = consumer.pop() {
         match cmd {
             AudioCommand::Play => {
-                local_state.is_playing = true;
+                local_state.transport = PlaybackTransportState::Playing;
             }
             AudioCommand::Pause => {
-                local_state.is_playing = false;
+                local_state.transport = PlaybackTransportState::Paused;
             }
             AudioCommand::Stop => {
-                local_state.is_playing = false;
+                local_state.transport = PlaybackTransportState::Stopped;
                 local_state.playback = None;
             }
             AudioCommand::UpdateModule(module) => {
@@ -292,15 +390,18 @@ fn write_audio<T>(
         Some(m) => m,
         None => {
             write_silence(output);
-            status.is_playing.store(false, Ordering::Relaxed);
+            status.publish_transport(PlaybackTransportState::Stopped);
+            status.publish_master_peaks(0.0, 0.0);
             return;
         }
     };
 
-    let is_playing = local_state.is_playing;
+    let is_playing = local_state.transport.is_playing();
     let playback_opt = &mut local_state.playback;
     let preview = &mut local_state.preview;
     let mut song_ended = false;
+    let mut master_left_peak = 0.0f32;
+    let mut master_right_peak = 0.0f32;
 
     for frame in output.chunks_mut(2) {
         let (module_l, module_r) = if is_playing && !song_ended {
@@ -341,6 +442,8 @@ fn write_audio<T>(
         // sum/clamp without preserving that property.
         let left = (module_l + preview_l).clamp(-1.0, 1.0);
         let right = (module_r + preview_r).clamp(-1.0, 1.0);
+        master_left_peak = master_left_peak.max(left.abs());
+        master_right_peak = master_right_peak.max(right.abs());
 
         if frame.len() >= 2 {
             frame[0] = T::from_sample(left);
@@ -351,19 +454,17 @@ fn write_audio<T>(
     }
 
     if song_ended {
-        local_state.is_playing = false;
+        local_state.transport = PlaybackTransportState::Stopped;
         local_state.playback = None;
     }
 
-    status
-        .is_playing
-        .store(local_state.is_playing, Ordering::Relaxed);
+    status.publish_transport(local_state.transport);
+    status.publish_master_peaks(master_left_peak, master_right_peak);
 
-    if local_state.is_playing {
+    if local_state.transport.is_playing() {
         if let (Some(pb), Some(module)) = (&local_state.playback, &local_state.module) {
             if let Ok(pos) = pb.clock().position(module) {
-                status.order_index.store(pos.order_index, Ordering::Relaxed);
-                status.row.store(pos.row as u32, Ordering::Relaxed);
+                status.publish_position(pos.order_index, pos.row);
             }
         }
     }
@@ -380,6 +481,24 @@ where
 
 fn normalize_pcm16_sample(sample: i32) -> f32 {
     sample.clamp(PCM16_MIN, PCM16_MAX) as f32 / PCM16_NORMALIZATION
+}
+
+fn pack_position(order_index: usize, row: u16) -> u64 {
+    ((order_index as u64) << POSITION_ROW_BITS) | row as u64
+}
+
+fn unpack_position(position: u64) -> (usize, u16) {
+    let order_index = (position >> POSITION_ROW_BITS) as usize;
+    let row = (position & POSITION_ROW_MASK) as u16;
+    (order_index, row)
+}
+
+fn encode_meter_peak(peak: f32) -> u32 {
+    (peak.clamp(0.0, 1.0) * METER_SCALE) as u32
+}
+
+fn decode_meter_peak(peak: u32) -> f32 {
+    peak.min(METER_MAX) as f32 / METER_SCALE
 }
 
 #[cfg(test)]
@@ -400,6 +519,41 @@ mod tests {
             status.device_error.load(Ordering::Relaxed),
             "device_error should be true after store"
         );
+    }
+
+    #[test]
+    fn audio_status_snapshot_reports_transport_position_and_meters() {
+        let status = AudioStatus::new();
+
+        assert_eq!(
+            status.snapshot(),
+            PlaybackStatusSnapshot {
+                transport: PlaybackTransportState::Stopped,
+                order_index: 0,
+                row: 0,
+                device_error: false,
+                meters: PlaybackMeterSnapshot {
+                    master_left_peak: 0.0,
+                    master_right_peak: 0.0,
+                },
+            }
+        );
+
+        status.publish_transport(PlaybackTransportState::Playing);
+        status.publish_position(3, 42);
+        status.publish_master_peaks(0.25, 1.25);
+
+        let snapshot = status.snapshot();
+        assert_eq!(snapshot.transport, PlaybackTransportState::Playing);
+        assert_eq!(snapshot.order_index, 3);
+        assert_eq!(snapshot.row, 42);
+        assert_eq!(snapshot.meters.master_left_peak, 0.25);
+        assert_eq!(snapshot.meters.master_right_peak, 1.0);
+
+        status.publish_transport(PlaybackTransportState::Paused);
+        let snapshot = status.snapshot();
+        assert_eq!(snapshot.transport, PlaybackTransportState::Paused);
+        assert!(!snapshot.transport.is_playing());
     }
 
     #[test]
@@ -428,7 +582,7 @@ mod tests {
         let mut local_state = AudioThreadState {
             playback: None,
             module: Some(module.clone()),
-            is_playing: false,
+            transport: PlaybackTransportState::Stopped,
             sample_rate: 44_100,
             preview: PreviewVoice::new(),
         };
@@ -447,5 +601,40 @@ mod tests {
             output.iter().any(|&sample| sample != 0.0),
             "preview voice should be mixed into output even when the song is stopped"
         );
+        let snapshot = status.snapshot();
+        assert!(
+            snapshot.meters.master_left_peak > 0.0 || snapshot.meters.master_right_peak > 0.0,
+            "mixed preview audio should publish master peak meters"
+        );
+    }
+
+    #[test]
+    fn write_audio_publishes_transport_commands() {
+        let module = module_with_preview_sample();
+        let mut local_state = AudioThreadState {
+            playback: None,
+            module: Some(module),
+            transport: PlaybackTransportState::Stopped,
+            sample_rate: 44_100,
+            preview: PreviewVoice::new(),
+        };
+        let status = Arc::new(AudioStatus::new());
+        let (mut producer, mut consumer) = rtrb::RingBuffer::<AudioCommand>::new(4);
+        let mut output = vec![0.0f32; 8];
+
+        producer.push(AudioCommand::Play).unwrap();
+        write_audio(&mut output, &mut consumer, &status, &mut local_state);
+        assert_eq!(status.snapshot().transport, PlaybackTransportState::Playing);
+        assert!(status.is_playing.load(Ordering::Relaxed));
+
+        producer.push(AudioCommand::Pause).unwrap();
+        write_audio(&mut output, &mut consumer, &status, &mut local_state);
+        assert_eq!(status.snapshot().transport, PlaybackTransportState::Paused);
+        assert!(!status.is_playing.load(Ordering::Relaxed));
+
+        producer.push(AudioCommand::Stop).unwrap();
+        write_audio(&mut output, &mut consumer, &status, &mut local_state);
+        assert_eq!(status.snapshot().transport, PlaybackTransportState::Stopped);
+        assert!(!status.is_playing.load(Ordering::Relaxed));
     }
 }
