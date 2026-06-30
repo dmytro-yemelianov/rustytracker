@@ -39,31 +39,37 @@ fn roundtrips_bundled_fixture_headers_and_orders() {
         assert_eq!(header.title, module.header.title.as_str(), "{}", fixture);
         assert_eq!(
             header.channel_count, module.header.channel_count,
-            "{}", fixture
+            "{}",
+            fixture
         );
         assert_eq!(
             header.frequency_table, module.header.frequency_table,
-            "{}", fixture
+            "{}",
+            fixture
         );
         assert_eq!(
             header.default_tick_speed, module.header.tick_speed,
-            "{}", fixture
+            "{}",
+            fixture
         );
         assert_eq!(header.default_bpm, module.header.bpm, "{}", fixture);
         assert_eq!(
             header.restart_position, module.header.restart_position,
-            "{}", fixture
+            "{}",
+            fixture
         );
         assert_eq!(header.orders, module.orders, "{}", fixture);
         assert_eq!(
             header.pattern_count,
             module.patterns.len() as u16,
-            "{}", fixture
+            "{}",
+            fixture
         );
         assert_eq!(
             header.instrument_count,
             module.instruments.len() as u16,
-            "{}", fixture
+            "{}",
+            fixture
         );
     }
 }

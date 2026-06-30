@@ -8,9 +8,7 @@ mod model;
 mod parser;
 mod writer;
 
-use rustytracker_core::{
-    INTERNAL_EFFECT_EXTENDED_BASE,
-};
+use rustytracker_core::INTERNAL_EFFECT_EXTENDED_BASE;
 
 pub use error::{XmParseError, XmResult, XmSampleField, XmWriteError, XmWriteResult};
 pub use model::{
@@ -19,12 +17,10 @@ pub use model::{
 };
 
 pub use parser::{
-    parse_xm_header, parse_xm_pattern_headers, decode_xm_patterns, decode_xm_pattern,
-    parse_xm_module, parse_xm_instruments,
+    decode_xm_pattern, decode_xm_patterns, parse_xm_header, parse_xm_instruments, parse_xm_module,
+    parse_xm_pattern_headers,
 };
-pub use writer::{
-    write_xm_header, write_xm_module, write_xm_patterns, write_xm_instruments,
-};
+pub use writer::{write_xm_header, write_xm_instruments, write_xm_module, write_xm_patterns};
 
 pub const XM_HEADER_SIGNATURE_LENGTH: usize = 17;
 pub const XM_HEADER_SIGNATURE: &[u8; XM_HEADER_SIGNATURE_LENGTH] = b"Extended Module: ";
@@ -69,9 +65,11 @@ pub(crate) const XM_HEADER_FIELD_STEP: usize = 2;
 pub(crate) const XM_RESTART_FIELD_OFFSET: usize = HEADER_FIELDS_OFFSET + XM_HEADER_FIELD_STEP;
 pub(crate) const XM_CHANNELS_FIELD_OFFSET: usize = HEADER_FIELDS_OFFSET + XM_HEADER_FIELD_STEP * 2;
 pub(crate) const XM_PATTERNS_FIELD_OFFSET: usize = HEADER_FIELDS_OFFSET + XM_HEADER_FIELD_STEP * 3;
-pub(crate) const XM_INSTRUMENTS_FIELD_OFFSET: usize = HEADER_FIELDS_OFFSET + XM_HEADER_FIELD_STEP * 4;
+pub(crate) const XM_INSTRUMENTS_FIELD_OFFSET: usize =
+    HEADER_FIELDS_OFFSET + XM_HEADER_FIELD_STEP * 4;
 pub(crate) const XM_FLAGS_FIELD_OFFSET: usize = HEADER_FIELDS_OFFSET + XM_HEADER_FIELD_STEP * 5;
-pub(crate) const XM_TICK_SPEED_FIELD_OFFSET: usize = HEADER_FIELDS_OFFSET + XM_HEADER_FIELD_STEP * 6;
+pub(crate) const XM_TICK_SPEED_FIELD_OFFSET: usize =
+    HEADER_FIELDS_OFFSET + XM_HEADER_FIELD_STEP * 6;
 pub(crate) const XM_BPM_FIELD_OFFSET: usize = HEADER_FIELDS_OFFSET + XM_HEADER_FIELD_STEP * 7;
 pub(crate) const XM_LINEAR_FREQUENCY_FLAG: u16 = 0x0001;
 pub(crate) const XM_1_02_PATTERN_HEADER_LEN: usize = 8;

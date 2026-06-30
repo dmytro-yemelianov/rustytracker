@@ -124,7 +124,9 @@ fn writes_internal_fine_volume_slides_to_xm_volume_column_when_effect_column_is_
                 XM_WRITER_XM_ARPEGGIO_EFFECT,
                 XM_WRITER_ARPEGGIO_OPERAND,
             ],
-            "fine slide {:#04x}/{:#04x}", fine_effect, fine_operand
+            "fine slide {:#04x}/{:#04x}",
+            fine_effect,
+            fine_operand
         );
         assert_eq!(
             first_decoded_cell(&bytes).effects,
@@ -135,7 +137,9 @@ fn writes_internal_fine_volume_slides_to_xm_volume_column_when_effect_column_is_
                     XM_WRITER_ARPEGGIO_OPERAND,
                 ),
             ],
-            "fine slide {:#04x}/{:#04x}", fine_effect, fine_operand
+            "fine slide {:#04x}/{:#04x}",
+            fine_effect,
+            fine_operand
         );
     }
 }
@@ -169,7 +173,9 @@ fn does_not_backfill_internal_fine_volume_slides_from_later_effect_slots() {
                 XM_WRITER_XM_ARPEGGIO_EFFECT,
                 XM_WRITER_ARPEGGIO_OPERAND,
             ],
-            "fine slide {:#04x}/{:#04x}", fine_effect, fine_operand
+            "fine slide {:#04x}/{:#04x}",
+            fine_effect,
+            fine_operand
         );
         assert_eq!(
             first_decoded_cell(&bytes).effects,
@@ -180,7 +186,9 @@ fn does_not_backfill_internal_fine_volume_slides_from_later_effect_slots() {
                     XM_WRITER_ARPEGGIO_OPERAND,
                 ),
             ],
-            "fine slide {:#04x}/{:#04x}", fine_effect, fine_operand
+            "fine slide {:#04x}/{:#04x}",
+            fine_effect,
+            fine_operand
         );
     }
 }
@@ -211,12 +219,14 @@ fn writes_zero_operand_internal_fine_volume_slides_to_effect_column_for_roundtri
                 XM_WRITER_XM_EXTENDED_EFFECT,
                 extended_operand,
             ],
-            "fine slide {:#04x}", fine_effect
+            "fine slide {:#04x}",
+            fine_effect
         );
         assert_eq!(
             first_decoded_cell(&bytes).effects[1],
             effect(fine_effect, XM_WRITER_FINE_VOLUME_SLIDE_EMPTY_OPERAND),
-            "fine slide {:#04x}", fine_effect
+            "fine slide {:#04x}",
+            fine_effect
         );
     }
 }
@@ -345,12 +355,14 @@ fn writes_zero_operand_slides_to_effect_column_for_roundtrip_symmetry() {
                 slide_effect,
                 XM_WRITER_EMPTY_OPERAND,
             ],
-            "slide effect {:#04x}", slide_effect
+            "slide effect {:#04x}",
+            slide_effect
         );
         assert_eq!(
             first_decoded_cell(&bytes).effects[1],
             effect(slide_effect, XM_WRITER_EMPTY_OPERAND),
-            "slide effect {:#04x}", slide_effect
+            "slide effect {:#04x}",
+            slide_effect
         );
     }
 }

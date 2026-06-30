@@ -1,5 +1,6 @@
 use std::path::Path;
 
+mod api;
 mod error;
 
 use rustytracker_core::{
@@ -23,6 +24,9 @@ const PLAY_STATE_COMMAND: &str = "play-state";
 const EXPORT_WAV_COMMAND: &str = "export-wav";
 const EXPORT_WAV_SAMPLE_RATE_FLAG: &str = "--sample-rate";
 const EXPORT_WAV_MIXER_FLAG: &str = "--mixer";
+const API_COMMAND: &str = "api";
+const API_REQUEST_FILE_FLAG: &str = "--request-file";
+const API_REQUEST_JSON_FLAG: &str = "--request-json";
 const EXPORT_WAV_MIN_SAMPLE_RATE: u32 = 1;
 const DEFAULT_EXPORT_SAMPLE_RATE: u32 = 44100;
 const FORMAT_FLAG: &str = "--format";
@@ -32,7 +36,8 @@ pub(crate) const USAGE: &str = concat!(
     "usage: rustytracker dump <module.xm|module.mod> --format json\n",
     "       rustytracker play-state <module.xm|module.mod> --rows <count>\n",
     "       rustytracker export-wav <module.xm|module.mod> <output.wav> ",
-    "[--sample-rate <rate>] [--mixer <hifi|rustysynth|amiga|protracker>]"
+    "[--sample-rate <rate>] [--mixer <hifi|rustysynth|amiga|protracker>]",
+    "\n       rustytracker api [--request-file <path>|--request-json <json>]"
 );
 const PLAY_STATE_MIN_ROWS: usize = 1;
 const FNV_OFFSET: u64 = 0xcbf29ce484222325;
@@ -255,8 +260,51 @@ where
         DUMP_COMMAND => run_dump_command(args),
         PLAY_STATE_COMMAND => run_play_state_command(args),
         EXPORT_WAV_COMMAND => run_export_wav_command(args),
+        API_COMMAND => run_api_command(args),
         _ => Err(DumpError::InvalidArguments),
     }
+}
+
+fn run_api_command<I>(mut args: I) -> Result<String, DumpError>
+where
+    I: Iterator<Item = String>,
+{
+    let mut file_path: Option<String> = None;
+    let mut request_json: Option<String> = None;
+
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            API_REQUEST_FILE_FLAG => {
+                if file_path.is_some() {
+                    return Err(DumpError::InvalidArguments);
+                }
+
+                file_path = Some(args.next().ok_or(DumpError::InvalidArguments)?);
+            }
+            API_REQUEST_JSON_FLAG => {
+                if request_json.is_some() {
+                    return Err(DumpError::InvalidArguments);
+                }
+
+                request_json = Some(args.next().ok_or(DumpError::InvalidArguments)?);
+            }
+            _ => return Err(DumpError::InvalidArguments),
+        }
+    }
+
+    if let Some(path) = file_path {
+        if request_json.is_some() {
+            return Err(DumpError::InvalidArguments);
+        }
+        let output = api::api_request_to_json_file(&path).map_err(DumpError::from)?;
+        return Ok(output);
+    }
+
+    if let Some(json) = request_json {
+        return Ok(api::api_request_to_json(&json));
+    }
+
+    Ok(api::api_request_from_stdin().map_err(DumpError::from)?)
 }
 
 fn run_dump_command<I>(mut args: I) -> Result<String, DumpError>
@@ -700,7 +748,6 @@ fn sample_loop_kind_name(loop_kind: SampleLoopKind) -> &'static str {
         SampleLoopKind::PingPong => SAMPLE_LOOP_PING_PONG,
     }
 }
-
 
 #[cfg(test)]
 mod tests {

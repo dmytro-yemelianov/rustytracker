@@ -419,7 +419,6 @@ fn test_undo_limit() {
     assert!(!editor.undo());
 }
 
-
 #[test]
 fn test_undo_redo_effect_edits() {
     let module = Module::empty();

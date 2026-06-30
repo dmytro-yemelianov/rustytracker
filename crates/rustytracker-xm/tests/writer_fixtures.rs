@@ -121,7 +121,8 @@ pub const XM_WRITER_TEST_SAMPLE_VALUES_8: &[i8] = &[1, 9, 22, 41];
 pub const XM_WRITER_TEST_SAMPLE_FRAME_COUNT_8: u32 = XM_WRITER_TEST_SAMPLE_VALUES_8.len() as u32;
 pub const XM_WRITER_TEST_SAMPLE_DELTAS_8: &[u8] = &[1, 8, 13, 19];
 pub const XM_WRITER_TEST_SAMPLE_VALUES_16: &[i16] = &[1_000, 500, 750, -250];
-pub const XM_WRITER_TEST_SAMPLE_DELTAS_16: &[u8] = &[0xe8, 0x03, 0x0c, 0xfe, 0xfa, 0x00, 0x18, 0xfc];
+pub const XM_WRITER_TEST_SAMPLE_DELTAS_16: &[u8] =
+    &[0xe8, 0x03, 0x0c, 0xfe, 0xfa, 0x00, 0x18, 0xfc];
 pub const XM_WRITER_OVERLONG_SAMPLE_LOOP_START: u32 = u32::MAX;
 pub const XM_WRITER_U32_FIELD_MAX: u64 = u32::MAX as u64;
 pub const XM_WRITER_OVERLONG_16_BIT_LOOP_START_BYTE_LEN: u64 =
@@ -527,9 +528,9 @@ pub fn fnv_byte(checksum: u64, byte: u8) -> u64 {
 }
 
 mod writer {
+    pub mod effects;
+    pub mod instruments;
     mod module;
     pub mod patterns;
-    pub mod instruments;
     pub mod samples;
-    pub mod effects;
 }

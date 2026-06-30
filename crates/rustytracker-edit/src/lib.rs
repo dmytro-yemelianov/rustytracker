@@ -6,8 +6,10 @@
 use std::collections::VecDeque;
 
 use rustytracker_core::{
-    CoreError, CoreResult, EffectCommand, Instrument, Module, Note, PatternCell, Sample,
-    MAX_ACTIVE_ORDERS, MAX_XM_NOTES,
+    CoreError, CoreResult, EffectCommand, Instrument, InstrumentName, Module, Note, Pattern,
+    PatternCell, Sample, SampleName, DEFAULT_EFFECT_SLOTS, DEFAULT_PATTERN_ROWS,
+    EDITOR_PATTERN_CHANNELS, MAX_ACTIVE_ORDERS, MAX_INSTRUMENTS, MAX_PATTERNS, MAX_XM_NOTES,
+    MIN_CHANNEL_COUNT,
 };
 
 pub const DEFAULT_UNDO_LIMIT: usize = 64;
@@ -775,6 +777,322 @@ impl ModuleEditor {
 
     pub fn can_redo(&self) -> bool {
         self.history.can_redo()
+    }
+
+    pub fn insert_track(&mut self, index: u16) -> CoreResult<usize> {
+        if self.module.header.channel_count >= EDITOR_PATTERN_CHANNELS {
+            return Err(CoreError::InvalidChannelCount(
+                self.module.header.channel_count,
+            ));
+        }
+        if index > self.module.header.channel_count {
+            return Err(CoreError::InvalidChannel {
+                channel: index,
+                capacity: self.module.header.channel_count,
+            });
+        }
+
+        let old = self.module.clone();
+
+        for pattern in &mut self.module.patterns {
+            pattern.insert_channel(index)?;
+        }
+
+        self.module.header.channel_count += 1;
+
+        self.history.push_command(EditCommand::ReplaceModule {
+            old_module: Box::new(old),
+            new_module: Box::new(self.module.clone()),
+        });
+
+        Ok((self.module.header.channel_count - 1) as usize)
+    }
+
+    pub fn delete_track(&mut self, index: u16) -> CoreResult<()> {
+        if self.module.header.channel_count <= MIN_CHANNEL_COUNT {
+            return Err(CoreError::InvalidChannelCount(
+                self.module.header.channel_count,
+            ));
+        }
+        if index >= self.module.header.channel_count {
+            return Err(CoreError::InvalidChannel {
+                channel: index,
+                capacity: self.module.header.channel_count,
+            });
+        }
+
+        let old = self.module.clone();
+
+        for pattern in &mut self.module.patterns {
+            pattern.remove_channel(index)?;
+        }
+
+        self.module.header.channel_count -= 1;
+
+        self.history.push_command(EditCommand::ReplaceModule {
+            old_module: Box::new(old),
+            new_module: Box::new(self.module.clone()),
+        });
+
+        Ok(())
+    }
+
+    pub fn create_pattern(&mut self, rows: Option<u16>) -> CoreResult<usize> {
+        if self.module.patterns.len() >= MAX_PATTERNS {
+            return Err(CoreError::PatternNumberOverflow);
+        }
+
+        let rows = rows.unwrap_or(DEFAULT_PATTERN_ROWS);
+        if rows == 0 {
+            return Err(CoreError::InvalidRow { row: 0, rows });
+        }
+
+        let old = self.module.clone();
+        let index = self.module.patterns.len();
+        self.module.patterns.push(Pattern::new(
+            rows,
+            self.module.header.channel_count,
+            DEFAULT_EFFECT_SLOTS,
+        ));
+
+        self.history.push_command(EditCommand::ReplaceModule {
+            old_module: Box::new(old),
+            new_module: Box::new(self.module.clone()),
+        });
+
+        Ok(index)
+    }
+
+    pub fn delete_pattern(&mut self, pattern_index: usize) -> CoreResult<()> {
+        if self.module.patterns.len() <= 1 {
+            return Err(CoreError::PatternNumberOverflow);
+        }
+        if pattern_index >= self.module.patterns.len() {
+            return Err(CoreError::PatternNumberOverflow);
+        }
+
+        let old = self.module.clone();
+        self.module.patterns.remove(pattern_index);
+
+        for order in &mut self.module.orders {
+            if usize::from(*order) == pattern_index {
+                *order = 0;
+            } else if usize::from(*order) > pattern_index {
+                *order -= 1;
+            }
+        }
+
+        self.history.push_command(EditCommand::ReplaceModule {
+            old_module: Box::new(old),
+            new_module: Box::new(self.module.clone()),
+        });
+
+        Ok(())
+    }
+
+    pub fn create_instrument(
+        &mut self,
+        index: Option<usize>,
+        name: Option<String>,
+        default_sample_index: Option<usize>,
+    ) -> CoreResult<usize> {
+        if self.module.instruments.len() >= MAX_INSTRUMENTS {
+            return Err(CoreError::InvalidInstrumentIndex {
+                index: index.unwrap_or(self.module.instruments.len()),
+                len: self.module.instruments.len(),
+            });
+        }
+
+        let index = index.unwrap_or(self.module.instruments.len());
+        if index > self.module.instruments.len() {
+            return Err(CoreError::InvalidInstrumentIndex {
+                index,
+                len: self.module.instruments.len(),
+            });
+        }
+
+        if let Some(sample_index) = default_sample_index {
+            if sample_index >= self.module.samples.len() {
+                return Err(CoreError::InvalidSampleIndex {
+                    index: sample_index,
+                    len: self.module.samples.len(),
+                });
+            }
+        }
+
+        let mut instrument = Instrument::empty_without_instrument_samples();
+        let default_sample_index =
+            default_sample_index.or_else(|| (!self.module.samples.is_empty()).then_some(0));
+
+        if let Some(sample_index) = default_sample_index {
+            instrument.sample_slots = vec![Some(sample_index); instrument.sample_slots.len()];
+            instrument.note_sample_map = vec![Some(sample_index); instrument.note_sample_map.len()];
+        }
+
+        if let Some(name) = name {
+            instrument.name = InstrumentName::new(&name);
+        }
+
+        let old = self.module.clone();
+        self.module.instruments.insert(index, instrument);
+
+        self.history.push_command(EditCommand::ReplaceModule {
+            old_module: Box::new(old),
+            new_module: Box::new(self.module.clone()),
+        });
+
+        Ok(index)
+    }
+
+    pub fn delete_instrument(&mut self, index: usize) -> CoreResult<()> {
+        if index >= self.module.instruments.len() {
+            return Err(CoreError::InvalidInstrumentIndex {
+                index,
+                len: self.module.instruments.len(),
+            });
+        }
+
+        let old = self.module.clone();
+        self.module.instruments.remove(index);
+
+        self.history.push_command(EditCommand::ReplaceModule {
+            old_module: Box::new(old),
+            new_module: Box::new(self.module.clone()),
+        });
+
+        Ok(())
+    }
+
+    pub fn rename_instrument(&mut self, index: usize, name: String) -> CoreResult<()> {
+        if index >= self.module.instruments.len() {
+            return Err(CoreError::InvalidInstrumentIndex {
+                index,
+                len: self.module.instruments.len(),
+            });
+        }
+
+        let old = self.module.clone();
+        self.module.instruments[index].name = InstrumentName::new(&name);
+
+        self.history.push_command(EditCommand::ReplaceModule {
+            old_module: Box::new(old),
+            new_module: Box::new(self.module.clone()),
+        });
+
+        Ok(())
+    }
+
+    pub fn create_sample(&mut self, index: Option<usize>, mut sample: Sample) -> CoreResult<usize> {
+        let index = index.unwrap_or(self.module.samples.len());
+        if index > self.module.samples.len() {
+            return Err(CoreError::InvalidSampleIndex {
+                index,
+                len: self.module.samples.len(),
+            });
+        }
+
+        let old = self.module.clone();
+
+        for instrument in &mut self.module.instruments {
+            for slot in &mut instrument.sample_slots {
+                *slot = slot.map(|slot_index| {
+                    if slot_index < index {
+                        slot_index
+                    } else {
+                        slot_index + 1
+                    }
+                });
+            }
+            for slot in &mut instrument.note_sample_map {
+                *slot = slot.map(|slot_index| {
+                    if slot_index < index {
+                        slot_index
+                    } else {
+                        slot_index + 1
+                    }
+                });
+            }
+        }
+
+        if sample.name.as_str().is_empty() {
+            sample.name = SampleName::default();
+        }
+
+        if sample.length == 0 {
+            sample.length = sample.data.frame_count() as u32;
+        }
+
+        self.module.samples.insert(index, sample);
+
+        self.history.push_command(EditCommand::ReplaceModule {
+            old_module: Box::new(old),
+            new_module: Box::new(self.module.clone()),
+        });
+
+        Ok(index)
+    }
+
+    pub fn delete_sample(&mut self, index: usize) -> CoreResult<()> {
+        if index >= self.module.samples.len() {
+            return Err(CoreError::InvalidSampleIndex {
+                index,
+                len: self.module.samples.len(),
+            });
+        }
+
+        let old = self.module.clone();
+        self.module.samples.remove(index);
+
+        for instrument in &mut self.module.instruments {
+            for slot in &mut instrument.sample_slots {
+                *slot = slot.and_then(|slot_index| {
+                    if slot_index == index {
+                        None
+                    } else if slot_index > index {
+                        Some(slot_index - 1)
+                    } else {
+                        Some(slot_index)
+                    }
+                });
+            }
+            for slot in &mut instrument.note_sample_map {
+                *slot = slot.and_then(|slot_index| {
+                    if slot_index == index {
+                        None
+                    } else if slot_index > index {
+                        Some(slot_index - 1)
+                    } else {
+                        Some(slot_index)
+                    }
+                });
+            }
+        }
+
+        self.history.push_command(EditCommand::ReplaceModule {
+            old_module: Box::new(old),
+            new_module: Box::new(self.module.clone()),
+        });
+
+        Ok(())
+    }
+
+    pub fn rename_sample(&mut self, index: usize, name: String) -> CoreResult<()> {
+        if index >= self.module.samples.len() {
+            return Err(CoreError::InvalidSampleIndex {
+                index,
+                len: self.module.samples.len(),
+            });
+        }
+
+        let old = self.module.clone();
+        self.module.samples[index].name = SampleName::new(&name);
+
+        self.history.push_command(EditCommand::ReplaceModule {
+            old_module: Box::new(old),
+            new_module: Box::new(self.module.clone()),
+        });
+
+        Ok(())
     }
 
     // --- Note & Cell Editing ---

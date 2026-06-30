@@ -255,6 +255,70 @@ impl Pattern {
         Ok(())
     }
 
+    pub fn insert_channel(&mut self, index: u16) -> CoreResult<()> {
+        let new_channels = self.channels + 1;
+        if self.channels >= EDITOR_PATTERN_CHANNELS {
+            return Err(CoreError::InvalidChannelCount(new_channels));
+        }
+        if index > self.channels {
+            return Err(CoreError::InvalidChannel {
+                channel: index,
+                capacity: self.channels,
+            });
+        }
+
+        let mut next = Vec::with_capacity(self.rows as usize * new_channels as usize);
+        let slot_count = usize::from(self.effect_slots);
+        let empty_cell = PatternCell {
+            effects: vec![EffectCommand::default(); slot_count],
+            ..PatternCell::default()
+        };
+
+        for row in 0..self.rows {
+            for channel in 0..new_channels {
+                if channel < index {
+                    next.push(self.cell(channel, row)?.clone());
+                } else if channel == index {
+                    next.push(empty_cell.clone());
+                } else {
+                    next.push(self.cell(channel - 1, row)?.clone());
+                }
+            }
+        }
+
+        self.channels = new_channels;
+        self.cells = next;
+        Ok(())
+    }
+
+    pub fn remove_channel(&mut self, index: u16) -> CoreResult<()> {
+        if self.channels <= MIN_CHANNEL_COUNT {
+            return Err(CoreError::InvalidChannelCount(self.channels));
+        }
+        if index >= self.channels {
+            return Err(CoreError::InvalidChannel {
+                channel: index,
+                capacity: self.channels,
+            });
+        }
+
+        let old_channels = self.channels;
+        let mut next = Vec::with_capacity(self.rows as usize * (old_channels - 1) as usize);
+
+        for row in 0..self.rows {
+            for channel in 0..old_channels {
+                if channel == index {
+                    continue;
+                }
+                next.push(self.cell(channel, row)?.clone());
+            }
+        }
+
+        self.channels = old_channels - 1;
+        self.cells = next;
+        Ok(())
+    }
+
     fn index(&self, channel: u16, row: u16) -> CoreResult<usize> {
         if channel >= self.channels {
             return Err(CoreError::InvalidChannel {
@@ -441,6 +505,18 @@ pub struct Instrument {
 }
 
 impl Instrument {
+    pub fn empty_without_instrument_samples() -> Self {
+        Self {
+            name: InstrumentName::default(),
+            sample_slots: vec![None; SAMPLES_PER_INSTRUMENT],
+            note_sample_map: vec![None; MAX_XM_NOTES as usize],
+            volume_envelope: Envelope::default(),
+            panning_envelope: Envelope::default(),
+            vibrato: Vibrato::default(),
+            volume_fadeout: SAMPLE_DEFAULT_VOLUME_FADEOUT,
+        }
+    }
+
     pub fn empty(index: usize) -> Self {
         let first_sample = index * SAMPLES_PER_INSTRUMENT;
         let sample_slots = (0..SAMPLES_PER_INSTRUMENT)

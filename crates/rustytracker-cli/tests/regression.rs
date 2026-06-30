@@ -1,14 +1,12 @@
-use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
-use rustytracker_cli::{
-    load_module_from_file, play_state_module_to_json,
-};
+use rustytracker_cli::{load_module_from_file, play_state_module_to_json};
 use rustytracker_play::{PlaybackMixerMode, PlaybackState};
 use rustytracker_test_support::{
     milkytracker_fixture_path as fixture_path,
     milkytracker_fixtures_available as fixtures_available,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 const FIXTURES: &[&str] = &[
     "milky.xm",
@@ -79,8 +77,9 @@ fn run_regression_fixtures() {
     let mut pcm_registry = if update_golden {
         PcmHashesRegistry::default()
     } else {
-        let content = std::fs::read_to_string(&pcm_hashes_path)
-            .expect("Failed to read golden pcm_hashes.json. Run with UPDATE_GOLDEN=1 to create it.");
+        let content = std::fs::read_to_string(&pcm_hashes_path).expect(
+            "Failed to read golden pcm_hashes.json. Run with UPDATE_GOLDEN=1 to create it.",
+        );
         serde_json::from_str(&content).expect("Failed to parse golden pcm_hashes.json")
     };
 
@@ -91,15 +90,20 @@ fn run_regression_fixtures() {
             let (module, format) = load_module_from_file(&path).unwrap();
 
             // Verify/Update state transitions (play-state)
-            let actual_play_state = play_state_module_to_json(&module, format, REGRESSION_ROWS).unwrap();
+            let actual_play_state =
+                play_state_module_to_json(&module, format, REGRESSION_ROWS).unwrap();
             let play_state_file = golden_dir.join(format!("{xm_file}.play_state.json"));
 
             if update_golden {
                 std::fs::write(&play_state_file, &actual_play_state).unwrap();
             } else {
-                let expected_play_state = std::fs::read_to_string(&play_state_file)
-                    .expect("Failed to read golden play-state file. Run with UPDATE_GOLDEN=1 to create it.");
-                assert_eq!(actual_play_state, expected_play_state, "Play-state transition mismatch for {xm_file}");
+                let expected_play_state = std::fs::read_to_string(&play_state_file).expect(
+                    "Failed to read golden play-state file. Run with UPDATE_GOLDEN=1 to create it.",
+                );
+                assert_eq!(
+                    actual_play_state, expected_play_state,
+                    "Play-state transition mismatch for {xm_file}"
+                );
             }
 
             // Verify/Update PCM output hashes
@@ -107,12 +111,15 @@ fn run_regression_fixtures() {
             for mixer_mode in PlaybackMixerMode::ALL {
                 let mode_name = mixer_mode.cli_name().to_string();
 
-                let mut playback = PlaybackState::start_with_mixer_mode(&module, mixer_mode).unwrap();
+                let mut playback =
+                    PlaybackState::start_with_mixer_mode(&module, mixer_mode).unwrap();
                 let mut pcm_bytes = Vec::new();
                 let total_frames = (PCM_RENDER_SECONDS * SAMPLE_RATE as f64) as usize;
 
                 for _ in 0..total_frames {
-                    let (left_i32, right_i32) = playback.render_raw_stereo_frame(&module, SAMPLE_RATE).unwrap();
+                    let (left_i32, right_i32) = playback
+                        .render_raw_stereo_frame(&module, SAMPLE_RATE)
+                        .unwrap();
                     let left_i16 = left_i32.clamp(-32768, 32767) as i16;
                     let right_i16 = right_i32.clamp(-32768, 32767) as i16;
                     pcm_bytes.extend_from_slice(&left_i16.to_le_bytes());
@@ -123,10 +130,17 @@ fn run_regression_fixtures() {
                 if update_golden {
                     file_hashes.insert(mode_name, hash);
                 } else {
-                    let expected_hash = pcm_registry.0.get(*xm_file)
+                    let expected_hash = pcm_registry
+                        .0
+                        .get(*xm_file)
                         .and_then(|modes| modes.get(&mode_name))
-                        .expect(&format!("Missing golden PCM hash for {xm_file} in mode {mode_name}"));
-                    assert_eq!(&hash, expected_hash, "PCM output mismatch for {xm_file} in mode {mode_name}");
+                        .expect(&format!(
+                            "Missing golden PCM hash for {xm_file} in mode {mode_name}"
+                        ));
+                    assert_eq!(
+                        &hash, expected_hash,
+                        "PCM output mismatch for {xm_file} in mode {mode_name}"
+                    );
                 }
             }
 
@@ -153,9 +167,13 @@ fn run_regression_fixtures() {
         if update_golden {
             std::fs::write(&play_state_file, &actual_play_state).unwrap();
         } else {
-            let expected_play_state = std::fs::read_to_string(&play_state_file)
-                .expect("Failed to read golden play-state file. Run with UPDATE_GOLDEN=1 to create it.");
-            assert_eq!(actual_play_state, expected_play_state, "Play-state transition mismatch for synthetic_mod");
+            let expected_play_state = std::fs::read_to_string(&play_state_file).expect(
+                "Failed to read golden play-state file. Run with UPDATE_GOLDEN=1 to create it.",
+            );
+            assert_eq!(
+                actual_play_state, expected_play_state,
+                "Play-state transition mismatch for synthetic_mod"
+            );
         }
 
         // Verify/Update PCM output hashes
@@ -168,7 +186,9 @@ fn run_regression_fixtures() {
             let total_frames = SAMPLE_RATE as usize;
 
             for _ in 0..total_frames {
-                let (left_i32, right_i32) = playback.render_raw_stereo_frame(&module, SAMPLE_RATE).unwrap();
+                let (left_i32, right_i32) = playback
+                    .render_raw_stereo_frame(&module, SAMPLE_RATE)
+                    .unwrap();
                 let left_i16 = left_i32.clamp(-32768, 32767) as i16;
                 let right_i16 = right_i32.clamp(-32768, 32767) as i16;
                 pcm_bytes.extend_from_slice(&left_i16.to_le_bytes());
@@ -179,15 +199,24 @@ fn run_regression_fixtures() {
             if update_golden {
                 file_hashes.insert(mode_name, hash);
             } else {
-                let expected_hash = pcm_registry.0.get("synthetic_mod")
+                let expected_hash = pcm_registry
+                    .0
+                    .get("synthetic_mod")
                     .and_then(|modes| modes.get(&mode_name))
-                    .expect(&format!("Missing golden PCM hash for synthetic_mod in mode {mode_name}"));
-                assert_eq!(&hash, expected_hash, "PCM output mismatch for synthetic_mod in mode {mode_name}");
+                    .expect(&format!(
+                        "Missing golden PCM hash for synthetic_mod in mode {mode_name}"
+                    ));
+                assert_eq!(
+                    &hash, expected_hash,
+                    "PCM output mismatch for synthetic_mod in mode {mode_name}"
+                );
             }
         }
 
         if update_golden {
-            pcm_registry.0.insert("synthetic_mod".to_string(), file_hashes);
+            pcm_registry
+                .0
+                .insert("synthetic_mod".to_string(), file_hashes);
         }
 
         let _ = std::fs::remove_file(temp_mod_path);

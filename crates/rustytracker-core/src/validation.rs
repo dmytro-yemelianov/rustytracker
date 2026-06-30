@@ -1,8 +1,5 @@
+use crate::{Module, SampleData, SAMPLE_DEFAULT_PANNING, SAMPLE_DEFAULT_VOLUME_FADEOUT};
 use std::path::Path;
-use crate::{
-    Module, SampleData, SAMPLE_DEFAULT_PANNING,
-    SAMPLE_DEFAULT_VOLUME_FADEOUT,
-};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExportValidation {
@@ -25,7 +22,9 @@ pub fn validate_export_path(path: &Path, expected_format: &str) -> ExportValidat
 
     // 1. Path UTF-8 check
     let Some(path_str) = path.to_str() else {
-        validation.errors.push("Path contains invalid UTF-8/lossy characters.".to_string());
+        validation
+            .errors
+            .push("Path contains invalid UTF-8/lossy characters.".to_string());
         return validation;
     };
 
@@ -36,12 +35,16 @@ pub fn validate_export_path(path: &Path, expected_format: &str) -> ExportValidat
 
     // 2. Incomplete path checks (filename / extension)
     if path.file_name().is_none() {
-        validation.errors.push("Path does not contain a valid file name.".to_string());
+        validation
+            .errors
+            .push("Path does not contain a valid file name.".to_string());
         return validation;
     }
 
     let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
-        validation.errors.push("Path is missing a file extension.".to_string());
+        validation
+            .errors
+            .push("Path is missing a file extension.".to_string());
         return validation;
     };
 
@@ -68,7 +71,9 @@ pub fn validate_module_for_export(module: &Module, format: &str) -> ExportValida
 
     // 1. Check for incomplete metadata: Title is empty
     if module.header.title.as_str().trim().is_empty() {
-        validation.warnings.push("Module title is empty.".to_string());
+        validation
+            .warnings
+            .push("Module title is empty.".to_string());
     }
 
     // Identify active instruments and samples
@@ -77,8 +82,10 @@ pub fn validate_module_for_export(module: &Module, format: &str) -> ExportValida
 
     for (i, inst) in module.instruments.iter().enumerate() {
         let has_name = !inst.name.as_str().trim().is_empty();
-        let has_vol_envelope = inst.volume_envelope.point_count > 0 || inst.volume_envelope.flags != 0;
-        let has_pan_envelope = inst.panning_envelope.point_count > 0 || inst.panning_envelope.flags != 0;
+        let has_vol_envelope =
+            inst.volume_envelope.point_count > 0 || inst.volume_envelope.flags != 0;
+        let has_pan_envelope =
+            inst.panning_envelope.point_count > 0 || inst.panning_envelope.flags != 0;
         let has_vibrato = inst.vibrato != crate::Vibrato::default();
         let has_custom_fadeout = inst.volume_fadeout != SAMPLE_DEFAULT_VOLUME_FADEOUT;
 
@@ -104,12 +111,16 @@ pub fn validate_module_for_export(module: &Module, format: &str) -> ExportValida
     // 2. Check for incomplete metadata: Active instrument or sample has empty name
     for (i, inst) in module.instruments.iter().enumerate() {
         if active_instruments[i] && inst.name.as_str().trim().is_empty() {
-            validation.warnings.push(format!("Active instrument {} has an empty name.", i));
+            validation
+                .warnings
+                .push(format!("Active instrument {} has an empty name.", i));
         }
     }
     for (i, sample) in module.samples.iter().enumerate() {
         if active_samples[i] && sample.name.as_str().trim().is_empty() {
-            validation.warnings.push(format!("Active sample {} has an empty name.", i));
+            validation
+                .warnings
+                .push(format!("Active sample {} has an empty name.", i));
         }
     }
 
@@ -129,7 +140,10 @@ pub fn validate_module_for_export(module: &Module, format: &str) -> ExportValida
                 "MOD format supports a maximum of 32 channels. Module has {} channels.",
                 module.header.channel_count
             ));
-        } else if module.header.channel_count != 4 && module.header.channel_count != 6 && module.header.channel_count != 8 {
+        } else if module.header.channel_count != 4
+            && module.header.channel_count != 6
+            && module.header.channel_count != 8
+        {
             validation.warnings.push(format!(
                 "Module has {} channels. Standard MOD format typically supports only 4, 6, or 8 channels.",
                 module.header.channel_count
@@ -210,7 +224,10 @@ mod tests {
         let mismatched_path = Path::new("test.mod");
         let path_val = validate_export_path(mismatched_path, "xm");
         assert!(!path_val.is_valid());
-        assert_eq!(path_val.errors[0], "Unsupported or mismatched extension: expected '.xm', got '.mod'");
+        assert_eq!(
+            path_val.errors[0],
+            "Unsupported or mismatched extension: expected '.xm', got '.mod'"
+        );
 
         let no_ext_path = Path::new("test");
         let path_val = validate_export_path(no_ext_path, "xm");
@@ -235,7 +252,9 @@ mod tests {
         module.instruments[0] = Instrument::empty(0);
         module.instruments[0].volume_envelope.point_count = 1; // makes it active
         let val = validate_module_for_export(&module, "xm");
-        assert!(val.warnings.contains(&"Active instrument 0 has an empty name.".to_string()));
+        assert!(val
+            .warnings
+            .contains(&"Active instrument 0 has an empty name.".to_string()));
     }
 
     #[test]
@@ -244,7 +263,10 @@ mod tests {
         module.header.channel_count = 33; // exceeding 32
         let val = validate_module_for_export(&module, "xm");
         assert!(!val.is_valid());
-        assert_eq!(val.errors[0], "XM format supports a maximum of 32 channels. Module has 33 channels.");
+        assert_eq!(
+            val.errors[0],
+            "XM format supports a maximum of 32 channels. Module has 33 channels."
+        );
     }
 
     #[test]
@@ -259,7 +281,10 @@ mod tests {
         module.instruments[2].volume_envelope.point_count = 2; // active & has envelope
         module.instruments[2].name = FixedText::new("Lead");
         let val = validate_module_for_export(&module, "mod");
-        assert!(val.warnings.contains(&"Instrument 2 has volume envelope configured, which MOD format does not support.".to_string()));
+        assert!(val.warnings.contains(
+            &"Instrument 2 has volume envelope configured, which MOD format does not support."
+                .to_string()
+        ));
 
         // Sample warnings
         module.samples[0] = Sample {
@@ -270,7 +295,10 @@ mod tests {
         };
         let val = validate_module_for_export(&module, "mod");
         assert!(val.warnings.contains(&"Sample 0 is 16-bit. MOD format only supports 8-bit samples; it will be converted lossily.".to_string()));
-        assert!(val.warnings.contains(&"Sample 0 has custom panning configuration, which MOD format does not support.".to_string()));
+        assert!(val.warnings.contains(
+            &"Sample 0 has custom panning configuration, which MOD format does not support."
+                .to_string()
+        ));
 
         // Instrument limits (exceeding index 31)
         module.instruments[32] = Instrument::empty(32);
