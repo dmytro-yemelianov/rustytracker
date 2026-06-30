@@ -121,31 +121,26 @@ impl RustyTrackerApp {
                 if self.active_field == ActiveField::Note {
                     for key in NOTE_KEYS {
                         if input.key_pressed(key) {
-                            if let Some((note_name, octave_offset)) =
-                                key_to_note_and_octave_offset(key)
-                            {
-                                let final_octave =
-                                    (self.octave as i8 + octave_offset).clamp(0, 8) as u8;
-                                if let Ok(note) = Note::key(final_octave, note_name) {
-                                    let active_pattern_idx = self.get_active_pattern_index();
+                            if let Some(value) = self.note_value_for_key(key) {
+                                let note = Note::Key(value);
+                                let active_pattern_idx = self.get_active_pattern_index();
 
-                                    // Write note
-                                    let _ = self.editor.set_note(
-                                        active_pattern_idx,
-                                        self.active_channel,
-                                        self.active_row,
-                                        note,
-                                    );
-                                    // Write selected instrument
-                                    let _ = self.editor.set_instrument(
-                                        active_pattern_idx,
-                                        self.active_channel,
-                                        self.active_row,
-                                        self.selected_instrument,
-                                    );
-                                    self.commit_edit_to_audio();
-                                    self.advance_row_after_edit();
-                                }
+                                // Write note
+                                let _ = self.editor.set_note(
+                                    active_pattern_idx,
+                                    self.active_channel,
+                                    self.active_row,
+                                    note,
+                                );
+                                // Write selected instrument
+                                let _ = self.editor.set_instrument(
+                                    active_pattern_idx,
+                                    self.active_channel,
+                                    self.active_row,
+                                    self.selected_instrument,
+                                );
+                                self.commit_edit_to_audio();
+                                self.advance_row_after_edit();
                             }
                         }
                     }
