@@ -46,6 +46,8 @@ impl MasterWarmth {
         (self.lp_l, self.lp_r)
     }
 
+    /// Mono warmth. Note: shares the left-channel low-pass state (`lp_l`) with
+    /// [`process`]; do not interleave mono and stereo calls on one instance.
     pub fn process_mono(&mut self, x: f64, sample_rate: u32) -> f64 {
         self.update_coeff(sample_rate);
         let s = soft_clip(x);
@@ -99,6 +101,9 @@ mod tests {
                 peak = peak.max(y.abs());
             }
         }
-        assert!(peak < 5000.0, "alternation should be attenuated, got {peak}");
+        assert!(
+            peak < 5000.0,
+            "alternation should be attenuated, got {peak}"
+        );
     }
 }

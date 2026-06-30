@@ -177,7 +177,10 @@ fn preview_voice_note_with_no_mapped_sample_is_silent_without_error() {
 fn rustysynth_warmth_compresses_a_loud_frame_hifi_does_not() {
     // A loud, steady full-scale sample: HiFi passes the peak; RustySynth
     // soft-clips it below full scale.
-    let module = module_with_preview_sample(SampleData::pcm16(vec![32_000; 64]));
+    let mut module = module_with_preview_sample(SampleData::pcm16(vec![32_000; 64]));
+    module.samples[0].loop_kind = rustytracker_core::SampleLoopKind::Forward;
+    module.samples[0].loop_start = 0;
+    module.samples[0].loop_length = 64;
 
     let first_left = |mode: PlaybackMixerMode| -> i32 {
         let mut voice = PreviewVoice::new();
@@ -213,7 +216,9 @@ fn rustysynth_cubic_differs_from_hifi_linear_on_a_curved_sample() {
     // A parabola is non-linear, so cubic interpolation diverges from linear.
     // Offset by 16 so integer division yields non-zero starting values (32, 36, 40...),
     // ensuring the difference between cubic and linear is observable after i32 truncation.
-    let data: Vec<i16> = (0..256).map(|i: i32| (((i + 16) * (i + 16)) / 8) as i16).collect();
+    let data: Vec<i16> = (0..256)
+        .map(|i: i32| (((i + 16) * (i + 16)) / 8) as i16)
+        .collect();
     let module = module_with_preview_sample(SampleData::pcm16(data));
 
     let render = |mode: PlaybackMixerMode| -> Vec<(i32, i32)> {

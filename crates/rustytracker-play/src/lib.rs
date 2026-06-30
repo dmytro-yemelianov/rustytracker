@@ -1203,7 +1203,11 @@ fn tap_index(frame: usize, offset: i64, sample: &Sample) -> Option<usize> {
         let loop_start = sample.loop_start as usize;
         let loop_length = sample.loop_length as usize;
         let loop_end = loop_start + loop_length;
-        if target >= loop_end {
+        if frame >= loop_start {
+            // In the loop region: wrap the tap into [loop_start, loop_end).
+            let rel = (target as i64 - loop_start as i64).rem_euclid(loop_length as i64);
+            Some((loop_start as i64 + rel) as usize)
+        } else if target >= loop_end {
             Some(loop_start + (target - loop_end) % loop_length)
         } else {
             Some(target)
@@ -1310,5 +1314,14 @@ mod cubic_tests {
         let s = ramp_sample(8, true);
         assert_eq!(tap_index(7, 1, &s), Some(2)); // wraps to loop_start
         assert_eq!(tap_index(7, 2, &s), Some(3));
+    }
+
+    #[test]
+    fn tap_index_backward_loop_wraps_to_tail() {
+        // len 8, loop_start 2, loop_length 6 => loop_end 8.
+        let s = ramp_sample(8, true);
+        // At the loop re-entry, the previous frame is the loop TAIL, not pre-loop.
+        assert_eq!(tap_index(2, -1, &s), Some(7)); // loop_end - 1
+        assert_eq!(tap_index(2, -2, &s), Some(6));
     }
 }
