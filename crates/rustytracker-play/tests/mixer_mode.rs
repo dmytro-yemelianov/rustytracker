@@ -36,7 +36,10 @@ fn only_rustysynth_uses_warmth() {
 #[test]
 fn mixer_modes_report_interpolation_kind() {
     use rustytracker_play::Interpolation;
-    assert_eq!(PlaybackMixerMode::HiFi.interpolation(), Interpolation::Linear);
+    assert_eq!(
+        PlaybackMixerMode::HiFi.interpolation(),
+        Interpolation::Linear
+    );
     assert_eq!(
         PlaybackMixerMode::RustySynth.interpolation(),
         Interpolation::Cubic
