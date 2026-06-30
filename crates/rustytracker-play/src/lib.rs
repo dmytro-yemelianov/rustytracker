@@ -31,7 +31,6 @@ pub use effects::{
 };
 pub use envelope::PlaybackEnvelopeState;
 use error::validate_sample_rate;
-use warmth::MasterWarmth;
 pub use error::{PlaybackError, PlaybackResult, PLAYBACK_MIN_SAMPLE_RATE};
 pub use flow::{
     EFFECT_PATTERN_BREAK, EFFECT_POSITION_JUMP, EFFECT_SET_SPEED_BPM, SPEED_BPM_THRESHOLD,
@@ -40,6 +39,7 @@ pub use preview::PreviewVoice;
 pub use timing::{
     PlaybackTiming, PLAYBACK_MIN_BPM, PLAYBACK_MIN_TICK_SPEED, PLAYBACK_XM_TICK_NANOS_AT_ONE_BPM,
 };
+use warmth::MasterWarmth;
 
 pub type RawMonoPcmFrame = i32;
 pub type RawStereoPcmFrame = (i32, i32);
@@ -1266,14 +1266,21 @@ mod cubic_tests {
     use rustytracker_core::{Sample, SampleData, SampleLoopKind};
 
     fn ramp_sample(len: usize, looped: bool) -> Sample {
-        let mut s = Sample::default();
-        s.data = SampleData::pcm16((0..len as i16).collect());
+        let data = SampleData::pcm16((0..len).map(|i| i as i16).collect());
         if looped {
-            s.loop_kind = SampleLoopKind::Forward;
-            s.loop_start = 2;
-            s.loop_length = (len as u32).saturating_sub(2);
+            Sample {
+                data,
+                loop_kind: SampleLoopKind::Forward,
+                loop_start: 2,
+                loop_length: (len as u32).saturating_sub(2),
+                ..Default::default()
+            }
+        } else {
+            Sample {
+                data,
+                ..Default::default()
+            }
         }
-        s
     }
 
     #[test]
