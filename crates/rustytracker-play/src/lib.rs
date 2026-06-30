@@ -10,6 +10,7 @@ mod error;
 mod flow;
 mod preview;
 mod timing;
+mod warmth;
 
 pub use channel::{
     ChannelSampleFrame, PlaybackChannelState, PlaybackSampleValue, PLAYBACK_EMPTY_VOLUME,
@@ -30,6 +31,7 @@ pub use effects::{
 };
 pub use envelope::PlaybackEnvelopeState;
 use error::validate_sample_rate;
+use warmth::MasterWarmth;
 pub use error::{PlaybackError, PlaybackResult, PLAYBACK_MIN_SAMPLE_RATE};
 pub use flow::{
     EFFECT_PATTERN_BREAK, EFFECT_POSITION_JUMP, EFFECT_SET_SPEED_BPM, SPEED_BPM_THRESHOLD,
@@ -108,6 +110,10 @@ impl PlaybackMixerMode {
             Self::RustySynth => Interpolation::Cubic,
             Self::Amiga | Self::ProTracker => Interpolation::Stepped,
         }
+    }
+
+    pub fn uses_warmth(self) -> bool {
+        matches!(self, Self::RustySynth)
     }
 }
 
@@ -521,9 +527,10 @@ impl MixerVoice {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Mixer {
     pub voices: Vec<MixerVoice>,
+    warmth: MasterWarmth,
 }
 
 impl Mixer {
@@ -531,7 +538,10 @@ impl Mixer {
         let voices = (0..channel_count)
             .map(|ch| MixerVoice::empty(ch as u16))
             .collect();
-        Self { voices }
+        Self {
+            voices,
+            warmth: MasterWarmth::new(),
+        }
     }
 
     pub fn handle_commands(&mut self, commands: &[SequencerCommand]) {
@@ -670,7 +680,13 @@ impl Mixer {
         // Write back state to keep channels in sync
         self.sync_to_channels(channels);
 
-        Ok((mixed_l as i32, mixed_r as i32))
+        let (out_l, out_r) = if mixer_mode.uses_warmth() {
+            self.warmth.process(mixed_l, mixed_r, sample_rate)
+        } else {
+            (mixed_l, mixed_r)
+        };
+
+        Ok((out_l as i32, out_r as i32))
     }
 
     pub fn render_mono_frame(
@@ -728,7 +744,13 @@ impl Mixer {
         // Write back state to keep channels in sync
         self.sync_to_channels(channels);
 
-        Ok(mixed)
+        let out = if mixer_mode.uses_warmth() {
+            self.warmth.process_mono(mixed as f64, sample_rate)
+        } else {
+            mixed as f64
+        };
+
+        Ok(out as i32)
     }
 
     pub fn step_samples(
@@ -775,7 +797,7 @@ impl Mixer {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PlaybackState {
     pub(crate) sequencer: Sequencer,
     pub(crate) mixer: Mixer,

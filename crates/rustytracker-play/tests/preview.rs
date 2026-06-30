@@ -174,6 +174,41 @@ fn preview_voice_note_with_no_mapped_sample_is_silent_without_error() {
 }
 
 #[test]
+fn rustysynth_warmth_compresses_a_loud_frame_hifi_does_not() {
+    // A loud, steady full-scale sample: HiFi passes the peak; RustySynth
+    // soft-clips it below full scale.
+    let module = module_with_preview_sample(SampleData::pcm16(vec![32_000; 64]));
+
+    let first_left = |mode: PlaybackMixerMode| -> i32 {
+        let mut voice = PreviewVoice::new();
+        voice
+            .note_on(
+                &module,
+                PREVIEW_TEST_INSTRUMENT,
+                PREVIEW_TEST_NOTE,
+                PlaybackSettings::with_mixer_mode(mode),
+            )
+            .unwrap();
+        // A few frames so the warmth low-pass settles toward the level.
+        let mut l = 0;
+        for _ in 0..32 {
+            l = voice
+                .render_stereo_frame(&module, PREVIEW_TEST_SAMPLE_RATE)
+                .unwrap()
+                .0;
+        }
+        l
+    };
+
+    let hifi = first_left(PlaybackMixerMode::HiFi).abs();
+    let rusty = first_left(PlaybackMixerMode::RustySynth).abs();
+    assert!(
+        rusty < hifi,
+        "RustySynth warmth should compress the loud frame below HiFi (hifi={hifi}, rusty={rusty})"
+    );
+}
+
+#[test]
 fn rustysynth_cubic_differs_from_hifi_linear_on_a_curved_sample() {
     // A parabola is non-linear, so cubic interpolation diverges from linear.
     // Offset by 16 so integer division yields non-zero starting values (32, 36, 40...),

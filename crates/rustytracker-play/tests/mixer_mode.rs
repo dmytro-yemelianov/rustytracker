@@ -26,6 +26,14 @@ fn rustysynth_replaces_milkytracker_mode() {
 }
 
 #[test]
+fn only_rustysynth_uses_warmth() {
+    assert!(PlaybackMixerMode::RustySynth.uses_warmth());
+    assert!(!PlaybackMixerMode::HiFi.uses_warmth());
+    assert!(!PlaybackMixerMode::Amiga.uses_warmth());
+    assert!(!PlaybackMixerMode::ProTracker.uses_warmth());
+}
+
+#[test]
 fn mixer_modes_report_interpolation_kind() {
     use rustytracker_play::Interpolation;
     assert_eq!(PlaybackMixerMode::HiFi.interpolation(), Interpolation::Linear);
