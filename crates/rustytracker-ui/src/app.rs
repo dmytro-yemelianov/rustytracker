@@ -117,7 +117,7 @@ pub struct RustyTrackerApp {
     pub(crate) selected_instrument: u8,
     pub(crate) octave: u8,
     pub(crate) view_mode: ViewMode,
-    pub(crate) preview_key: Option<egui::Key>,
+    pub(crate) pressed_keys: Vec<egui::Key>,
 }
 
 impl RustyTrackerApp {
@@ -144,7 +144,7 @@ impl RustyTrackerApp {
             selected_instrument: 1,
             octave: 4,
             view_mode: ViewMode::PatternEditor,
-            preview_key: None,
+            pressed_keys: Vec::new(),
         }
     }
 
