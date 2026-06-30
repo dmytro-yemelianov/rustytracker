@@ -164,3 +164,5 @@ Current coverage:
   input checks.
 - `rustytracker-cli`: `rustytracker dump <module.xm> --format json`, schema
   validation, and golden structural dumps for bundled fixtures.
+
+This API path is optimized for LLM/tool-driven composition and playback workflows (headless or headed).
