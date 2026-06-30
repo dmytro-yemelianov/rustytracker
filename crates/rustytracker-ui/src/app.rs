@@ -106,6 +106,7 @@ pub struct RustyTrackerApp {
     pub(crate) ui_settings: TrackerUiSettings,
     pub(crate) edit_mode: bool,
     pub(crate) mixer_mode: PlaybackMixerMode,
+    pub(crate) last_file_operation: Option<io::FileOperationStatus>,
 
     // Cursor position
     pub(crate) active_order_index: usize,
@@ -137,6 +138,7 @@ impl RustyTrackerApp {
             ui_settings,
             edit_mode: false,
             mixer_mode: PlaybackMixerMode::default(),
+            last_file_operation: None,
             active_order_index: 0,
             active_row: 0,
             active_channel: 0,
@@ -146,6 +148,10 @@ impl RustyTrackerApp {
             view_mode: ViewMode::PatternEditor,
             pressed_keys: Vec::new(),
         }
+    }
+
+    pub(crate) fn last_file_operation_status(&self) -> Option<&io::FileOperationStatus> {
+        self.last_file_operation.as_ref()
     }
 
     pub(crate) fn commit_edit_to_audio(&mut self) {
@@ -171,23 +177,73 @@ impl RustyTrackerApp {
                 self.audio_engine
                     .update_module(self.editor.module().clone());
                 self.audio_engine.stop();
+                self.last_file_operation = Some(io::FileOperationStatus::success(
+                    io::FileOperation::LoadModule,
+                    path,
+                    "Loaded module",
+                ));
             }
             Err(err) => {
-                eprintln!("Failed to parse module: {err}");
+                let message = file_operation_error_message("Failed to load module", &err);
+                eprintln!("{message}");
+                self.last_file_operation = Some(io::FileOperationStatus::failure(
+                    io::FileOperation::LoadModule,
+                    path,
+                    message,
+                ));
             }
         }
     }
 
-    pub(crate) fn export_to_wav_file(&self, path: &Path) {
-        if let Err(err) = io::export_to_wav_file(self.editor.module(), self.mixer_mode, path) {
-            eprintln!("{err}");
+    pub(crate) fn export_to_wav_file(&mut self, path: &Path) {
+        match io::export_to_wav_file(self.editor.module(), self.mixer_mode, path) {
+            Ok(()) => {
+                self.last_file_operation = Some(io::FileOperationStatus::success(
+                    io::FileOperation::ExportWav,
+                    path,
+                    "Exported WAV",
+                ));
+            }
+            Err(err) => {
+                let message = file_operation_error_message("Failed to export WAV", &err);
+                eprintln!("{message}");
+                self.last_file_operation = Some(io::FileOperationStatus::failure(
+                    io::FileOperation::ExportWav,
+                    path,
+                    message,
+                ));
+            }
         }
     }
 
-    pub(crate) fn save_module_file(&self, path: &Path) {
-        if let Err(err) = io::save_module_file(self.editor.module(), path) {
-            eprintln!("Failed to export module: {err}");
+    pub(crate) fn save_module_file(&mut self, path: &Path) {
+        match io::save_module_file(self.editor.module(), path) {
+            Ok(report) => {
+                self.last_file_operation = Some(io::FileOperationStatus::success_with_details(
+                    io::FileOperation::SaveModule,
+                    path,
+                    "Saved module",
+                    report.warnings,
+                ));
+            }
+            Err(err) => {
+                let message = file_operation_error_message("Failed to save module", &err);
+                eprintln!("{message}");
+                self.last_file_operation = Some(io::FileOperationStatus::failure(
+                    io::FileOperation::SaveModule,
+                    path,
+                    message,
+                ));
+            }
         }
+    }
+}
+
+fn file_operation_error_message(prefix: &str, err: &str) -> String {
+    if err.starts_with(prefix) {
+        err.to_string()
+    } else {
+        format!("{prefix}: {err}")
     }
 }
 
@@ -236,7 +292,6 @@ impl eframe::App for RustyTrackerApp {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -244,16 +299,88 @@ mod tests {
     #[test]
     fn test_app_save_and_export_validations() {
         let ctx = egui::Context::default();
-        let app = RustyTrackerApp::new(&ctx);
+        let mut app = RustyTrackerApp::new(&ctx);
 
         let temp_dir = std::env::temp_dir();
         let invalid_path = temp_dir.join("non_existent_dir_12345/module.invalid");
-        
+
         // This should return early without creating any file
         app.save_module_file(&invalid_path);
         assert!(!invalid_path.exists());
 
         app.export_to_wav_file(&invalid_path);
         assert!(!invalid_path.exists());
+    }
+
+    #[test]
+    fn app_records_file_operation_failures() {
+        let ctx = egui::Context::default();
+        let mut app = RustyTrackerApp::new(&ctx);
+        let invalid_path = unique_temp_path("module.invalid");
+
+        app.save_module_file(&invalid_path);
+        let status = app.last_file_operation_status().unwrap();
+        assert_eq!(status.operation, io::FileOperation::SaveModule);
+        assert!(status.is_failure());
+        assert_eq!(status.path, invalid_path);
+        assert!(status.message.contains("Failed to save module"));
+        assert!(status.message.contains("Unsupported file format"));
+        assert!(!invalid_path.exists());
+
+        app.export_to_wav_file(&invalid_path);
+        let status = app.last_file_operation_status().unwrap();
+        assert_eq!(status.operation, io::FileOperation::ExportWav);
+        assert!(status.is_failure());
+        assert_eq!(status.path, invalid_path);
+        assert!(status.message.contains("Failed to export WAV"));
+        assert!(status.message.contains("expected '.wav'"));
+        assert!(!invalid_path.exists());
+
+        let missing_path = unique_temp_path("missing.xm");
+        app.load_module_file(&missing_path);
+        let status = app.last_file_operation_status().unwrap();
+        assert_eq!(status.operation, io::FileOperation::LoadModule);
+        assert!(status.is_failure());
+        assert_eq!(status.path, missing_path);
+        assert!(status.message.contains("Failed to load module"));
+    }
+
+    #[test]
+    fn app_records_success_status_and_save_warnings() {
+        let ctx = egui::Context::default();
+        let mut app = RustyTrackerApp::new(&ctx);
+        let path = unique_temp_path("module.xm");
+
+        app.save_module_file(&path);
+        let status = app.last_file_operation_status().unwrap();
+        assert_eq!(status.operation, io::FileOperation::SaveModule);
+        assert!(status.is_success());
+        assert_eq!(status.path, path);
+        assert_eq!(status.message, "Saved module");
+        assert!(status
+            .details
+            .iter()
+            .any(|warning| warning == "Module title is empty."));
+        assert!(path.exists());
+
+        app.load_module_file(&path);
+        let status = app.last_file_operation_status().unwrap();
+        assert_eq!(status.operation, io::FileOperation::LoadModule);
+        assert!(status.is_success());
+        assert_eq!(status.path, path);
+        assert_eq!(status.message, "Loaded module");
+
+        std::fs::remove_file(path).ok();
+    }
+
+    fn unique_temp_path(file_name: &str) -> std::path::PathBuf {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock should be after Unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "rustytracker-ui-{}-{unique}-{file_name}",
+            std::process::id()
+        ))
     }
 }
